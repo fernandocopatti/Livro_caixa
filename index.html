@@ -329,6 +329,8 @@
   #cat-month-matrix td.matrix-max{color:var(--accent);font-weight:700;position:relative;}
   #cat-month-matrix td.matrix-clickable{cursor:pointer;}
   #cat-month-matrix td.matrix-clickable:hover{text-decoration:underline;text-decoration-color:var(--ink-faint);}
+  .account-row.matrix-clickable{cursor:pointer;}
+  .account-row.matrix-clickable:hover{background:var(--surface-2);}
   #cat-month-matrix td.matrix-zero{color:var(--ink-faint);}
   #cat-month-matrix td.matrix-total{font-weight:700;color:var(--ink);border-top:1px solid var(--line);}
   #cat-month-matrix tr:hover td{background:var(--surface-2);}
@@ -1679,21 +1681,35 @@ function renderDashboard(){
 
   // parcelas futuras: projeta os meses seguintes a partir de lançamentos com número de parcela
   {
-    const byMonth = {};
-    const pendingItems = [];
+    // agrupa por compra original (descrição + total de parcelas + valor + conta) — faturas de
+    // cartão costumam repetir a mesma compra em cada mês com o número da parcela avançando, então
+    // sem agrupar, cada reaparição seria contada como uma dívida nova, multiplicando o valor real
+    const groups = {};
     state.transactions.forEach(t=>{
       if(!t.installment) return;
-      const { current, total } = t.installment;
-      const remaining = total - current;
+      const key = normalizeDesc(t.desc)+'|'+t.installment.total+'|'+t.amount.toFixed(2)+'|'+(t.account||'');
+      if(!groups[key]) groups[key] = [];
+      groups[key].push(t);
+    });
+
+    const byMonth = {};
+    const pendingItems = [];
+    Object.values(groups).forEach(txs=>{
+      // usa só o registro com a parcela mais avançada — os anteriores já viraram histórico
+      const latest = txs.reduce((a,b)=> b.installment.current > a.installment.current ? b : a);
+      const remaining = latest.installment.total - latest.installment.current;
       if(remaining <= 0) return;
-      const [y,m] = t.date.split('-').map(Number);
+      const [y,m] = latest.date.split('-').map(Number);
+      const contribMonths = [];
       for(let k=1;k<=remaining;k++){
         const d = new Date(y, (m-1)+k, 1);
         const key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-        byMonth[key] = (byMonth[key]||0) + t.amount;
+        byMonth[key] = (byMonth[key]||0) + latest.amount;
+        contribMonths.push(key);
       }
-      pendingItems.push(t);
+      pendingItems.push({ ...latest, remaining, contribMonths });
     });
+
     const instCard = document.getElementById('installments-card');
     const instEl = document.getElementById('installments-content');
     const monthKeys = Object.keys(byMonth).sort();
@@ -1701,31 +1717,52 @@ function renderDashboard(){
       instCard.style.display = 'none';
     } else {
       instCard.style.display = '';
-      const totalPending = pendingItems.reduce((s,t)=> s + t.amount*(t.installment.total-t.installment.current), 0);
+      const totalPending = pendingItems.reduce((s,t)=> s + t.amount*t.remaining, 0);
       const maxMonthVal = Math.max(...monthKeys.map(k=>byMonth[k]));
       const monthsRows = monthKeys.map(k=>`
-        <div class="account-row">
+        <div class="account-row matrix-clickable" data-inst-month="${k}">
           <span class="account-row-name">${monthLabel(k)}</span>
           <div class="account-row-bar"><div class="account-row-bar-fill" style="width:${Math.max(4, Math.round(byMonth[k]/maxMonthVal*100))}%;background:var(--gold);"></div></div>
           <span class="account-row-val">${fmtBRL(byMonth[k])}</span>
-        </div>`).join('');
+        </div>
+        <div id="inst-breakdown-${k}" style="display:none;padding:4px 0 8px 14px;"></div>`).join('');
       const itemsRows = pendingItems
-        .sort((a,b)=> (b.installment.total-b.installment.current) - (a.installment.total-a.installment.current))
+        .sort((a,b)=> b.remaining - a.remaining)
         .slice(0,8)
-        .map(t=>{
-          const remaining = t.installment.total - t.installment.current;
-          return `<div class="account-row" style="cursor:pointer;" data-inst-desc="${escapeAttr(t.desc)}"><span class="account-row-name" title="${escapeAttr(t.desc)}">${escapeHTML(t.desc)}</span><span style="font-size:11px;color:var(--ink-faint);">mais ${remaining}x de ${fmtBRL(t.amount)}</span></div>`;
-        }).join('');
+        .map(t=>`<div class="account-row matrix-clickable" data-inst-search="${escapeAttr(t.desc)}"><span class="account-row-name" title="${escapeAttr(t.desc)}">${escapeHTML(t.desc)}</span><span style="font-size:11px;color:var(--ink-faint);">mais ${t.remaining}x de ${fmtBRL(t.amount)}</span></div>`)
+        .join('');
       instEl.innerHTML = `
         <div style="margin-bottom:14px;">
           <span style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;">Ainda comprometido em parcelas futuras</span><br>
           <span style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:var(--gold);">${fmtBRL(totalPending)}</span>
         </div>
-        <div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;margin-bottom:6px;">Por mês</div>
+        <div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;margin-bottom:6px;">Por mês — clique pra ver quais compras compõem o valor</div>
         ${monthsRows}
         <div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;margin:14px 0 6px;">Compras com mais parcelas restantes</div>
         ${itemsRows}
       `;
+
+      instEl.querySelectorAll('[data-inst-month]').forEach(row=>{
+        row.addEventListener('click', ()=>{
+          const k = row.dataset.instMonth;
+          const box = document.getElementById('inst-breakdown-'+k);
+          const isOpen = box.style.display !== 'none';
+          instEl.querySelectorAll('[id^="inst-breakdown-"]').forEach(b=> b.style.display='none');
+          if(isOpen) return;
+          const contributors = pendingItems.filter(t=> t.contribMonths.includes(k));
+          box.innerHTML = contributors.map(t=>
+            `<div style="display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--ink-dim);padding:4px 0;">
+              <span>${escapeHTML(t.desc)}</span><span style="font-family:var(--font-mono);white-space:nowrap;">${fmtBRL(t.amount)}</span>
+            </div>`
+          ).join('') || '<div style="font-size:12px;color:var(--ink-faint);">Nada encontrado.</div>';
+          box.style.display = '';
+        });
+      });
+      instEl.querySelectorAll('[data-inst-search]').forEach(row=>{
+        row.addEventListener('click', ()=>{
+          goToTransactions({ search: row.dataset.instSearch });
+        });
+      });
     }
   }
 
