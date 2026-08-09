@@ -2492,19 +2492,23 @@ function suggestCategory(desc, type){
 }
 
 /* ---------- detecção de duplicados na importação ---------- */
-function txSignature(date, desc, amount){
-  return `${date}|${normalizeDesc(desc)}|${Number(amount).toFixed(2)}`;
+function txSignature(date, desc, amount, installment){
+  // inclui o número da parcela na assinatura: faturas de cartão costumam repetir a mesma
+  // data/descrição/valor da compra original em cada parcela futura — sem isso, "parcela 2 de 2"
+  // seria confundida com "parcela 1 de 2" da mesma compra.
+  const instPart = (installment && installment.current && installment.total) ? `|${installment.current}/${installment.total}` : '';
+  return `${date}|${normalizeDesc(desc)}|${Number(amount).toFixed(2)}${instPart}`;
 }
 const existingTxSignatures = ()=> new Set(
-  state.transactions.map(t=> txSignature(t.date, t.desc, t.amount))
+  state.transactions.map(t=> txSignature(t.date, t.desc, t.amount, t.installment))
 );
-// marca item.duplicate = true se já existe um lançamento igual (mesma data, descrição e valor)
-// na base, ou se é repetido dentro do próprio arquivo sendo importado
+// marca item.duplicate = true se já existe um lançamento igual (mesma data, descrição, valor e
+// parcela) na base, ou se é repetido dentro do próprio arquivo sendo importado
 function flagDuplicates(items){
   const existing = existingTxSignatures();
   const seenInBatch = new Set();
   items.forEach(it=>{
-    const sig = txSignature(it.date, it.desc, it.amount);
+    const sig = txSignature(it.date, it.desc, it.amount, it.installment);
     it.duplicate = existing.has(sig) || seenInBatch.has(sig);
     seenInBatch.add(sig);
   });
