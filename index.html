@@ -1681,13 +1681,14 @@ function renderDashboard(){
 
   // parcelas futuras: projeta os meses seguintes a partir de lançamentos com número de parcela
   {
-    // agrupa por compra original (descrição + total de parcelas + valor + conta) — faturas de
-    // cartão costumam repetir a mesma compra em cada mês com o número da parcela avançando, então
-    // sem agrupar, cada reaparição seria contada como uma dívida nova, multiplicando o valor real
+    // agrupa por compra original (descrição + total de parcelas) — faturas de cartão costumam
+    // repetir a mesma compra em cada mês com o número da parcela avançando, e às vezes o valor
+    // (arredondamento) ou a conta preenchida variam entre uma reimportação e outra; sem agrupar
+    // de forma tolerante, cada reaparição seria contada como uma dívida nova, multiplicando o valor real
     const groups = {};
     state.transactions.forEach(t=>{
       if(!t.installment) return;
-      const key = normalizeDesc(t.desc)+'|'+t.installment.total+'|'+t.amount.toFixed(2)+'|'+(t.account||'');
+      const key = normalizeDesc(t.desc)+'|'+t.installment.total;
       if(!groups[key]) groups[key] = [];
       groups[key].push(t);
     });
@@ -2782,7 +2783,10 @@ setupDropZone('drop-planilha','input-planilha', file=>{
       if(isCsv){
         const text = typeof e.target.result === 'string' ? e.target.result : new TextDecoder('utf-8').decode(e.target.result);
         const delimiter = detectCsvDelimiter(text);
-        wb = XLSX.read(text, {type:'string', FS: delimiter, cellDates:true, raw:false});
+        // cellDates:false de propósito — em CSV, a lib tenta "adivinhar" datas ambíguas
+        // (dia <=12 pode ser lido como mês/dia à americana) e isso derruba a leitura;
+        // preferimos manter o texto bruto e deixar nosso parseFlexibleDate cuidar disso
+        wb = XLSX.read(text, {type:'string', FS: delimiter, cellDates:false});
       } else {
         wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
       }
