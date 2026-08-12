@@ -16,7 +16,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.0/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/1.0.17/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
 <style>
   :root{
     --bg: #121A1D;
@@ -402,13 +402,47 @@
     .spine-nav{flex-direction:row;padding:0 0 0 12px;}
     .spine-foot{display:none;}
     main{padding:22px 18px 50px;}
-    .stat-row{grid-template-columns:1fr;}
+    .stat-row{grid-template-columns:1fr 1fr;}
     .dash-cols{grid-template-columns:1fr;}
     .form-grid{grid-template-columns:1fr;}
     .ledger-row{grid-template-columns:70px 1fr 90px 30px;}
     .ledger-row.selectable{grid-template-columns:22px 70px 1fr 90px 30px;}
     .ledger-row .cat-tag{display:none;}
+    .filter-summary{gap:10px 14px;}
+    .filter-summary .fs-count{margin-left:0;width:100%;}
+    .date-range-row{width:100%;}
+    .date-range-row input[type="date"]{flex:1;min-width:0;}
   }
+  @media (max-width:520px){
+    .stat-row{grid-template-columns:1fr;}
+  }
+
+  /* ---------- Filter summary & date range ---------- */
+  .filter-summary{
+    display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;
+    background:var(--surface);border:1px solid var(--line);border-radius:10px;
+    padding:12px 16px;margin-bottom:14px;font-size:13px;
+  }
+  .filter-summary .fs-item{display:flex;flex-direction:column;gap:2px;}
+  .filter-summary .fs-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-faint);}
+  .filter-summary .fs-val{font-family:var(--font-mono);font-weight:600;font-size:15px;}
+  .filter-summary .fs-val.warn{color:var(--warn);}
+  .filter-summary .fs-val.accent{color:var(--accent);}
+  .filter-summary .fs-count{margin-left:auto;color:var(--ink-dim);font-size:12.5px;}
+  .date-range-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  .date-range-row label{font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;}
+  .date-range-row input[type="date"]{
+    background:var(--surface-2);border:1px solid var(--line);color:var(--ink);
+    padding:8px 10px;border-radius:8px;font-size:13px;outline:none;
+  }
+  .goal-bar-wrap{margin-top:10px;}
+  .goal-bar{height:8px;background:var(--surface-3);border-radius:6px;overflow:hidden;}
+  .goal-bar-fill{height:100%;border-radius:6px;transition:width .25s;}
+  .goal-meta{display:flex;justify-content:space-between;font-size:12px;color:var(--ink-dim);margin-top:6px;font-family:var(--font-mono);}
+  .transfer-hint{font-size:12px;color:var(--ink-dim);background:rgba(92,143,214,.1);border:1px solid #3a5a8a;border-radius:8px;padding:10px 12px;margin-bottom:14px;line-height:1.45;}
+  .kbd-hint{font-size:11px;color:var(--ink-faint);margin-top:8px;}
+  kbd{font-family:var(--font-mono);font-size:10px;background:var(--surface-3);border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--ink-dim);}
+
 </style>
 </head>
 <body>
@@ -427,7 +461,7 @@
       <button class="spine-btn" data-view="categories"><span class="tab-num">05</span>Categorias</button>
       <button class="spine-btn" data-view="config"><span class="tab-num">06</span>Config</button>
     </nav>
-    <div class="spine-foot">Os dados ficam salvos só na sua conta, neste navegador.</div>
+    <div class="spine-foot">Dados neste navegador/conta.<br><span class="kbd-hint"><kbd>N</kbd> novo · <kbd>/</kbd> buscar · <kbd>D</kbd> visão geral</span></div>
   </aside>
 
   <main>
@@ -462,6 +496,11 @@
           <div class="stat-value accent" id="stat-top-cat">—</div>
           <div class="stat-delta" id="stat-top-cat-val">—</div>
         </div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px;" id="goal-card">
+        <div class="panel-title">Meta mensal de despesas <span id="goal-month-label" style="font-size:12px;font-weight:500;color:var(--ink-faint);font-family:var(--font-body);"></span></div>
+        <div id="goal-content"></div>
       </div>
 
       <div class="card" style="margin-bottom:18px;" id="yoy-card">
@@ -524,6 +563,12 @@
 
       <div class="filter-bar">
         <select id="filter-month"></select>
+        <div class="date-range-row">
+          <label for="filter-from">De</label>
+          <input type="date" id="filter-from" title="Data inicial">
+          <label for="filter-to">Até</label>
+          <input type="date" id="filter-to" title="Data final">
+        </div>
         <select id="filter-type"><option value="">Todo tipo</option></select>
         <select id="filter-category"></select>
         <select id="filter-source">
@@ -534,10 +579,14 @@
           <option value="pdf">PDF</option>
           <option value="planilha">Planilha</option>
           <option value="recorrente">Recorrente</option>
+          <option value="transferencia">Transferência</option>
         </select>
         <select id="filter-account"><option value="">Toda conta/cartão</option></select>
-        <input class="text-input" id="filter-search" placeholder="Buscar descrição…" style="flex:1;min-width:160px;">
+        <input class="text-input" id="filter-search" placeholder="Buscar descrição… (/)" style="flex:1;min-width:160px;">
+        <button type="button" class="btn ghost" id="filter-clear-btn" style="padding:8px 12px;font-size:12px;">Limpar filtros</button>
       </div>
+
+      <div class="filter-summary" id="filter-summary" style="display:none;"></div>
 
       <div class="bulk-bar" id="bulk-actions-bar" style="display:none;">
         <span id="bulk-count">0 selecionados</span>
@@ -625,6 +674,19 @@
                 <input type="text" id="f-account" placeholder="Ex.: Cartão Nubank" list="account-suggestions">
                 <datalist id="account-suggestions"></datalist>
               </div>
+              <div class="field full" id="transfer-fields" style="display:none;">
+                <div class="transfer-hint">Transferência cria <strong>dois lançamentos ligados</strong>: saída na conta de origem e entrada na de destino — sem contar como despesa nos totais.</div>
+                <div class="form-grid">
+                  <div class="field">
+                    <label>Conta de origem</label>
+                    <input type="text" id="f-account-from" placeholder="Ex.: Conta Corrente" list="account-suggestions">
+                  </div>
+                  <div class="field">
+                    <label>Conta de destino</label>
+                    <input type="text" id="f-account-to" placeholder="Ex.: Cartão / Poupança" list="account-suggestions">
+                  </div>
+                </div>
+              </div>
               <div class="field full">
                 <label>Observações (opcional)</label>
                 <textarea id="f-notes" placeholder="Alguma nota sobre esse lançamento…"></textarea>
@@ -706,7 +768,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-        <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-11-01 (leitor de CSV próprio)</p>
+        <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-12-02 (filtros, meta, transferência, PWA)</p>
       </div>
 
       <div class="card" style="margin-bottom:18px;">
@@ -714,6 +776,11 @@
         <div class="field" style="max-width:320px;margin-bottom:16px;">
           <label>Nome base do arquivo</label>
           <input type="text" id="file-prefix-input" placeholder="livro-caixa">
+        </div>
+        <div class="field" style="max-width:320px;margin-bottom:16px;">
+          <label>Meta mensal de despesas (R$)</label>
+          <input type="number" id="monthly-goal-input" step="0.01" min="0" placeholder="Ex.: 4000,00 — deixe vazio para desativar">
+          <span style="font-size:11px;color:var(--ink-faint);margin-top:4px;display:block;">Aparece no dashboard como barra de progresso do mês em exibição.</span>
         </div>
         <div id="config-storage-status" style="font-size:13px;color:var(--ink-dim);margin-bottom:14px;line-height:1.5;"></div>
         <div class="btn-row" style="margin-top:0;flex-wrap:wrap;" id="config-storage-actions"></div>
@@ -892,6 +959,7 @@ const DEFAULT_CATEGORIES = [
   { id:'reembolso',      name:'Reembolso',           color:'#6FAF52', kind:'receita' },
   { id:'presente',       name:'Presente/Doação',     color:'#B85C7A', kind:'receita' },
   { id:'outros-receita', name:'Outra receita',       color:'#8A8F89', kind:'receita' },
+  { id:'transferencia-cat', name:'Transferência entre contas', color:'#5C8FD6', kind:'transferencia' },
 ];
 
 // tipos de lançamento: despesa e receita são fixos (não podem ser excluídos), mas o usuário
@@ -900,6 +968,7 @@ const DEFAULT_CATEGORIES = [
 const DEFAULT_TRANSACTION_TYPES = [
   { id:'despesa', name:'Despesa', arrow:'↓', flowSign:-1, countsAsExpense:true,  color:'#D97C57', protected:true },
   { id:'receita', name:'Receita', arrow:'↑', flowSign:1,  countsAsExpense:false, color:'#59B3A3', protected:true },
+  { id:'transferencia', name:'Transferência', arrow:'↔', flowSign:0, countsAsExpense:false, color:'#5C8FD6', protected:true },
 ];
 
 let state = {
@@ -907,7 +976,7 @@ let state = {
   categories: DEFAULT_CATEGORIES.slice(),
   categoryRules: [],  // {keyword, category} — aprendido a partir de correções feitas ao importar
   recurringTemplates: [], // {id, desc, amount, category, type, day}
-  settings: { filePrefix: 'livro-caixa' },
+  settings: { filePrefix: 'livro-caixa', monthlyGoal: null },
   transactionTypes: DEFAULT_TRANSACTION_TYPES.slice(),
 };
 
@@ -938,11 +1007,17 @@ function normalizeLoadedState(parsed){
   state.categories = cats;
   state.categoryRules = parsed.categoryRules || [];
   state.recurringTemplates = parsed.recurringTemplates || [];
-  state.settings = { filePrefix: 'livro-caixa', ...(parsed.settings || {}) };
+  state.settings = { filePrefix: 'livro-caixa', monthlyGoal: null, ...(parsed.settings || {}) };
   let types = parsed.transactionTypes && parsed.transactionTypes.length ? parsed.transactionTypes.slice() : DEFAULT_TRANSACTION_TYPES.slice();
   // garante que despesa/receita sempre existam, mesmo em backups antigos ou editados na mão
   DEFAULT_TRANSACTION_TYPES.filter(dt => !types.some(t=>t.id===dt.id)).forEach(dt=> types.push(dt));
   state.transactionTypes = types;
+  // garante categoria padrão de transferência
+  if(!state.categories.some(c=>c.id==='transferencia-cat')){
+    state.categories.push({ id:'transferencia-cat', name:'Transferência entre contas', color:'#5C8FD6', kind:'transferencia' });
+  }
+  DEFAULT_CATEGORIES.filter(dc => dc.kind === 'transferencia' && !state.categories.some(c => c.id === dc.id))
+    .forEach(dc => state.categories.push(dc));
 }
 
 async function loadState(){
@@ -1000,7 +1075,8 @@ function typeToggleHTML(activeId){
   return state.transactionTypes.map(t=>{
     const isActive = t.id===activeId;
     const style = isActive ? `background:${t.color}26;border-color:${t.color};color:${t.color};` : '';
-    return `<button type="button" class="type-btn${isActive?' active':''}" data-type="${t.id}" style="${style}">${t.arrow||(t.flowSign<0?'↓':'↑')} ${escapeHTML(t.name)}</button>`;
+    const arrow = t.arrow || (t.flowSign<0?'↓':(t.flowSign>0?'↑':'↔'));
+    return `<button type="button" class="type-btn${isActive?' active':''}" data-type="${t.id}" style="${style}">${arrow} ${escapeHTML(t.name)}</button>`;
   }).join('');
 }
 function setActiveTypeButton(container, activeId){
@@ -1077,6 +1153,8 @@ document.querySelectorAll('.spine-btn').forEach(btn=>{
       renderRecurringList();
       renderTypesList();
       document.getElementById('file-prefix-input').value = state.settings.filePrefix || 'livro-caixa';
+      const g = state.settings.monthlyGoal;
+      document.getElementById('monthly-goal-input').value = (g && g > 0) ? g : '';
       renderConfigStorageSection();
     }
     document.getElementById('fab-quick-add').classList.toggle('hide', btn.dataset.view==='new');
@@ -1097,8 +1175,10 @@ document.getElementById('fab-quick-add').addEventListener('click', ()=>{
 document.getElementById('trend-cat-select').addEventListener('change', renderDashboard);
 document.getElementById('matrix-account-select').addEventListener('change', renderDashboard);
 
-function goToTransactions({month, type, category, source, account, search} = {}){
+function goToTransactions({month, type, category, source, account, search, from, to} = {}){
   document.getElementById('filter-month').value = month || '';
+  document.getElementById('filter-from').value = from || '';
+  document.getElementById('filter-to').value = to || '';
   document.getElementById('filter-type').value = type || '';
   document.getElementById('filter-category').value = category || '';
   document.getElementById('filter-source').value = source || '';
@@ -1452,6 +1532,34 @@ function renderDashboard(){
     document.getElementById('stat-top-cat-val').textContent = 'Nenhuma despesa ainda';
   }
 
+  // meta mensal de despesas
+  {
+    const goalEl = document.getElementById('goal-content');
+    const goalCard = document.getElementById('goal-card');
+    const goal = state.settings.monthlyGoal;
+    document.getElementById('goal-month-label').textContent = '· ' + monthLabel(curKey);
+    if(!goal || goal <= 0){
+      goalCard.style.display = 'none';
+    } else {
+      goalCard.style.display = '';
+      const pct = Math.min(100, Math.round(curTotal / goal * 100));
+      const over = curTotal > goal;
+      const remaining = goal - curTotal;
+      goalEl.innerHTML = `
+        <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+          <span style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:${over?'var(--warn)':'var(--ink)'};">${fmtBRL(curTotal)}</span>
+          <span style="color:var(--ink-dim);font-size:13px;">de ${fmtBRL(goal)} · <strong style="color:${over?'var(--warn)':'var(--accent)'};">${pct}%</strong></span>
+        </div>
+        <div class="goal-bar-wrap">
+          <div class="goal-bar"><div class="goal-bar-fill" style="width:${pct}%;background:${over?'var(--warn)':'var(--accent)'};"></div></div>
+          <div class="goal-meta">
+            <span>${over ? 'Acima da meta em ' + fmtBRL(curTotal - goal) : 'Restam ' + fmtBRL(remaining)}</span>
+            <span>${pct}%</span>
+          </div>
+        </div>`;
+    }
+  }
+
   // comparação com o mesmo mês do ano passado
   {
     const [cy, cm] = curKey.split('-').map(Number);
@@ -1786,9 +1894,9 @@ function rowHTML(t, selectable){
   <div class="ledger-row${selectable?' selectable':''}" data-id="${t.id}">
     ${selectable ? `<input type="checkbox" class="row-select-chk" data-select="${t.id}">` : ''}
     <span class="ledger-date">${fmtDate(t.date)}</span>
-    <span class="ledger-desc">${escapeHTML(t.desc)}${t.photo ? ' 📎' : ''}${t.installment ? ` <span style="color:var(--gold);font-size:11px;">📅${t.installment.current}/${t.installment.total}</span>` : ''}${t.account ? `<span class="ledger-desc-sub">💳 ${escapeHTML(t.account)}</span>` : ''}${t.notes ? `<span class="ledger-desc-sub">${escapeHTML(t.notes)}</span>`:''}</span>
+    <span class="ledger-desc">${escapeHTML(t.desc)}${t.photo ? ' 📎' : ''}${t.transferId ? ` <span style="color:#5C8FD6;font-size:11px;">↔ ${t.transferLeg==='in'?'entrada':'saída'}</span>` : ''}${t.installment ? ` <span style="color:var(--gold);font-size:11px;">📅${t.installment.current}/${t.installment.total}</span>` : ''}${t.account ? `<span class="ledger-desc-sub">💳 ${escapeHTML(t.account)}</span>` : ''}${t.notes ? `<span class="ledger-desc-sub">${escapeHTML(t.notes)}</span>`:''}</span>
     <span class="cat-tag"><span class="stamp" style="background:${c.color}">${initials(c.name)}</span>${c.name}</span>
-    <span class="ledger-amt" style="color:${tType.color};">${isInflow ? '+' : '−'} ${fmtBRL(t.amount)}</span>
+    <span class="ledger-amt" style="color:${tType.color};">${tType.flowSign===0 ? '↔' : (isInflow ? '+' : '−')} ${fmtBRL(t.amount)}</span>
     <button class="row-del" data-del="${t.id}" title="Excluir">✕</button>
   </div>`;
 }
@@ -1806,17 +1914,35 @@ function attachRowHandlers(container){
       const id = btn.dataset.del;
       const idx = state.transactions.findIndex(t=>t.id===id);
       if(idx===-1) return;
-      const [removed] = state.transactions.splice(idx, 1);
-      saveState();
-      renderDashboard();
-      renderTransactions();
-      showToast('Lançamento excluído.', 'Desfazer', ()=>{
-        state.transactions.splice(idx, 0, removed);
+      const target = state.transactions[idx];
+      const doRemove = ()=>{
+        const removed = [];
+        if(target.transferId){
+          // remove as duas pernas da transferência
+          for(let i=state.transactions.length-1;i>=0;i--){
+            if(state.transactions[i].transferId === target.transferId){
+              removed.push(state.transactions.splice(i,1)[0]);
+            }
+          }
+        } else {
+          removed.push(state.transactions.splice(idx,1)[0]);
+        }
         saveState();
         renderDashboard();
         renderTransactions();
-        showToast('Restaurado.');
-      }, 5000);
+        showToast(removed.length>1 ? 'Transferência excluída.' : 'Lançamento excluído.', 'Desfazer', ()=>{
+          state.transactions.push(...removed);
+          saveState();
+          renderDashboard();
+          renderTransactions();
+          showToast('Restaurado.');
+        }, 5000);
+      };
+      if(target.transferId){
+        askConfirm('Excluir transferência', 'Isso remove a saída e a entrada ligadas desta transferência. Continuar?', doRemove);
+      } else {
+        doRemove();
+      }
     });
   });
   container.querySelectorAll('.ledger-row[data-id]').forEach(row=>{
@@ -1855,6 +1981,8 @@ function renderTransactions(){
   fillTypeFilter();
   fillAccountSuggestions();
   const month = document.getElementById('filter-month').value;
+  const from = document.getElementById('filter-from').value;
+  const to = document.getElementById('filter-to').value;
   const type = document.getElementById('filter-type').value;
   const cat = document.getElementById('filter-category').value;
   const source = document.getElementById('filter-source').value;
@@ -1862,7 +1990,13 @@ function renderTransactions(){
   const search = document.getElementById('filter-search').value.trim().toLowerCase();
 
   let list = state.transactions.slice();
-  if(month) list = list.filter(t=>monthKey(t.date)===month);
+  // período customizado tem prioridade sobre o filtro de mês isolado
+  if(from || to){
+    if(from) list = list.filter(t=> t.date >= from);
+    if(to) list = list.filter(t=> t.date <= to);
+  } else if(month){
+    list = list.filter(t=>monthKey(t.date)===month);
+  }
   if(type) list = list.filter(t=> (t.type||'despesa')===type);
   if(cat) list = list.filter(t=>t.category===cat);
   if(source) list = list.filter(t=>t.source===source);
@@ -1871,6 +2005,27 @@ function renderTransactions(){
   list.sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt));
   currentTxList = list;
   selectedIds = new Set();
+
+  // resumo dos filtros
+  const sumEl = document.getElementById('filter-summary');
+  if(list.length){
+    let despesas = 0, receitas = 0, saldo = 0;
+    list.forEach(t=>{
+      const tt = typeById(t.type);
+      if(tt.countsAsExpense) despesas += t.amount;
+      if(tt.flowSign > 0) receitas += t.amount;
+      saldo += (tt.flowSign || 0) * t.amount;
+    });
+    sumEl.style.display = 'flex';
+    sumEl.innerHTML = `
+      <div class="fs-item"><span class="fs-label">Despesas</span><span class="fs-val warn">${fmtBRL(despesas)}</span></div>
+      <div class="fs-item"><span class="fs-label">Receitas</span><span class="fs-val accent">${fmtBRL(receitas)}</span></div>
+      <div class="fs-item"><span class="fs-label">Saldo do filtro</span><span class="fs-val ${saldo>=0?'accent':'warn'}">${saldo>=0?'':'-'}${fmtBRL(Math.abs(saldo))}</span></div>
+      <span class="fs-count">${list.length} lançamento${list.length===1?'':'s'}</span>`;
+  } else {
+    sumEl.style.display = 'none';
+    sumEl.innerHTML = '';
+  }
 
   const container = document.getElementById('transactions-list');
   container.innerHTML = list.length ? list.map(t=>rowHTML(t, true)).join('') :
@@ -1946,10 +2101,31 @@ document.getElementById('bulk-delete-btn').addEventListener('click', ()=>{
   );
 });
 
-['filter-month','filter-type','filter-category','filter-source','filter-account'].forEach(id=>{
-  document.getElementById(id).addEventListener('change', renderTransactions);
+['filter-month','filter-type','filter-category','filter-source','filter-account','filter-from','filter-to'].forEach(id=>{
+  document.getElementById(id).addEventListener('change', ()=>{
+    // se escolher mês, limpa período customizado; se escolher período, o mês é ignorado na filtragem
+    if(id === 'filter-month' && document.getElementById('filter-month').value){
+      document.getElementById('filter-from').value = '';
+      document.getElementById('filter-to').value = '';
+    }
+    if((id === 'filter-from' || id === 'filter-to') && (document.getElementById('filter-from').value || document.getElementById('filter-to').value)){
+      document.getElementById('filter-month').value = '';
+    }
+    renderTransactions();
+  });
 });
 document.getElementById('filter-search').addEventListener('input', renderTransactions);
+document.getElementById('filter-clear-btn').addEventListener('click', ()=>{
+  document.getElementById('filter-month').value = '';
+  document.getElementById('filter-from').value = '';
+  document.getElementById('filter-to').value = '';
+  document.getElementById('filter-type').value = '';
+  document.getElementById('filter-category').value = '';
+  document.getElementById('filter-source').value = '';
+  document.getElementById('filter-account').value = '';
+  document.getElementById('filter-search').value = '';
+  renderTransactions();
+});
 
 /* ============================================================
    MODAL DE EDIÇÃO
@@ -2014,7 +2190,7 @@ document.getElementById('m-save').addEventListener('click', ()=>{
    ============================================================ */
 document.getElementById('f-date').value = todayISO();
 
-function addTransaction({date, amount, desc, category, source, notes, type, photo, recurringId, account, installment}){
+function addTransaction({date, amount, desc, category, source, notes, type, photo, recurringId, account, installment, transferId, transferLeg}){
   const t = {
     id: uid(), date, amount, desc, category, source: source||'manual',
     type: type||'despesa', notes: notes||'', createdAt: Date.now().toString(),
@@ -2023,8 +2199,21 @@ function addTransaction({date, amount, desc, category, source, notes, type, phot
   if(recurringId) t.recurringId = recurringId;
   if(account) t.account = account.trim();
   if(installment && installment.current && installment.total) t.installment = { current: installment.current, total: installment.total };
+  if(transferId) t.transferId = transferId;
+  if(transferLeg) t.transferLeg = transferLeg;
   state.transactions.push(t);
   saveState();
+}
+
+function toggleTransferFields(typeId){
+  const isTransfer = typeId === 'transferencia';
+  const box = document.getElementById('transfer-fields');
+  if(box) box.style.display = isTransfer ? '' : 'none';
+  const accountField = document.getElementById('f-account');
+  if(accountField){
+    const wrap = accountField.closest('.field');
+    if(wrap) wrap.style.display = isTransfer ? 'none' : '';
+  }
 }
 
 document.getElementById('type-toggle').addEventListener('click', (e)=>{
@@ -2032,10 +2221,17 @@ document.getElementById('type-toggle').addEventListener('click', (e)=>{
   if(!btn) return;
   setActiveTypeButton(document.getElementById('type-toggle'), btn.dataset.type);
   document.getElementById('f-type').value = btn.dataset.type;
+  toggleTransferFields(btn.dataset.type);
   // recategoriza automaticamente com base na descrição já digitada, se houver
   const desc = document.getElementById('f-desc').value.trim();
   if(desc) document.getElementById('f-category').value = suggestCategory(desc, btn.dataset.type);
-  else fillCategorySelects();
+  else {
+    fillCategorySelects();
+    if(btn.dataset.type === 'transferencia'){
+      const sel = document.getElementById('f-category');
+      if(sel.querySelector('option[value="transferencia-cat"]')) sel.value = 'transferencia-cat';
+    }
+  }
 });
 
 document.getElementById('f-desc').addEventListener('change', ()=>{
@@ -2061,16 +2257,39 @@ document.getElementById('manual-form').addEventListener('submit', (e)=>{
   const type = document.getElementById('f-type').value;
   const account = document.getElementById('f-account').value.trim();
   if(!date || !amount){ showToast('Preencha pelo menos a data e o valor.'); return; }
-  addTransaction({date, amount, desc, category, source, notes, type, photo: pendingPhotoDataUrl, account});
-  showToast(typeById(type).flowSign > 0 ? `${typeById(type).name} salva!` : `${typeById(type).name} salvo!`);
+
+  if(type === 'transferencia'){
+    const fromAcc = document.getElementById('f-account-from').value.trim();
+    const toAcc = document.getElementById('f-account-to').value.trim();
+    if(!fromAcc || !toAcc){ showToast('Informe as contas de origem e destino.'); return; }
+    if(fromAcc === toAcc){ showToast('Origem e destino precisam ser diferentes.'); return; }
+    const linkId = uid();
+    const baseCat = category || 'transferencia-cat';
+    addTransaction({
+      date, amount, desc: desc + ' → ' + toAcc, category: baseCat, source: source || 'manual',
+      notes, type: 'transferencia', photo: pendingPhotoDataUrl, account: fromAcc, transferId: linkId, transferLeg: 'out'
+    });
+    // entrada espelho: flowSign 0 também, mas com conta destino — saldo por conta fica rastreável pelo campo account
+    addTransaction({
+      date, amount, desc: desc + ' ← ' + fromAcc, category: baseCat, source: source || 'manual',
+      notes, type: 'transferencia', account: toAcc, transferId: linkId, transferLeg: 'in'
+    });
+    showToast('Transferência registrada (saída + entrada).');
+  } else {
+    addTransaction({date, amount, desc, category, source, notes, type, photo: pendingPhotoDataUrl, account});
+    showToast(typeById(type).flowSign > 0 ? `${typeById(type).name} salva!` : `${typeById(type).name} salvo!`);
+  }
+
+  const keepAccount = account;
   document.getElementById('manual-form').reset();
   document.getElementById('f-date').value = todayISO();
   document.getElementById('f-source').value = 'manual';
-  document.getElementById('f-account').value = account; // mantém preenchido — útil pra lançar vários do mesmo cartão seguidos
+  document.getElementById('f-account').value = keepAccount;
   document.getElementById('ocr-preview').style.display = 'none';
   pendingPhotoDataUrl = null;
   document.getElementById('type-toggle').innerHTML = typeToggleHTML('despesa');
   document.getElementById('f-type').value = 'despesa';
+  toggleTransferFields('despesa');
   fillCategorySelects();
   fillAccountSuggestions();
   renderDashboard();
@@ -2082,6 +2301,7 @@ document.getElementById('f-clear').addEventListener('click', ()=>{
   document.getElementById('ocr-preview').style.display = 'none';
   document.getElementById('type-toggle').innerHTML = typeToggleHTML('despesa');
   document.getElementById('f-type').value = 'despesa';
+  toggleTransferFields('despesa');
 });
 
 /* ============================================================
@@ -2194,14 +2414,18 @@ function preprocessImageForOCR(file){
 }
 
 async function ocrAttempt(url, lang, onProgress){
-  const job = Tesseract.recognize(url, lang, {});
-  if(job && typeof job.progress === 'function' && onProgress){
-    job.progress(p=>{
-      if(p && typeof p.progress === 'number') onProgress(p);
-    });
+  // Tesseract.js v5: recognize(url, lang, { logger })
+  const opts = {};
+  if(onProgress){
+    opts.logger = (m)=>{
+      if(m && m.status === 'recognizing text' && typeof m.progress === 'number'){
+        onProgress({ progress: m.progress });
+      }
+    };
   }
-  const result = await job;
-  const text = (result && result.text) ? result.text : (result && result.data ? result.data.text : '');
+  const result = await Tesseract.recognize(url, lang, opts);
+  const text = (result && result.data && result.data.text) ? result.data.text
+    : (result && result.text ? result.text : '');
   const confidence = result && result.data && typeof result.data.confidence === 'number' ? result.data.confidence : null;
   return { text: text || '', confidence };
 }
@@ -2465,6 +2689,10 @@ function guessCategory(text, kind){
     for(const [re,id] of rules){ if(re.test(t)) return id; }
     return 'outros';
   }
+  if(kind === 'transferencia'){
+    const tc = state.categories.find(c=>c.id==='transferencia-cat') || state.categories.find(c=>c.kind==='transferencia');
+    return tc ? tc.id : 'transferencia-cat';
+  }
   // tipo customizado (ex.: Investimento) — sem regras de palpite prontas; cai na primeira
   // categoria já cadastrada desse tipo, se houver
   const fallback = state.categories.find(c=>c.kind===kind);
@@ -2710,6 +2938,10 @@ setupDropZone('drop-pdf','input-pdf', async file=>{
   const container = document.getElementById('review-pdf');
   container.innerHTML = '<div class="empty-state">Lendo o PDF…</div>';
   try{
+    if(typeof pdfjsLib === 'undefined'){
+      container.innerHTML = '<div class="empty-state">Biblioteca de PDF não carregou (CDN). Recarregue a página ou use OFX/planilha.</div>';
+      return;
+    }
     const buf = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({data: buf}).promise;
     let fullText = '';
@@ -2719,12 +2951,32 @@ setupDropZone('drop-pdf','input-pdf', async file=>{
       const strings = content.items.map(it=>it.str);
       fullText += strings.join(' ') + '\n';
     }
+    const textLen = fullText.replace(/\s+/g,'').length;
+    if(textLen < 40){
+      container.innerHTML = `<div class="empty-state" style="text-align:left;max-width:520px;margin:0 auto;">
+        <strong style="color:var(--ink);">Este PDF parece ser só imagem (sem texto selecionável).</strong><br><br>
+        Bancos às vezes exportam fatura “escaneada”. Opções:
+        <ul style="margin:10px 0 0 18px;color:var(--ink-dim);line-height:1.6;">
+          <li>Exporte o extrato em <strong>OFX</strong> ou <strong>CSV/XLSX</strong> no app do banco</li>
+          <li>Ou fotografe a página e use <strong>Novo lançamento → Foto (OCR)</strong></li>
+        </ul>
+      </div>`;
+      return;
+    }
     const items = parseStatementText(fullText);
+    if(!items.length){
+      container.innerHTML = `<div class="empty-state" style="text-align:left;max-width:520px;margin:0 auto;">
+        Li o PDF, mas não reconheci linhas de lançamento (data + valor).<br><br>
+        Tente <strong>OFX</strong> ou <strong>planilha</strong> do banco, ou use OCR na foto do extrato.
+      </div>`;
+      return;
+    }
     const account = document.getElementById('import-account-pdf').value.trim();
     if(account) items.forEach(it=> it.account = account);
     renderReviewTable('review-pdf', items, 'pdf');
   }catch(err){
-    container.innerHTML = '<div class="empty-state">Não consegui ler esse PDF. Ele pode estar escaneado como imagem — tente exportar em OFX ou planilha.</div>';
+    console.error(err);
+    container.innerHTML = '<div class="empty-state">Não consegui ler esse PDF. Ele pode estar escaneado como imagem — tente exportar em OFX ou planilha, ou use OCR.</div>';
   }
 });
 
@@ -3174,6 +3426,19 @@ document.getElementById('file-prefix-input').addEventListener('change', (e)=>{
   showToast('Nome do arquivo atualizado.');
 });
 
+document.getElementById('monthly-goal-input').addEventListener('change', (e)=>{
+  const raw = e.target.value.trim();
+  if(raw === '' || isNaN(parseFloat(raw))){
+    state.settings.monthlyGoal = null;
+    e.target.value = '';
+  } else {
+    state.settings.monthlyGoal = Math.max(0, parseFloat(raw));
+  }
+  saveState();
+  renderDashboard();
+  showToast(state.settings.monthlyGoal ? 'Meta mensal atualizada.' : 'Meta mensal desativada.');
+});
+
 document.getElementById('cfg-btn-import-sheet').addEventListener('click', ()=>{
   document.querySelector('.spine-btn[data-view="import"]').click();
   document.querySelector('.import-tab[data-tab="planilha"]').click();
@@ -3470,11 +3735,103 @@ document.getElementById('type-save').addEventListener('click', ()=>{
 });
 
 
+/* ============================================================
+   ATALHOS DE TECLADO
+   ============================================================ */
+document.addEventListener('keydown', (e)=>{
+  const tag = (e.target && e.target.tagName || '').toLowerCase();
+  const typing = tag === 'input' || tag === 'textarea' || tag === 'select' || e.target.isContentEditable;
+  if(e.key === 'Escape'){
+    document.querySelectorAll('.modal-bg.active').forEach(m=> m.classList.remove('active'));
+    return;
+  }
+  if(typing) return;
+  if(e.key === '/' ){
+    e.preventDefault();
+    document.querySelector('.spine-btn[data-view="transactions"]').click();
+    setTimeout(()=> document.getElementById('filter-search').focus(), 30);
+  }
+  if(e.key === 'n' || e.key === 'N'){
+    e.preventDefault();
+    document.querySelector('.spine-btn[data-view="new"]').click();
+    setTimeout(()=> document.getElementById('f-desc').focus(), 30);
+  }
+  if(e.key === 'd' || e.key === 'D'){
+    e.preventDefault();
+    document.querySelector('.spine-btn[data-view="dashboard"]').click();
+  }
+});
+
+/* ============================================================
+   PWA MÍNIMA (manifest inline + service worker básico)
+   ============================================================ */
+function registerPWA(){
+  try{
+    const manifest = {
+      name: 'Livro-Caixa',
+      short_name: 'Livro-Caixa',
+      description: 'Controle de gastos pessoal',
+      start_url: '.',
+      display: 'standalone',
+      background_color: '#121A1D',
+      theme_color: '#121A1D',
+      lang: 'pt-BR',
+      icons: [{
+        src: document.querySelector('link[rel="icon"]').href,
+        sizes: '180x180',
+        type: 'image/png',
+        purpose: 'any maskable'
+      }]
+    };
+    const blob = new Blob([JSON.stringify(manifest)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    let link = document.querySelector('link[rel="manifest"]');
+    if(!link){
+      link = document.createElement('link');
+      link.rel = 'manifest';
+      document.head.appendChild(link);
+    }
+    link.href = url;
+
+    if('serviceWorker' in navigator){
+      const swCode = `
+        const CACHE = 'livro-caixa-v2026-08-12';
+        self.addEventListener('install', (e)=>{
+          self.skipWaiting();
+          e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./']).catch(()=>{})));
+        });
+        self.addEventListener('activate', (e)=>{
+          e.waitUntil(
+            caches.keys().then(keys=> Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))
+              .then(()=> self.clients.claim())
+          );
+        });
+        self.addEventListener('fetch', (e)=>{
+          const req = e.request;
+          if(req.method !== 'GET') return;
+          e.respondWith(
+            fetch(req).then(res=>{
+              const copy = res.clone();
+              caches.open(CACHE).then(c=>{ try{ c.put(req, copy); }catch(err){} });
+              return res;
+            }).catch(()=> caches.match(req).then(r=> r || caches.match('./')))
+          );
+        });
+      `;
+      const swBlob = new Blob([swCode], {type:'text/javascript'});
+      const swUrl = URL.createObjectURL(swBlob);
+      // blob: SW só funciona em alguns contextos; se falhar, ignora silenciosamente
+      navigator.serviceWorker.register(swUrl).catch(()=>{});
+    }
+  }catch(err){ /* PWA opcional */ }
+}
+
 async function init(){
   try{
     await loadState();
     runRecurringGeneration();
     document.getElementById('type-toggle').innerHTML = typeToggleHTML('despesa');
+    toggleTransferFields('despesa');
     fillCategorySelects();
     fillAccountSuggestions();
     fillMonthFilter();
@@ -3487,6 +3844,7 @@ async function init(){
         hasStoredHandle = !!stored;
       }catch(e){ hasStoredHandle = false; }
     }
+    registerPWA();
   }catch(err){
     console.error('Erro ao iniciar o app:', err);
     showToast('Algo não carregou direito ao abrir o app — veja o console para detalhes.');
