@@ -443,6 +443,34 @@
   .kbd-hint{font-size:11px;color:var(--ink-faint);margin-top:8px;}
   kbd{font-family:var(--font-mono);font-size:10px;background:var(--surface-3);border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--ink-dim);}
 
+
+  /* ---------- Insights, pace, card limits, invoice sim ---------- */
+  .insight-list{display:flex;flex-direction:column;gap:10px;}
+  .insight-item{
+    display:flex;gap:12px;align-items:flex-start;
+    background:var(--surface-2);border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px;font-size:13.5px;line-height:1.45;color:var(--ink);
+  }
+  .insight-icon{font-size:18px;line-height:1;flex-shrink:0;margin-top:1px;}
+  .insight-item.warn-ish{border-color:var(--warn-dim);background:rgba(217,124,87,.08);}
+  .insight-item.good-ish{border-color:var(--accent-dim);background:rgba(89,179,163,.08);}
+  .pace-dual{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;font-size:12px;color:var(--ink-dim);}
+  .pace-dual strong{color:var(--ink);font-family:var(--font-mono);}
+  .limit-row{
+    display:flex;flex-direction:column;gap:6px;
+    padding:12px 4px;border-bottom:1px dashed var(--line);
+  }
+  .limit-row-top{display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;}
+  .limit-row-name{font-weight:500;color:var(--ink);}
+  .limit-row-meta{font-size:11.5px;color:var(--ink-faint);font-family:var(--font-mono);}
+  .sim-breakdown{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+  .sim-line{display:flex;justify-content:space-between;gap:12px;font-size:13px;color:var(--ink-dim);}
+  .sim-line strong{color:var(--ink);font-family:var(--font-mono);white-space:nowrap;}
+  .sim-total{border-top:1px solid var(--line);padding-top:10px;margin-top:4px;font-size:14px;}
+  .sim-total strong{font-size:18px;}
+  .account-limit-cfg-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px dashed var(--line);flex-wrap:wrap;}
+  .account-limit-cfg-row input{max-width:140px;}
+
 </style>
 </head>
 <body>
@@ -503,6 +531,16 @@
         <div id="goal-content"></div>
       </div>
 
+      <div class="card" style="margin-bottom:18px;" id="pace-card">
+        <div class="panel-title">Ritmo do mês <span id="pace-month-label" style="font-size:12px;font-weight:500;color:var(--ink-faint);font-family:var(--font-body);"></span></div>
+        <div id="pace-content"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px;" id="insights-card">
+        <div class="panel-title">Insights automáticos</div>
+        <div id="insights-content" class="insight-list"></div>
+      </div>
+
       <div class="card" style="margin-bottom:18px;" id="yoy-card">
         <div class="panel-title">Comparando com o mesmo mês do ano passado</div>
         <div id="yoy-content"></div>
@@ -540,6 +578,18 @@
       <div class="card" style="margin-top:18px;" id="account-summary-card">
         <div class="panel-title">Por conta/cartão (mês atual)</div>
         <div id="account-summary-list"></div>
+      </div>
+
+      <div class="card" style="margin-top:18px;" id="card-limits-card">
+        <div class="panel-title">Limites de cartão / conta</div>
+        <p style="color:var(--ink-dim);font-size:12.5px;margin:-8px 0 14px;">Gasto do ciclo + parcelas futuras já comprometidas nessa conta. Configure os limites em <a href="#" id="link-view-limits" style="color:var(--accent);">Config → Limites</a>.</p>
+        <div id="card-limits-list"></div>
+      </div>
+
+      <div class="card" style="margin-top:18px;" id="invoice-sim-card">
+        <div class="panel-title">Simulador da próxima fatura</div>
+        <p style="color:var(--ink-dim);font-size:12.5px;margin:-8px 0 14px;">Estimativa do que deve aparecer no próximo ciclo: lançamentos do mês atual + recorrências de despesa + parcelas que vencem no mês seguinte.</p>
+        <div id="invoice-sim-content"></div>
       </div>
 
       <div class="card" style="margin-top:18px;" id="installments-card">
@@ -768,7 +818,35 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-        <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-12-02 (filtros, meta, transferência, PWA)</p>
+        <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-12-04 (limites, fatura, insights, ritmo)</p>
+      </div>
+
+      <div class="card" style="margin-bottom:18px;">
+        <div class="panel-title">Meta mensal de despesas</div>
+        <p style="color:var(--ink-dim);font-size:13px;line-height:1.5;margin:0 0 14px;">
+          Define um teto de gastos para o mês. O progresso aparece na <strong>Visão geral</strong>.
+        </p>
+        <div class="field" style="max-width:320px;margin-bottom:0;">
+          <label>Valor da meta (R$)</label>
+          <input type="number" id="monthly-goal-input" step="0.01" min="0" placeholder="Ex.: 4000,00 — deixe vazio para desativar">
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px;" id="limits-section">
+        <div class="panel-title">Limites por conta/cartão</div>
+        <p style="color:var(--ink-dim);font-size:13px;line-height:1.5;margin:0 0 14px;">
+          Informe o limite de cada cartão ou conta. Na visão geral o app mostra quanto já está ocupado
+          (gastos do mês + parcelas futuras dessa conta).
+        </p>
+        <div id="account-limits-list"></div>
+        <div class="field" style="max-width:360px;margin-top:14px;">
+          <label>Adicionar limite para conta ainda sem lançamentos</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <input type="text" id="new-limit-account" placeholder="Ex.: Cartão Nubank" list="account-suggestions" style="flex:1;min-width:140px;">
+            <input type="number" id="new-limit-value" step="0.01" min="0" placeholder="Limite R$" style="width:130px;">
+            <button type="button" class="btn secondary" id="new-limit-btn" style="padding:10px 14px;">Salvar</button>
+          </div>
+        </div>
       </div>
 
       <div class="card" style="margin-bottom:18px;">
@@ -776,11 +854,6 @@
         <div class="field" style="max-width:320px;margin-bottom:16px;">
           <label>Nome base do arquivo</label>
           <input type="text" id="file-prefix-input" placeholder="livro-caixa">
-        </div>
-        <div class="field" style="max-width:320px;margin-bottom:16px;">
-          <label>Meta mensal de despesas (R$)</label>
-          <input type="number" id="monthly-goal-input" step="0.01" min="0" placeholder="Ex.: 4000,00 — deixe vazio para desativar">
-          <span style="font-size:11px;color:var(--ink-faint);margin-top:4px;display:block;">Aparece no dashboard como barra de progresso do mês em exibição.</span>
         </div>
         <div id="config-storage-status" style="font-size:13px;color:var(--ink-dim);margin-bottom:14px;line-height:1.5;"></div>
         <div class="btn-row" style="margin-top:0;flex-wrap:wrap;" id="config-storage-actions"></div>
@@ -977,6 +1050,7 @@ let state = {
   categoryRules: [],  // {keyword, category} — aprendido a partir de correções feitas ao importar
   recurringTemplates: [], // {id, desc, amount, category, type, day}
   settings: { filePrefix: 'livro-caixa', monthlyGoal: null },
+  accountLimits: {}, // { 'Cartão X': { limit: 26000 } }
   transactionTypes: DEFAULT_TRANSACTION_TYPES.slice(),
 };
 
@@ -1008,6 +1082,7 @@ function normalizeLoadedState(parsed){
   state.categoryRules = parsed.categoryRules || [];
   state.recurringTemplates = parsed.recurringTemplates || [];
   state.settings = { filePrefix: 'livro-caixa', monthlyGoal: null, ...(parsed.settings || {}) };
+  state.accountLimits = parsed.accountLimits && typeof parsed.accountLimits === 'object' ? parsed.accountLimits : {};
   let types = parsed.transactionTypes && parsed.transactionTypes.length ? parsed.transactionTypes.slice() : DEFAULT_TRANSACTION_TYPES.slice();
   // garante que despesa/receita sempre existam, mesmo em backups antigos ou editados na mão
   DEFAULT_TRANSACTION_TYPES.filter(dt => !types.some(t=>t.id===dt.id)).forEach(dt=> types.push(dt));
@@ -1155,6 +1230,7 @@ document.querySelectorAll('.spine-btn').forEach(btn=>{
       document.getElementById('file-prefix-input').value = state.settings.filePrefix || 'livro-caixa';
       const g = state.settings.monthlyGoal;
       document.getElementById('monthly-goal-input').value = (g && g > 0) ? g : '';
+      renderAccountLimitsConfig();
       renderConfigStorageSection();
     }
     document.getElementById('fab-quick-add').classList.toggle('hide', btn.dataset.view==='new');
@@ -1466,6 +1542,222 @@ function ensureCanvas(wrapId, canvasId){
   return canvas;
 }
 
+
+/* ============================================================
+   LIMITES, PARCELAS, INSIGHTS, RITMO, SIMULADOR
+   ============================================================ */
+function getPendingInstallmentItems(){
+  const groups = {};
+  state.transactions.forEach(t=>{
+    if(!t.installment) return;
+    const key = normalizeDesc(t.desc)+'|'+t.installment.total+(t.account?'|'+normalizeDesc(t.account):'');
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(t);
+  });
+  const pendingItems = [];
+  Object.values(groups).forEach(txs=>{
+    const latest = txs.reduce((a,b)=> b.installment.current > a.installment.current ? b : a);
+    const remaining = latest.installment.total - latest.installment.current;
+    if(remaining <= 0) return;
+    const [y,m] = latest.date.split('-').map(Number);
+    const contribMonths = [];
+    for(let k=1;k<=remaining;k++){
+      const d = new Date(y, (m-1)+k, 1);
+      const key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      contribMonths.push(key);
+    }
+    pendingItems.push({ ...latest, remaining, contribMonths });
+  });
+  return pendingItems;
+}
+
+function installmentAmountForMonth(pendingItems, monthKeyStr, accountFilter){
+  return pendingItems
+    .filter(t=> t.contribMonths.includes(monthKeyStr) && (!accountFilter || t.account === accountFilter))
+    .reduce((s,t)=> s + t.amount, 0);
+}
+
+function accountOccupied(accountName, cycleMonthKey, pendingItems){
+  const spentCycle = state.transactions
+    .filter(t=> t.account===accountName && monthKey(t.date)===cycleMonthKey && typeById(t.type).countsAsExpense)
+    .reduce((s,t)=>s+t.amount, 0);
+  // parcelas futuras desta conta (todos os meses restantes)
+  const futureInst = pendingItems
+    .filter(t=> t.account===accountName)
+    .reduce((s,t)=> s + t.amount * t.remaining, 0);
+  return { spentCycle, futureInst, total: spentCycle + futureInst };
+}
+
+function nextMonthKey(monthKeyStr){
+  const [y,m] = monthKeyStr.split('-').map(Number);
+  const d = new Date(y, m, 1); // month is 1-based in key; Date month is 0-based so m means next month
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+}
+
+function buildInsights(curKey, curTotal, curDespesas, prevTotal, dataMonths){
+  const insights = [];
+  const isExpense = t => typeById(t.type).countsAsExpense;
+
+  // 1) categoria que mais cresceu vs média dos meses anteriores com dados
+  const byCatCur = {};
+  curDespesas.forEach(t=>{ byCatCur[t.category] = (byCatCur[t.category]||0)+t.amount; });
+  const prevMonths = dataMonths.filter(m=> m < curKey).slice(-6);
+  if(prevMonths.length >= 1 && Object.keys(byCatCur).length){
+    const avgByCat = {};
+    prevMonths.forEach(m=>{
+      state.transactions.filter(t=> monthKey(t.date)===m && isExpense(t)).forEach(t=>{
+        avgByCat[t.category] = (avgByCat[t.category]||0) + t.amount;
+      });
+    });
+    Object.keys(avgByCat).forEach(id=>{ avgByCat[id] = avgByCat[id] / prevMonths.length; });
+    let best = null;
+    Object.entries(byCatCur).forEach(([id, val])=>{
+      const avg = avgByCat[id] || 0;
+      if(avg < 30) return; // ignora categorias com média irrelevante
+      const growth = (val - avg) / avg;
+      if(!best || growth > best.growth) best = { id, val, avg, growth };
+    });
+    if(best && best.growth >= 0.15){
+      insights.push({
+        kind: best.growth >= 0.35 ? 'warn' : 'neutral',
+        icon: '📈',
+        text: `${catById(best.id).name} foi a categoria que mais cresceu este mês (+${Math.round(best.growth*100)}% vs a média dos últimos ${prevMonths.length} mês${prevMonths.length===1?'':'es'}).`
+      });
+    }
+  }
+
+  // 2) projeção do mês no ritmo atual
+  const now = new Date();
+  const realCur = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  if(curKey === realCur && curTotal > 0){
+    const day = now.getDate();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+    const projected = curTotal / day * daysInMonth;
+    if(prevTotal > 0){
+      const vs = ((projected - prevTotal) / prevTotal * 100);
+      insights.push({
+        kind: vs > 10 ? 'warn' : (vs < -10 ? 'good' : 'neutral'),
+        icon: '🎯',
+        text: `No ritmo atual, você deve fechar o mês em ${fmtBRL(projected)} — ${vs>=0?'+':''}${vs.toFixed(0)}% em relação ao mês anterior (${fmtBRL(prevTotal)}).`
+      });
+    } else {
+      insights.push({
+        kind: 'neutral', icon: '🎯',
+        text: `No ritmo atual, a projeção de despesas do mês é ${fmtBRL(projected)}.`
+      });
+    }
+  }
+
+  // 3) categoria já consumiu grande parte da média e ainda faltam dias
+  if(curKey === realCur && prevMonths.length >= 1){
+    const day = now.getDate();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+    const daysLeft = daysInMonth - day;
+    if(daysLeft >= 5){
+      const avgByCat = {};
+      prevMonths.forEach(m=>{
+        state.transactions.filter(t=> monthKey(t.date)===m && isExpense(t)).forEach(t=>{
+          avgByCat[t.category] = (avgByCat[t.category]||0) + t.amount;
+        });
+      });
+      Object.keys(avgByCat).forEach(id=>{ avgByCat[id] /= prevMonths.length; });
+      let hit = null;
+      Object.entries(byCatCur).forEach(([id, val])=>{
+        const avg = avgByCat[id] || 0;
+        if(avg < 80) return;
+        const pct = val / avg;
+        if(pct >= 0.75 && (!hit || pct > hit.pct)) hit = { id, val, avg, pct };
+      });
+      if(hit){
+        insights.push({
+          kind: 'warn', icon: '⏰',
+          text: `Você já gastou ${Math.round(hit.pct*100)}% do que costuma gastar em ${catById(hit.id).name}, e ainda faltam ${daysLeft} dias de mês.`
+        });
+      }
+    }
+  }
+
+  // 4) limite de cartão perto do teto
+  const pending = getPendingInstallmentItems();
+  Object.entries(state.accountLimits || {}).forEach(([name, cfg])=>{
+    if(!cfg || !cfg.limit) return;
+    const occ = accountOccupied(name, curKey, pending);
+    const pct = occ.total / cfg.limit;
+    if(pct >= 0.8){
+      insights.push({
+        kind: pct >= 1 ? 'warn' : 'warn',
+        icon: '💳',
+        text: pct >= 1
+          ? `${name}: ocupação estimada ${fmtBRL(occ.total)} já ultrapassa o limite de ${fmtBRL(cfg.limit)}.`
+          : `${name}: ${Math.round(pct*100)}% do limite ocupado (${fmtBRL(occ.total)} de ${fmtBRL(cfg.limit)}).`
+      });
+    }
+  });
+
+  // 5) fallback se poucos insights
+  if(!insights.length && curTotal > 0){
+    insights.push({
+      kind: 'neutral', icon: '✨',
+      text: `Despesas de ${monthLabel(curKey)} somam ${fmtBRL(curTotal)} em ${curDespesas.length} lançamento${curDespesas.length===1?'':'s'}.`
+    });
+  }
+  if(!insights.length){
+    insights.push({
+      kind: 'neutral', icon: '👋',
+      text: 'Ainda há pouco histórico para gerar insights. Importe uma fatura ou registre alguns gastos.'
+    });
+  }
+  return insights.slice(0, 4);
+}
+
+function renderAccountLimitsConfig(){
+  const el = document.getElementById('account-limits-list');
+  if(!el) return;
+  const accounts = Array.from(new Set([
+    ...knownAccounts(),
+    ...Object.keys(state.accountLimits || {})
+  ])).sort((a,b)=> a.localeCompare(b,'pt-BR'));
+  if(!accounts.length){
+    el.innerHTML = '<div class="empty-state" style="padding:16px 0;">Nenhuma conta/cartão nos lançamentos ainda. Importe uma fatura ou digite o nome abaixo.</div>';
+    return;
+  }
+  el.innerHTML = accounts.map(name=>{
+    const lim = (state.accountLimits[name] && state.accountLimits[name].limit) || '';
+    return `<div class="account-limit-cfg-row">
+      <span style="flex:1;min-width:120px;color:var(--ink);">💳 ${escapeHTML(name)}</span>
+      <input type="number" class="limit-input" data-account="${escapeAttr(name)}" step="0.01" min="0" value="${lim}" placeholder="Sem limite">
+      <button type="button" class="btn ghost limit-save-btn" data-account="${escapeAttr(name)}" style="padding:7px 12px;font-size:12px;">Salvar</button>
+      ${lim ? `<button type="button" class="btn ghost limit-clear-btn" data-account="${escapeAttr(name)}" style="padding:7px 10px;font-size:12px;color:var(--warn);">Remover</button>` : ''}
+    </div>`;
+  }).join('');
+  el.querySelectorAll('.limit-save-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const name = btn.dataset.account;
+      const input = Array.from(el.querySelectorAll('.limit-input')).find(i=> i.dataset.account === name);
+      const val = parseFloat(input && input.value);
+      if(!val || val <= 0){
+        delete state.accountLimits[name];
+      } else {
+        state.accountLimits[name] = { limit: val };
+      }
+      saveState();
+      renderAccountLimitsConfig();
+      renderDashboard();
+      showToast('Limite atualizado.');
+    });
+  });
+  el.querySelectorAll('.limit-clear-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      delete state.accountLimits[btn.dataset.account];
+      saveState();
+      renderAccountLimitsConfig();
+      renderDashboard();
+      showToast('Limite removido.');
+    });
+  });
+}
+
+
 function renderDashboard(){
  try{
   const hasData = state.transactions.length > 0;
@@ -1558,6 +1850,63 @@ function renderDashboard(){
           </div>
         </div>`;
     }
+  }
+
+  // ritmo do mês
+  {
+    const paceCard = document.getElementById('pace-card');
+    const paceEl = document.getElementById('pace-content');
+    document.getElementById('pace-month-label').textContent = '· ' + monthLabel(curKey);
+    const now = new Date();
+    const realCur = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+    if(curKey !== realCur || !hasData){
+      // mês em exibição não é o calendário atual — mostra só gasto vs 100% do mês
+      paceEl.innerHTML = `
+        <div class="goal-bar-wrap">
+          <div class="goal-bar"><div class="goal-bar-fill" style="width:100%;background:var(--accent-dim);"></div></div>
+          <div class="goal-meta"><span>Mês completo em visualização</span><span>${fmtBRL(curTotal)} em despesas</span></div>
+        </div>
+        <p style="font-size:12.5px;color:var(--ink-dim);margin:10px 0 0;">O ritmo diário só faz sentido para o mês-calendário atual.</p>`;
+    } else {
+      const day = now.getDate();
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+      const monthPct = Math.round(day / daysInMonth * 100);
+      const projected = day > 0 ? curTotal / day * daysInMonth : curTotal;
+      const spendVsTime = monthPct > 0 ? (curTotal / (prevDespesaTotal > 0 ? prevDespesaTotal : projected || 1)) : 0;
+      // barra 1: tempo decorrido; barra 2 implícita pelo gasto projetado
+      const paceColor = (curTotal / day) > ((prevDespesaTotal || projected) / daysInMonth) * 1.15 ? 'var(--warn)' : 'var(--accent)';
+      paceEl.innerHTML = `
+        <div style="margin-bottom:4px;font-size:13px;color:var(--ink-dim);">
+          Você já gastou <strong style="color:var(--ink);font-family:var(--font-mono);">${fmtBRL(curTotal)}</strong>
+          e estamos em <strong style="color:var(--ink);">${monthPct}%</strong> do mês (dia ${day} de ${daysInMonth}).
+        </div>
+        <div class="goal-bar-wrap">
+          <div style="font-size:11px;color:var(--ink-faint);margin-bottom:4px;">Tempo decorrido</div>
+          <div class="goal-bar"><div class="goal-bar-fill" style="width:${monthPct}%;background:var(--ink-faint);"></div></div>
+        </div>
+        <div class="goal-bar-wrap" style="margin-top:12px;">
+          <div style="font-size:11px;color:var(--ink-faint);margin-bottom:4px;">Gasto do mês (em relação à projeção linear ${fmtBRL(projected)})</div>
+          <div class="goal-bar"><div class="goal-bar-fill" style="width:${Math.min(100, Math.round(curTotal/Math.max(projected,1)*100))}%;background:${paceColor};"></div></div>
+          <div class="goal-meta">
+            <span>Projeção: ${fmtBRL(projected)}</span>
+            <span>${prevDespesaTotal>0 ? 'Mês anterior: '+fmtBRL(prevDespesaTotal) : ''}</span>
+          </div>
+        </div>
+        <div class="pace-dual">
+          <div>Média diária atual: <strong>${fmtBRL(curTotal/day)}</strong></div>
+          <div>Média diária “ideal” p/ igualar mês anterior: <strong>${prevDespesaTotal>0 ? fmtBRL(prevDespesaTotal/daysInMonth) : '—'}</strong></div>
+        </div>`;
+    }
+  }
+
+  // insights automáticos
+  {
+    const insights = buildInsights(curKey, curTotal, curDespesas, prevDespesaTotal, dataMonths);
+    const el = document.getElementById('insights-content');
+    el.innerHTML = insights.map(ins=>{
+      const cls = ins.kind === 'warn' ? 'warn-ish' : (ins.kind === 'good' ? 'good-ish' : '');
+      return `<div class="insight-item ${cls}"><span class="insight-icon">${ins.icon}</span><span>${escapeHTML(ins.text)}</span></div>`;
+    }).join('');
   }
 
   // comparação com o mesmo mês do ano passado
@@ -1788,36 +2137,105 @@ function renderDashboard(){
       </div>`).join('');
   }
 
+  // limites de cartão
+  {
+    const pendingForLimits = getPendingInstallmentItems();
+    const limitNames = Array.from(new Set([
+      ...Object.keys(state.accountLimits || {}),
+      ...accountEntries.map(([n])=>n)
+    ])).filter(n=> state.accountLimits[n] && state.accountLimits[n].limit > 0);
+    const limCard = document.getElementById('card-limits-card');
+    const limEl = document.getElementById('card-limits-list');
+    if(!limitNames.length){
+      limCard.style.display = Object.keys(state.accountLimits||{}).length ? '' : 'none';
+      limEl.innerHTML = '<div class="empty-state" style="padding:12px 0;">Nenhum limite configurado. Vá em Config → Limites por conta/cartão.</div>';
+    } else {
+      limCard.style.display = '';
+      limEl.innerHTML = limitNames.map(name=>{
+        const limit = state.accountLimits[name].limit;
+        const occ = accountOccupied(name, curKey, pendingForLimits);
+        const pct = Math.min(100, Math.round(occ.total / limit * 100));
+        const over = occ.total > limit;
+        const near = !over && pct >= 80;
+        const color = over ? 'var(--warn)' : (near ? 'var(--gold)' : 'var(--accent)');
+        return `<div class="limit-row">
+          <div class="limit-row-top">
+            <span class="limit-row-name">💳 ${escapeHTML(name)}</span>
+            <span class="limit-row-meta" style="color:${color};">${fmtBRL(occ.total)} / ${fmtBRL(limit)} · ${pct}%</span>
+          </div>
+          <div class="goal-bar"><div class="goal-bar-fill" style="width:${pct}%;background:${color};"></div></div>
+          <div class="limit-row-meta">Ciclo ${monthLabel(curKey)}: ${fmtBRL(occ.spentCycle)} · Parcelas futuras: ${fmtBRL(occ.futureInst)}${over?' · acima do limite':(near?' · perto do limite':'')}</div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // simulador próxima fatura
+  {
+    const pendingItems = getPendingInstallmentItems();
+    const nxt = nextMonthKey(curKey);
+    const cycleSpend = curTotal; // despesas do mês em exibição (já calculado)
+    const recurringExpense = state.recurringTemplates
+      .filter(tpl => typeById(tpl.type).countsAsExpense)
+      .reduce((s,tpl)=> s + tpl.amount, 0);
+    // se a recorrência do mês atual já foi gerada, não contar de novo no "já lançado" vs "recorrente"
+    // no simulador: "já lançado no ciclo" = curTotal; "recorrências previstas no próximo mês" = templates
+    // "parcelas no próximo mês" = installmentAmountForMonth next
+    const instNext = installmentAmountForMonth(pendingItems, nxt, null);
+    // também parcelas que caem no próprio curKey e ainda não "existem" como lançamento? 
+    // as pending já começam no mês seguinte ao latest — ok
+    const estimated = cycleSpend + recurringExpense + instNext;
+    // nota: cycleSpend é o mês atual; para "próxima fatura" o usuário quer o próximo ciclo.
+    // Interpretação prática: estimativa do próximo mês = recorrências + parcelas do próximo mês
+    // + média/recente do que já costuma vir. Melhor: 
+    // baseNext = recorrências de despesa + parcelas que vencem no próximo mês
+    // + gastos do mês atual sem parcela (proxy do consumo recorrente de fatura)
+    const spendWithoutInstallments = curDespesas
+      .filter(t=> !t.installment)
+      .reduce((s,t)=>s+t.amount, 0);
+    const estimatedNext = spendWithoutInstallments + recurringExpense + instNext;
+
+    const simCard = document.getElementById('invoice-sim-card');
+    const simEl = document.getElementById('invoice-sim-content');
+    if(!hasData){
+      simCard.style.display = 'none';
+    } else {
+      simCard.style.display = '';
+      // por conta
+      const byAcc = {};
+      curDespesas.filter(t=>!t.installment && t.account).forEach(t=>{
+        byAcc[t.account] = (byAcc[t.account]||0) + t.amount;
+      });
+      pendingItems.forEach(t=>{
+        if(!t.contribMonths.includes(nxt) || !t.account) return;
+        byAcc[t.account] = (byAcc[t.account]||0) + t.amount;
+      });
+      const accLines = Object.entries(byAcc).sort((a,b)=>b[1]-a[1]).slice(0,6)
+        .map(([n,v])=>`<div class="sim-line"><span>💳 ${escapeHTML(n)}</span><strong>${fmtBRL(v)}</strong></div>`).join('');
+
+      simEl.innerHTML = `
+        <div class="sim-breakdown">
+          <div class="sim-line"><span>Gastos do ciclo atual (sem parcelas)</span><strong>${fmtBRL(spendWithoutInstallments)}</strong></div>
+          <div class="sim-line"><span>Recorrências de despesa (todo mês)</span><strong>${fmtBRL(recurringExpense)}</strong></div>
+          <div class="sim-line"><span>Parcelas com vencimento em ${monthLabel(nxt)}</span><strong>${fmtBRL(instNext)}</strong></div>
+          <div class="sim-line sim-total"><span>Estimativa p/ ${monthLabel(nxt)}</span><strong style="color:var(--gold);">${fmtBRL(estimatedNext)}</strong></div>
+        </div>
+        <p style="font-size:12px;color:var(--ink-faint);margin:12px 0 0;line-height:1.45;">
+          Heurística: usa o consumo à vista do mês em exibição como proxy do próximo ciclo, soma assinaturas/recorrências e as parcelas já conhecidas. Não é a fatura oficial do banco.
+        </p>
+        ${accLines ? `<div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;margin:14px 0 6px;">Por conta (proxy + parcelas)</div>${accLines}` : ''}
+      `;
+    }
+  }
+
   // parcelas futuras: projeta os meses seguintes a partir de lançamentos com número de parcela
   {
-    // agrupa por compra original (descrição + total de parcelas) — faturas de cartão costumam
-    // repetir a mesma compra em cada mês com o número da parcela avançando, e às vezes o valor
-    // (arredondamento) ou a conta preenchida variam entre uma reimportação e outra; sem agrupar
-    // de forma tolerante, cada reaparição seria contada como uma dívida nova, multiplicando o valor real
-    const groups = {};
-    state.transactions.forEach(t=>{
-      if(!t.installment) return;
-      const key = normalizeDesc(t.desc)+'|'+t.installment.total;
-      if(!groups[key]) groups[key] = [];
-      groups[key].push(t);
-    });
-
+    const pendingItems = getPendingInstallmentItems();
     const byMonth = {};
-    const pendingItems = [];
-    Object.values(groups).forEach(txs=>{
-      // usa só o registro com a parcela mais avançada — os anteriores já viraram histórico
-      const latest = txs.reduce((a,b)=> b.installment.current > a.installment.current ? b : a);
-      const remaining = latest.installment.total - latest.installment.current;
-      if(remaining <= 0) return;
-      const [y,m] = latest.date.split('-').map(Number);
-      const contribMonths = [];
-      for(let k=1;k<=remaining;k++){
-        const d = new Date(y, (m-1)+k, 1);
-        const key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-        byMonth[key] = (byMonth[key]||0) + latest.amount;
-        contribMonths.push(key);
-      }
-      pendingItems.push({ ...latest, remaining, contribMonths });
+    pendingItems.forEach(t=>{
+      t.contribMonths.forEach(key=>{
+        byMonth[key] = (byMonth[key]||0) + t.amount;
+      });
     });
 
     const instCard = document.getElementById('installments-card');
@@ -3439,6 +3857,29 @@ document.getElementById('monthly-goal-input').addEventListener('change', (e)=>{
   showToast(state.settings.monthlyGoal ? 'Meta mensal atualizada.' : 'Meta mensal desativada.');
 });
 
+document.getElementById('new-limit-btn').addEventListener('click', ()=>{
+  const name = document.getElementById('new-limit-account').value.trim();
+  const val = parseFloat(document.getElementById('new-limit-value').value);
+  if(!name){ showToast('Informe o nome da conta/cartão.'); return; }
+  if(!val || val <= 0){ showToast('Informe um limite válido.'); return; }
+  state.accountLimits[name] = { limit: val };
+  saveState();
+  document.getElementById('new-limit-account').value = '';
+  document.getElementById('new-limit-value').value = '';
+  renderAccountLimitsConfig();
+  renderDashboard();
+  showToast('Limite salvo para ' + name + '.');
+});
+
+document.getElementById('link-view-limits').addEventListener('click', (e)=>{
+  e.preventDefault();
+  document.querySelector('.spine-btn[data-view="config"]').click();
+  setTimeout(()=>{
+    const sec = document.getElementById('limits-section');
+    if(sec) sec.scrollIntoView({behavior:'smooth', block:'start'});
+  }, 50);
+});
+
 document.getElementById('cfg-btn-import-sheet').addEventListener('click', ()=>{
   document.querySelector('.spine-btn[data-view="import"]').click();
   document.querySelector('.import-tab[data-tab="planilha"]').click();
@@ -3455,12 +3896,13 @@ document.getElementById('export-backup-btn').addEventListener('click', ()=>{
   const backup = {
     exportedAt: new Date().toISOString(),
     app: 'livro-caixa',
-    version: 1,
+    version: 2,
     transactions: state.transactions,
     categories: state.categories,
     categoryRules: state.categoryRules,
     recurringTemplates: state.recurringTemplates,
     settings: state.settings,
+    accountLimits: state.accountLimits,
     transactionTypes: state.transactionTypes,
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
