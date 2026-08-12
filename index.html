@@ -706,6 +706,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
+        <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-11-01 (leitor de CSV próprio)</p>
       </div>
 
       <div class="card" style="margin-bottom:18px;">
@@ -2774,24 +2775,55 @@ function detectCsvDelimiter(text){
   return Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0];
 }
 
+// leitor de CSV próprio (respeita campos entre aspas, inclusive com aspas duplicadas "" dentro),
+// usado no lugar do leitor de CSV do SheetJS — que se mostrou instável com algumas linhas deste
+// tipo de extrato, embaralhando datas silenciosamente sem motivo aparente no arquivo em si
+function parseCsvToRows(text, delimiter){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i=0; i<text.length; i++){
+    const ch = text[i];
+    if(inQuotes){
+      if(ch === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; }
+        else inQuotes = false;
+      } else {
+        field += ch;
+      }
+    } else {
+      if(ch === '"'){
+        inQuotes = true;
+      } else if(ch === delimiter){
+        row.push(field); field = '';
+      } else if(ch === '\r'){
+        // ignora — a quebra de linha real é tratada no \n
+      } else if(ch === '\n'){
+        row.push(field); field = '';
+        rows.push(row); row = [];
+      } else {
+        field += ch;
+      }
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+
 setupDropZone('drop-planilha','input-planilha', file=>{
   const isCsv = /\.csv$/i.test(file.name) || file.type === 'text/csv';
   const reader = new FileReader();
   reader.onload = (e)=>{
     try{
-      let wb;
+      let rows;
       if(isCsv){
         const text = typeof e.target.result === 'string' ? e.target.result : new TextDecoder('utf-8').decode(e.target.result);
         const delimiter = detectCsvDelimiter(text);
-        // cellDates:false de propósito — em CSV, a lib tenta "adivinhar" datas ambíguas
-        // (dia <=12 pode ser lido como mês/dia à americana) e isso derruba a leitura;
-        // preferimos manter o texto bruto e deixar nosso parseFlexibleDate cuidar disso
-        wb = XLSX.read(text, {type:'string', FS: delimiter, cellDates:false});
+        rows = parseCsvToRows(text, delimiter).map(r=> r.map(c=>c.trim()));
       } else {
-        wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+        const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        rows = XLSX.utils.sheet_to_json(sheet, {header:1, raw:false, defval:''});
       }
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(sheet, {header:1, raw:false, defval:''});
       sheetRawRows = rows;
       renderColumnMapper(rows);
     }catch(err){
