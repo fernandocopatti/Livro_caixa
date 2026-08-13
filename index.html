@@ -1019,7 +1019,11 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-        <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-13-01 (contas, objetivos, tags, lembretes, fluxo, dívidas, dash config)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-13-02 (botão recarregar app)</p>
+        <div class="btn-row" style="margin-top:12px;">
+          <button type="button" class="btn secondary" id="btn-reload-app" style="padding:8px 14px;" title="Equivale a atualizar a página. Não apaga seus lançamentos.">Recarregar app</button>
+        </div>
+        <p style="font-size:12px;color:var(--ink-dim);margin:8px 0 0;line-height:1.45;">Recarregar só atualiza o arquivo do app (como F5). <strong>Não apaga</strong> lançamentos, metas nem backups — isso fica salvo neste navegador.</p>
       </div>
 
       <div class="card" style="margin-bottom:18px;">
@@ -5888,6 +5892,11 @@ document.getElementById('cashflow-days-select').addEventListener('change', (e)=>
   renderDashboard();
 });
 
+
+document.getElementById('btn-reload-app').addEventListener('click', ()=>{
+  showToast('Recarregando…');
+  setTimeout(()=> window.location.reload(), 200);
+});
 
 function maybeShowOnboarding(){
   if(state.settings.onboardingDone) return;
