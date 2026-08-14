@@ -1089,9 +1089,16 @@
             <input type="text" id="import-account-ofx" placeholder="Ex.: Conta Corrente, Cartão Nubank" list="account-suggestions">
           </div>
           <div class="drop-zone" id="drop-ofx">
-            <strong>Arraste um ou vários arquivos .ofx / .qfx</strong><br>ou clique para escolher — vários extratos são mesclados na revisão
+            <strong>Arraste um ou vários arquivos OFX / QFX</strong><br>ou toque para escolher — vários extratos são mesclados na revisão
           </div>
-          <input type="file" id="input-ofx" accept=".ofx,.qfx,text/ofx,application/x-ofx" multiple style="display:none;">
+          <div class="btn-row" style="margin-top:10px;">
+            <button type="button" class="btn secondary" id="btn-pick-ofx" style="padding:10px 16px;">Escolher arquivo OFX</button>
+          </div>
+          <p style="font-size:12px;color:var(--ink-faint);margin:8px 0 0;line-height:1.4;">
+            Se o arquivo não aparecer na lista do celular, escolha “Todos os arquivos” / “Arquivos” e selecione o download
+            (alguns bancos salvam como .txt ou sem extensão).
+          </p>
+          <input type="file" id="input-ofx" accept="*/*" multiple style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0;">
           <div id="ofx-meta" style="margin-top:12px;font-size:12.5px;color:var(--ink-dim);"></div>
           <div id="review-ofx"></div>
         </div>
@@ -1153,7 +1160,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-14-02 (modo privacidade ocultar valores)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-14-03 (import OFX mais compatível no celular)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -5373,47 +5380,59 @@ async function handleOfxFiles(fileList){
   const files = Array.from(fileList || []);
   const metaEl = document.getElementById('ofx-meta');
   const reviewEl = document.getElementById('review-ofx');
-  if(!files.length){ showToast('Selecione um arquivo OFX/QFX.'); return; }
-  metaEl.textContent = files.length > 1 ? 'Lendo '+files.length+' arquivos…' : 'Lendo OFX…';
-  reviewEl.innerHTML = '';
-  let allItems = [];
+  if(!files.length){
+    if(metaEl) metaEl.textContent = 'Nenhum arquivo selecionado.';
+    return;
+  }
+  if(metaEl) metaEl.innerHTML = 'Lendo '+files.length+' arquivo(s)…';
+  if(reviewEl) reviewEl.innerHTML = '';
+
+  const allItems = [];
   const metas = [];
+  let account = (document.getElementById('import-account-ofx')?.value || '').trim();
+
   for(const file of files){
     try{
       const text = await readFileAsTextAutoEncoding(file);
-      if(!/<STMTTRN>/i.test(text) && !/<OFX>/i.test(text)){
-        metas.push({ name: file.name, ok:false, msg:'não parece OFX' });
+      const head = String(text).slice(0, 400).toUpperCase();
+      const looksOfx = head.includes('OFX') || head.includes('STMTTRN') || head.includes('BANKTRANLIST') || head.includes('CREDITCARDMSGSRQV1') || head.includes('<OFX');
+      if(!looksOfx && !/\.ofx|\.qfx/i.test(file.name||'')){
+        metas.push({ name: file.name||'arquivo', ok:false, msg: 'não parece OFX (conteúdo sem tags OFX)' });
         continue;
       }
       const parsed = parseOFX(text);
-      metas.push({ name: file.name, ok:true, count: parsed.items.length, meta: parsed.meta });
-      allItems = allItems.concat(parsed.items);
+      const items = (parsed && parsed.items) ? parsed.items : (Array.isArray(parsed) ? parsed : []);
+      const meta = (parsed && parsed.meta) ? parsed.meta : null;
+      if(!items.length){
+        metas.push({ name: file.name||'arquivo', ok:false, msg: 'OFX lido, mas sem lançamentos (STMTTRN)' });
+        continue;
+      }
+      items.forEach(it=>{ it._srcFile = file.name; });
+      allItems.push(...items);
+      metas.push({ name: file.name||'arquivo', ok:true, count: items.length, meta });
+      if(!account && meta && meta.label) account = meta.label;
     }catch(err){
-      metas.push({ name: file.name, ok:false, msg: (err && err.message) || 'erro de leitura' });
+      console.error(err);
+      metas.push({ name: file.name||'arquivo', ok:false, msg: (err && err.message) ? err.message : 'erro ao ler' });
     }
   }
-  let account = document.getElementById('import-account-ofx').value.trim();
-  if(!account){
-    const detected = metas.find(m=> m.ok && m.meta && m.meta.label);
-    if(detected){
-      account = detected.meta.label;
-      document.getElementById('import-account-ofx').value = account;
-    }
-  }
-  if(!account && state.importPrefs && state.importPrefs.lastAccountOfx){
-    account = state.importPrefs.lastAccountOfx;
+
+  if(account && document.getElementById('import-account-ofx') && !document.getElementById('import-account-ofx').value){
     document.getElementById('import-account-ofx').value = account;
   }
   if(account) allItems.forEach(it=>{ if(!it.account) it.account = account; });
 
-  metaEl.innerHTML = metas.map(m=>{
-    if(!m.ok) return '• <strong>'+escapeHTML(m.name)+'</strong> — falhou ('+escapeHTML(m.msg)+')';
-    const bank = m.meta && m.meta.label ? ' · '+escapeHTML(m.meta.label) : '';
-    return '• <strong>'+escapeHTML(m.name)+'</strong> — '+m.count+' lançamento'+(m.count===1?'':'s')+bank;
-  }).join('<br>');
+  if(metaEl){
+    metaEl.innerHTML = metas.map(m=>{
+      if(!m.ok) return '• <strong>'+escapeHTML(m.name)+'</strong> — falhou ('+escapeHTML(m.msg)+')';
+      const bank = m.meta && m.meta.label ? ' · '+escapeHTML(m.meta.label) : '';
+      return '• <strong>'+escapeHTML(m.name)+'</strong> — '+m.count+' lançamento'+(m.count===1?'':'s')+bank;
+    }).join('<br>') || 'Nada processado.';
+  }
 
   if(!allItems.length){
-    reviewEl.innerHTML = '<div class="empty-state">Nenhum lançamento encontrado nos arquivos OFX.</div>';
+    if(reviewEl) reviewEl.innerHTML = '<div class="empty-state">Nenhum lançamento encontrado. Confira se o arquivo é OFX/QFX (não PDF). No celular, use “Todos os arquivos” ao escolher.</div>';
+    showToast('Não foi possível importar o OFX. Veja a mensagem acima.');
     return;
   }
   allItems.sort((a,b)=> (a.date+a.desc).localeCompare(b.date+b.desc));
@@ -5423,25 +5442,30 @@ async function handleOfxFiles(fileList){
     state.importPrefs.lastAccountOfx = account;
     saveState();
   }
+  showToast(allItems.length+' lançamento(s) prontos para revisar.');
 }
 
 (function setupOfxDrop(){
   const zone = document.getElementById('drop-ofx');
   const input = document.getElementById('input-ofx');
-  if(!zone || !input) return;
-  // remove listeners antigos re-clonando
-  const zone2 = zone.cloneNode(true);
-  zone.parentNode.replaceChild(zone2, zone);
-  const input2 = input.cloneNode(true);
-  input.parentNode.replaceChild(input2, input);
-  zone2.addEventListener('click', ()=> input2.click());
-  input2.addEventListener('change', e=>{ handleOfxFiles(e.target.files); input2.value=''; });
-  ['dragover','dragenter'].forEach(ev=> zone2.addEventListener(ev, e=>{ e.preventDefault(); zone2.classList.add('drag'); }));
-  ['dragleave','drop'].forEach(ev=> zone2.addEventListener(ev, e=>{ e.preventDefault(); zone2.classList.remove('drag'); }));
-  zone2.addEventListener('drop', e=>{
-    if(e.dataTransfer.files && e.dataTransfer.files.length) handleOfxFiles(e.dataTransfer.files);
+  const pickBtn = document.getElementById('btn-pick-ofx');
+  if(!input) return;
+  const openPicker = ()=>{ try{ input.click(); }catch(e){ console.warn(e); } };
+  if(zone){
+    zone.addEventListener('click', openPicker);
+    ['dragover','dragenter'].forEach(ev=> zone.addEventListener(ev, e=>{ e.preventDefault(); zone.classList.add('drag'); }));
+    ['dragleave','drop'].forEach(ev=> zone.addEventListener(ev, e=>{ e.preventDefault(); zone.classList.remove('drag'); }));
+    zone.addEventListener('drop', e=>{
+      if(e.dataTransfer.files && e.dataTransfer.files.length) handleOfxFiles(e.dataTransfer.files);
+    });
+  }
+  if(pickBtn) pickBtn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); openPicker(); });
+  input.addEventListener('change', e=>{
+    if(e.target.files && e.target.files.length) handleOfxFiles(e.target.files);
+    e.target.value = '';
   });
 })();
+
 
 /* ---------- PDF ---------- */
 if(window.pdfjsLib){
