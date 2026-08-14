@@ -916,7 +916,7 @@
           <option value="recorrente">Recorrente</option>
           <option value="transferencia">Transferência</option>
         </select>
-        <select id="filter-account"><option value="">Toda conta/cartão</option></select>
+        <select id="filter-account"><option value="">Toda conta/cartão</option><!-- Sem conta definida é preenchida dinamicamente --></select>
         <select id="filter-tag"><option value="">Todas as tags</option></select>
         <input class="text-input" id="filter-search" placeholder="Buscar descrição… (/)" style="flex:1;min-width:160px;">
         <button type="button" class="btn ghost" id="filter-clear-btn" style="padding:8px 12px;font-size:12px;">Limpar filtros</button>
@@ -1160,7 +1160,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-14-03 (import OFX mais compatível no celular)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-14-04 (filtro sem conta definida)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1929,8 +1929,12 @@ function fillAccountSuggestions(){
   const filterAcc = document.getElementById('filter-account');
   if(filterAcc){
     const prev = filterAcc.value;
-    filterAcc.innerHTML = '<option value="">Toda conta/cartão</option>' + accounts.map(a=>`<option value="${escapeAttr(a)}">${escapeHTML(a)}</option>`).join('');
-    if(accounts.includes(prev)) filterAcc.value = prev;
+    const hasEmpty = state.transactions.some(t=> !(t.account && String(t.account).trim()));
+    filterAcc.innerHTML =
+      '<option value="">Toda conta/cartão</option>' +
+      (hasEmpty ? '<option value="__none__">Sem conta definida</option>' : '') +
+      accounts.map(a=>`<option value="${escapeAttr(a)}">${escapeHTML(a)}</option>`).join('');
+    if(prev === '__none__' || accounts.includes(prev) || prev === '') filterAcc.value = prev;
   }
   const filterTag = document.getElementById('filter-tag');
   if(filterTag){
@@ -3042,13 +3046,18 @@ function renderDashboard(){
   const prevDashAcc = dashAccSel ? dashAccSel.value : '';
   if(dashAccSel){
     const accs = knownAccounts();
-    dashAccSel.innerHTML = '<option value="">Todas as contas</option>' + accs.map(a=>`<option value="${escapeAttr(a)}">${escapeHTML(a)}</option>`).join('');
-    if(accs.includes(prevDashAcc)) dashAccSel.value = prevDashAcc;
+    const hasEmptyDash = state.transactions.some(t=> !(t.account && String(t.account).trim()));
+    dashAccSel.innerHTML = '<option value="">Todas as contas</option>' +
+      (hasEmptyDash ? '<option value="__none__">Sem conta definida</option>' : '') +
+      accs.map(a=>`<option value="${escapeAttr(a)}">${escapeHTML(a)}</option>`).join('');
+    if(prevDashAcc === '__none__' || accs.includes(prevDashAcc) || prevDashAcc === '') dashAccSel.value = prevDashAcc;
   }
   const dashAccount = dashAccSel ? dashAccSel.value : '';
   const cycleMode = !!(document.getElementById('dash-cycle-mode') && document.getElementById('dash-cycle-mode').checked);
-  let scopedTx = dashAccount ? state.transactions.filter(t=> t.account === dashAccount) : state.transactions;
-  if(cycleMode && dashAccount){
+  let scopedTx = state.transactions;
+  if(dashAccount === '__none__') scopedTx = state.transactions.filter(t=> !(t.account && String(t.account).trim()));
+  else if(dashAccount) scopedTx = state.transactions.filter(t=> t.account === dashAccount);
+  if(cycleMode && dashAccount && dashAccount !== '__none__'){
     const range = getCycleRangeForAccount(dashAccount);
     scopedTx = scopedTx.filter(t=> t.date >= range.start && t.date <= range.end);
   }
@@ -4113,7 +4122,9 @@ function renderTransactions(){
   if(type) list = list.filter(t=> (t.type||'despesa')===type);
   if(cat) list = list.filter(t=>t.category===cat);
   if(source) list = list.filter(t=>t.source===source);
-  if(account) list = list.filter(t=>t.account===account);
+  if(account === '__none__') list = list.filter(t=> !(t.account && String(t.account).trim()));
+  else if(account) list = list.filter(t=>t.account===account);
+  if(tagFilter) list = list.filter(t=> (t.tags||[]).includes(tagFilter));
   if(search) list = list.filter(t=>t.desc.toLowerCase().includes(search));
   list.sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt));
   currentTxList = list;
@@ -6812,7 +6823,8 @@ document.getElementById('btn-export-csv') && document.getElementById('btn-export
   if(type) list = list.filter(t=> t.type===type);
   if(category) list = list.filter(t=> t.category===category);
   if(source) list = list.filter(t=> t.source===source);
-  if(account) list = list.filter(t=> (t.account||'')===account);
+  if(account === '__none__') list = list.filter(t=> !(t.account && String(t.account).trim()));
+  else if(account) list = list.filter(t=> (t.account||'')===account);
   if(tagFilter) list = list.filter(t=> (t.tags||[]).includes(tagFilter));
   if(search) list = list.filter(t=> (t.desc||'').toLowerCase().includes(search));
   if(!list.length){ showToast('Nenhum lançamento no filtro atual.'); return; }
