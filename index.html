@@ -468,8 +468,19 @@
   .sim-line strong{color:var(--ink);font-family:var(--font-mono);white-space:nowrap;}
   .sim-total{border-top:1px solid var(--line);padding-top:10px;margin-top:4px;font-size:14px;}
   .sim-total strong{font-size:18px;}
-  .account-limit-cfg-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px dashed var(--line);flex-wrap:wrap;}
-  .account-limit-cfg-row input{max-width:140px;}
+  .account-limit-cfg-row{
+    display:flex;flex-direction:column;gap:10px;padding:14px 0;
+    border-bottom:1px dashed var(--line);
+  }
+  .account-limit-cfg-row .acc-name{color:var(--ink);font-weight:500;font-size:14px;}
+  .account-limit-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .account-limit-fields .field{margin:0;}
+  .account-limit-fields label{font-size:11px;display:block;margin-bottom:4px;}
+  .account-limit-fields input{width:100%;max-width:none;box-sizing:border-box;}
+  .account-limit-actions{display:flex;gap:8px;flex-wrap:wrap;}
+  @media (max-width:420px){
+    .account-limit-fields{grid-template-columns:1fr;}
+  }
 
 
   /* ---------- Pacote 5: orçamento, lojas, agenda, relatório ---------- */
@@ -547,9 +558,60 @@
   .dash-cfg-grid label{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-dim);cursor:pointer;}
   @media (max-width:600px){ .dash-cfg-grid{grid-template-columns:1fr;} }
 
+
+  /* ---------- Login ---------- */
+  #auth-gate{
+    position:fixed;inset:0;z-index:2000;display:flex;align-items:center;justify-content:center;
+    background:var(--bg);padding:24px;
+  }
+  #auth-gate.hidden{display:none;}
+  .auth-card{
+    width:100%;max-width:400px;background:var(--surface);border:1px solid var(--line);
+    border-radius:16px;padding:28px 24px;box-shadow:0 20px 50px rgba(0,0,0,.35);
+  }
+  .auth-card h1{font-family:var(--font-display);font-size:26px;margin:0 0 6px;color:var(--ink);}
+  .auth-card .auth-sub{color:var(--ink-dim);font-size:13.5px;line-height:1.5;margin:0 0 20px;}
+  .auth-user-pill{
+    display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;
+    background:var(--surface-2);border:1px solid var(--line);margin-bottom:14px;
+  }
+  .auth-user-pill img{width:36px;height:36px;border-radius:50%;}
+  .auth-divider{display:flex;align-items:center;gap:10px;margin:16px 0;color:var(--ink-faint);font-size:11px;text-transform:uppercase;letter-spacing:.6px;}
+  .auth-divider::before,.auth-divider::after{content:"";flex:1;height:1px;background:var(--line);}
+  #google-btn-wrap{display:flex;justify-content:center;min-height:44px;margin-bottom:8px;}
+  .auth-note{font-size:11.5px;color:var(--ink-faint);line-height:1.45;margin-top:14px;}
+
 </style>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+
+<div id="auth-gate">
+  <div class="auth-card">
+    <h1>Livro-Caixa</h1>
+    <p class="auth-sub">Entre com sua conta Google para identificar seu perfil neste aparelho, ou continue só neste navegador.</p>
+    <div id="auth-logged-preview" style="display:none;"></div>
+    <div id="google-btn-wrap"></div>
+    <p id="google-setup-hint" style="display:none;font-size:12.5px;color:var(--ink-dim);line-height:1.5;margin:0 0 12px;">
+      Para ativar o botão Google, informe o <strong>Client ID</strong> em Config (depois do primeiro acesso local) ou no campo abaixo.
+    </p>
+    <div class="field" id="auth-client-id-field" style="margin-bottom:12px;">
+      <label>Google Client ID (opcional)</label>
+      <input type="text" id="auth-google-client-id" placeholder="123456789-abc.apps.googleusercontent.com" autocomplete="off">
+    </div>
+    <button type="button" class="btn secondary" id="auth-save-client-id" style="width:100%;margin-bottom:8px;">Salvar Client ID e carregar Google</button>
+    <div class="auth-divider">ou</div>
+    <button type="button" class="btn" id="auth-continue-local" style="width:100%;">Continuar sem conta</button>
+    <div class="field" style="margin-top:14px;">
+      <label>Nome local (opcional)</label>
+      <input type="text" id="auth-local-name" placeholder="Como quer ser chamado?">
+    </div>
+    <p class="auth-note">
+      O login Google neste app é só identificação local (nome/e-mail). Os lançamentos continuam salvos neste navegador/aparelho — não há nuvem automática. Em sites HTTP/arquivo local o Google pode bloquear o botão; use HTTPS ou o modo sem conta.
+    </p>
+  </div>
+</div>
+
 
 <div id="app">
   <aside class="spine">
@@ -1019,7 +1081,36 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-13-03 (relatório com voltar no app)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-13-06 (backup Google Drive)</p>
+        <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
+          <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
+          <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
+          <div class="field" style="margin-bottom:10px;">
+            <label>Google OAuth Client ID</label>
+            <input type="text" id="cfg-google-client-id" placeholder="xxx.apps.googleusercontent.com">
+          </div>
+          <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
+            <button type="button" class="btn secondary" id="cfg-save-google-client" style="padding:8px 14px;">Salvar Client ID</button>
+            <button type="button" class="btn ghost" id="btn-logout" style="padding:8px 14px;">Sair da conta</button>
+          </div>
+          <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);">
+            <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;">Google Drive</div>
+            <p style="font-size:12.5px;color:var(--ink-dim);line-height:1.45;margin:0 0 10px;">
+              Envia ou recupera o backup JSON no seu Drive (arquivo <strong>Livro-Caixa-backup.json</strong>).
+              Ative a API Google Drive no mesmo projeto do Client ID.
+            </p>
+            <div id="drive-status" style="font-size:12px;color:var(--ink-faint);margin-bottom:10px;">Drive não conectado.</div>
+            <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
+              <button type="button" class="btn" id="btn-drive-connect" style="padding:8px 14px;">Conectar Drive</button>
+              <button type="button" class="btn secondary" id="btn-drive-upload" style="padding:8px 14px;">Salvar no Drive</button>
+              <button type="button" class="btn secondary" id="btn-drive-download" style="padding:8px 14px;">Restaurar do Drive</button>
+            </div>
+          </div>
+          <p style="font-size:11.5px;color:var(--ink-faint);margin:10px 0 0;line-height:1.45;">
+            Crie um Client ID em <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" style="color:var(--accent);">Google Cloud Console</a>
+            (tipo “Aplicativo da Web”). Ative também a <strong>Google Drive API</strong>. Em origens JavaScript autorizadas, use a URL HTTPS do app.
+          </p>
+        </div>
         <div class="btn-row" style="margin-top:12px;">
           <button type="button" class="btn secondary" id="btn-reload-app" style="padding:8px 14px;" title="Equivale a atualizar a página. Não apaga seus lançamentos.">Recarregar app</button>
         </div>
@@ -1064,13 +1155,24 @@
           Com o fechamento, o ciclo do cartão deixa de ser o mês civil e passa a respeitar a fatura.
         </p>
         <div id="account-limits-list"></div>
-        <div class="field" style="max-width:480px;margin-top:14px;">
-          <label>Adicionar limite para conta ainda sem lançamentos</label>
-          <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <input type="text" id="new-limit-account" placeholder="Ex.: Cartão Nubank" list="account-suggestions" style="flex:1;min-width:140px;">
-            <input type="number" id="new-limit-value" step="0.01" min="0" placeholder="Limite R$" style="width:120px;">
-            <input type="number" id="new-limit-closing" min="1" max="28" placeholder="Fecha dia" style="width:100px;" title="Dia de fechamento da fatura (opcional)">
-            <button type="button" class="btn secondary" id="new-limit-btn" style="padding:10px 14px;">Salvar</button>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);">
+          <div class="panel-title" style="font-size:13px;margin-bottom:10px;">Adicionar limite para conta ainda sem lançamentos</div>
+          <div class="account-limit-fields" style="max-width:520px;">
+            <div class="field" style="grid-column:1/-1;">
+              <label>Nome da conta / cartão</label>
+              <input type="text" id="new-limit-account" placeholder="Ex.: Cartão Nubank" list="account-suggestions">
+            </div>
+            <div class="field">
+              <label>Limite do cartão (R$)</label>
+              <input type="number" id="new-limit-value" step="0.01" min="0" placeholder="Ex.: 5000">
+            </div>
+            <div class="field">
+              <label>Dia de fechamento (1–28)</label>
+              <input type="number" id="new-limit-closing" min="1" max="28" placeholder="Ex.: 10">
+            </div>
+          </div>
+          <div class="btn-row" style="margin-top:12px;">
+            <button type="button" class="btn secondary" id="new-limit-btn" style="padding:10px 16px;">Salvar limite</button>
           </div>
         </div>
       </div>
@@ -1387,7 +1489,25 @@ let state = {
   transactionTypes: DEFAULT_TRANSACTION_TYPES.slice(),
 };
 
-const STORAGE_KEY = 'finance-data';
+const STORAGE_KEY_BASE = 'finance-data';
+const AUTH_SESSION_KEY = 'lc-auth-session';
+const AUTH_CLIENT_ID_KEY = 'lc-google-client-id';
+
+let currentUser = null; // { provider:'google'|'local', email?, name?, picture?, sub? }
+
+function storageKeyForUser(user){
+  if(user && user.provider === 'google' && user.email){
+    // namespace por e-mail para não misturar perfis no mesmo navegador
+    const safe = String(user.email).toLowerCase().replace(/[^a-z0-9._-]+/g, '_');
+    return STORAGE_KEY_BASE + '::' + safe;
+  }
+  return STORAGE_KEY_BASE;
+}
+function activeStorageKey(){
+  return storageKeyForUser(currentUser);
+}
+// compat: código antigo usava STORAGE_KEY
+let STORAGE_KEY = STORAGE_KEY_BASE;
 
 const HAS_APP_STORAGE = typeof window.storage !== 'undefined' && window.storage !== null;
 let HAS_LOCAL_STORAGE = false;
@@ -1435,6 +1555,7 @@ function normalizeLoadedState(parsed){
 }
 
 async function loadState(){
+  STORAGE_KEY = activeStorageKey();
   if(STORAGE_MODE === 'cloud'){
     try{
       const res = await window.storage.get(STORAGE_KEY, false);
@@ -1454,6 +1575,7 @@ let saveTimer = null;
 function saveState(){
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async ()=>{
+    STORAGE_KEY = activeStorageKey();
     if(STORAGE_MODE === 'cloud'){
       try{
         await window.storage.set(STORAGE_KEY, JSON.stringify(state), false);
@@ -1580,6 +1702,7 @@ document.querySelectorAll('.spine-btn').forEach(btn=>{
       document.getElementById('file-prefix-input').value = state.settings.filePrefix || 'livro-caixa';
       const g = state.settings.monthlyGoal;
       document.getElementById('monthly-goal-input').value = (g && g > 0) ? g : '';
+      updateAuthConfigUI();
       fillReductionConfig();
       renderAccountLimitsConfig();
       renderAccountsConfig();
@@ -2308,11 +2431,21 @@ function renderAccountLimitsConfig(){
     const lim = cfg.limit || '';
     const closing = cfg.closingDay || '';
     return `<div class="account-limit-cfg-row">
-      <span style="flex:1;min-width:120px;color:var(--ink);">💳 ${escapeHTML(name)}</span>
-      <input type="number" class="limit-input" data-account="${escapeAttr(name)}" step="0.01" min="0" value="${lim}" placeholder="Limite R$" title="Limite">
-      <input type="number" class="closing-input" data-account="${escapeAttr(name)}" min="1" max="28" value="${closing}" placeholder="Fecha dia" title="Dia de fechamento (1-28)">
-      <button type="button" class="btn ghost limit-save-btn" data-account="${escapeAttr(name)}" style="padding:7px 12px;font-size:12px;">Salvar</button>
-      ${(lim||closing) ? `<button type="button" class="btn ghost limit-clear-btn" data-account="${escapeAttr(name)}" style="padding:7px 10px;font-size:12px;color:var(--warn);">Remover</button>` : ''}
+      <div class="acc-name">💳 ${escapeHTML(name)}</div>
+      <div class="account-limit-fields">
+        <div class="field">
+          <label>Limite do cartão (R$)</label>
+          <input type="number" class="limit-input" data-account="${escapeAttr(name)}" step="0.01" min="0" value="${lim}" placeholder="Ex.: 5000">
+        </div>
+        <div class="field">
+          <label>Dia de fechamento (1–28)</label>
+          <input type="number" class="closing-input" data-account="${escapeAttr(name)}" min="1" max="28" value="${closing}" placeholder="Ex.: 10">
+        </div>
+      </div>
+      <div class="account-limit-actions">
+        <button type="button" class="btn secondary limit-save-btn" data-account="${escapeAttr(name)}" style="padding:8px 14px;font-size:12.5px;">Salvar</button>
+        ${(lim||closing) ? `<button type="button" class="btn ghost limit-clear-btn" data-account="${escapeAttr(name)}" style="padding:8px 12px;font-size:12.5px;color:var(--warn);">Remover</button>` : ''}
+      </div>
     </div>`;
   }).join('');
   el.querySelectorAll('.limit-save-btn').forEach(btn=>{
@@ -6011,13 +6144,439 @@ document.getElementById('reduction-save-btn').addEventListener('click', ()=>{
   renderDashboard();
 });
 
+
+/* ---------- Auth / login Google ---------- */
+function parseJwtPayload(token){
+  try{
+    const part = token.split('.')[1];
+    const json = atob(part.replace(/-/g,'+').replace(/_/g,'/'));
+    return JSON.parse(decodeURIComponent(json.split('').map(c=> '%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')));
+  }catch(e){ return null; }
+}
+function getSavedGoogleClientId(){
+  try{ return localStorage.getItem(AUTH_CLIENT_ID_KEY) || ''; }catch(e){ return ''; }
+}
+function setSavedGoogleClientId(id){
+  try{ localStorage.setItem(AUTH_CLIENT_ID_KEY, id || ''); }catch(e){}
+}
+function loadAuthSession(){
+  try{
+    const raw = localStorage.getItem(AUTH_SESSION_KEY);
+    if(!raw) return null;
+    return JSON.parse(raw);
+  }catch(e){ return null; }
+}
+function saveAuthSession(user){
+  try{
+    if(user) localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(user));
+    else localStorage.removeItem(AUTH_SESSION_KEY);
+  }catch(e){}
+}
+function hideAuthGate(){
+  const g = document.getElementById('auth-gate');
+  if(g) g.classList.add('hidden');
+}
+function showAuthGate(){
+  const g = document.getElementById('auth-gate');
+  if(g) g.classList.remove('hidden');
+}
+function updateAuthConfigUI(){
+  const el = document.getElementById('auth-config-user');
+  const clientInput = document.getElementById('cfg-google-client-id');
+  if(clientInput) clientInput.value = getSavedGoogleClientId();
+  if(!el) return;
+  if(!currentUser){ el.textContent = 'Não identificado'; return; }
+  if(currentUser.provider === 'google'){
+    el.innerHTML = `Google: <strong style="color:var(--ink);">${escapeHTML(currentUser.name||'')}</strong><br><span style="font-size:12px;">${escapeHTML(currentUser.email||'')}</span>`;
+  } else {
+    el.innerHTML = `Local: <strong style="color:var(--ink);">${escapeHTML(currentUser.name||'Usuário')}</strong>`;
+  }
+}
+async function enterAppAs(user){
+  currentUser = user;
+  saveAuthSession(user);
+  STORAGE_KEY = activeStorageKey();
+  // recarrega state do namespace do usuário
+  state = {
+    transactions: [],
+    categories: DEFAULT_CATEGORIES.slice(),
+    categoryRules: [],
+    recurringTemplates: [],
+    settings: { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null },
+    accountLimits: {},
+    accounts: {},
+    goals: [],
+    debts: [],
+    importPrefs: { lastAccountOfx:'', lastAccountPdf:'', lastAccountSheet:'', sheetMaps:{} },
+    transactionTypes: DEFAULT_TRANSACTION_TYPES.slice(),
+  };
+  await loadState();
+  if(!state.importPrefs) state.importPrefs = { lastAccountOfx:'', lastAccountPdf:'', lastAccountSheet:'', sheetMaps:{} };
+  if(!state.accounts) state.accounts = {};
+  if(!state.goals) state.goals = [];
+  if(!state.debts) state.debts = [];
+  runRecurringGeneration();
+  fillCategorySelects();
+  fillAccountSuggestions();
+  document.getElementById('type-toggle').innerHTML = typeToggleHTML('despesa');
+  document.getElementById('f-type').value = 'despesa';
+  toggleTransferFields('despesa');
+  document.getElementById('f-date').value = todayISO();
+  renderDashboard();
+  renderTransactions();
+  renderCategories();
+  renderConfigStorageSection();
+  updateAuthConfigUI();
+  hideAuthGate();
+  maybeShowOnboarding();
+  setTimeout(checkReminders, 600);
+  showToast(user.provider==='google' ? ('Olá, '+(user.name||'bem-vindo')+'!') : 'Modo local ativo.');
+}
+function handleGoogleCredential(response){
+  const payload = parseJwtPayload(response.credential);
+  if(!payload || !payload.email){
+    showToast('Não foi possível ler a conta Google.');
+    return;
+  }
+  enterAppAs({
+    provider: 'google',
+    email: payload.email,
+    name: payload.name || payload.email,
+    picture: payload.picture || '',
+    sub: payload.sub || ''
+  });
+}
+function renderGoogleButton(){
+  const wrap = document.getElementById('google-btn-wrap');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  const clientId = getSavedGoogleClientId();
+  if(!clientId || typeof google === 'undefined' || !google.accounts || !google.accounts.id){
+    document.getElementById('google-setup-hint').style.display = '';
+    return;
+  }
+  document.getElementById('google-setup-hint').style.display = 'none';
+  try{
+    google.accounts.id.initialize({
+      client_id: clientId,
+      callback: handleGoogleCredential,
+      auto_select: false,
+      cancel_on_tap_outside: true
+    });
+    google.accounts.id.renderButton(wrap, {
+      theme: 'outline',
+      size: 'large',
+      shape: 'pill',
+      text: 'signin_with',
+      locale: 'pt-BR',
+      width: 320
+    });
+  }catch(e){
+    console.warn(e);
+    document.getElementById('google-setup-hint').style.display = '';
+  }
+}
+function initAuthUI(){
+  const savedClient = getSavedGoogleClientId();
+  const input = document.getElementById('auth-google-client-id');
+  if(input && savedClient) input.value = savedClient;
+
+  document.getElementById('auth-save-client-id').addEventListener('click', ()=>{
+    const id = (document.getElementById('auth-google-client-id').value || '').trim();
+    setSavedGoogleClientId(id);
+    showToast(id ? 'Client ID salvo. Carregando botão Google…' : 'Client ID removido.');
+    // Google script may already be loaded
+    if(id){
+      const tryRender = ()=> renderGoogleButton();
+      if(typeof google !== 'undefined' && google.accounts) tryRender();
+      else setTimeout(tryRender, 800);
+    }
+  });
+
+  document.getElementById('auth-continue-local').addEventListener('click', ()=>{
+    const name = (document.getElementById('auth-local-name').value || '').trim() || 'Usuário local';
+    enterAppAs({ provider: 'local', name, email: '' });
+  });
+
+  document.getElementById('cfg-save-google-client').addEventListener('click', ()=>{
+    const id = (document.getElementById('cfg-google-client-id').value || '').trim();
+    setSavedGoogleClientId(id);
+    showToast(id ? 'Client ID salvo.' : 'Client ID limpo.');
+  });
+
+  document.getElementById('btn-logout').addEventListener('click', ()=>{
+    askConfirm('Sair da conta', 'Os dados deste perfil ficam salvos neste aparelho. Você voltará à tela de entrada.', ()=>{
+      currentUser = null;
+      saveAuthSession(null);
+      showAuthGate();
+      renderGoogleButton();
+      showToast('Sessão encerrada.');
+    });
+  });
+
+  // se GIS carregar depois
+  window.addEventListener('load', ()=> setTimeout(renderGoogleButton, 400));
+  initDriveUI();
+}
+
+
+
+/* ---------- Google Drive backup ---------- */
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const DRIVE_FILE_NAME = 'Livro-Caixa-backup.json';
+const DRIVE_TOKEN_KEY = 'lc-drive-token';
+const DRIVE_FILE_ID_KEY = 'lc-drive-file-id';
+let driveAccessToken = null;
+let driveTokenClient = null;
+
+function setDriveStatus(msg){
+  const el = document.getElementById('drive-status');
+  if(el) el.textContent = msg;
+}
+function loadDriveFileId(){
+  try{ return localStorage.getItem(DRIVE_FILE_ID_KEY) || ''; }catch(e){ return ''; }
+}
+function saveDriveFileId(id){
+  try{ if(id) localStorage.setItem(DRIVE_FILE_ID_KEY, id); else localStorage.removeItem(DRIVE_FILE_ID_KEY); }catch(e){}
+}
+function loadDriveToken(){
+  try{
+    const raw = sessionStorage.getItem(DRIVE_TOKEN_KEY);
+    if(!raw) return null;
+    const t = JSON.parse(raw);
+    if(t.expires_at && Date.now() > t.expires_at - 60000) return null;
+    return t.access_token || null;
+  }catch(e){ return null; }
+}
+function saveDriveToken(accessToken, expiresIn){
+  try{
+    sessionStorage.setItem(DRIVE_TOKEN_KEY, JSON.stringify({
+      access_token: accessToken,
+      expires_at: Date.now() + (Number(expiresIn)||3600)*1000
+    }));
+  }catch(e){}
+  driveAccessToken = accessToken;
+}
+
+function ensureDriveTokenClient(){
+  const clientId = getSavedGoogleClientId();
+  if(!clientId) throw new Error('Configure o Google Client ID primeiro.');
+  if(typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2){
+    throw new Error('Biblioteca Google ainda não carregou. Use HTTPS e recarregue.');
+  }
+  driveTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: DRIVE_SCOPE,
+    callback: ()=>{}
+  });
+  return driveTokenClient;
+}
+
+function requestDriveAccess(){
+  return new Promise((resolve, reject)=>{
+    try{
+      const cached = loadDriveToken();
+      if(cached){ driveAccessToken = cached; resolve(cached); return; }
+      ensureDriveTokenClient();
+      driveTokenClient.callback = (resp)=>{
+        if(resp.error){ reject(new Error(resp.error)); return; }
+        saveDriveToken(resp.access_token, resp.expires_in);
+        setDriveStatus('Drive conectado.');
+        resolve(resp.access_token);
+      };
+      driveTokenClient.requestAccessToken({ prompt: '' });
+    }catch(e){ reject(e); }
+  });
+}
+
+async function driveFetch(path, options={}){
+  const token = driveAccessToken || await requestDriveAccess();
+  const res = await fetch('https://www.googleapis.com/drive/v3'+path, {
+    ...options,
+    headers: {
+      ...(options.headers||{}),
+      'Authorization': 'Bearer '+token
+    }
+  });
+  if(res.status === 401){
+    driveAccessToken = null;
+    try{ sessionStorage.removeItem(DRIVE_TOKEN_KEY); }catch(e){}
+    throw new Error('Sessão do Drive expirou. Conecte de novo.');
+  }
+  return res;
+}
+
+async function findDriveBackupFile(){
+  let id = loadDriveFileId();
+  if(id){
+    const check = await driveFetch('/files/'+encodeURIComponent(id)+'?fields=id,name,modifiedTime');
+    if(check.ok) return await check.json();
+    saveDriveFileId('');
+  }
+  const q = encodeURIComponent(`name='${DRIVE_FILE_NAME}' and trashed=false`);
+  const res = await driveFetch(`/files?q=${q}&spaces=drive&fields=files(id,name,modifiedTime)&pageSize=5`);
+  if(!res.ok) throw new Error('Falha ao buscar arquivo no Drive.');
+  const data = await res.json();
+  const file = (data.files && data.files[0]) || null;
+  if(file) saveDriveFileId(file.id);
+  return file;
+}
+
+function buildBackupPayload(){
+  return {
+    app: 'livro-caixa',
+    version: 2,
+    exportedAt: new Date().toISOString(),
+    transactions: state.transactions,
+    categories: state.categories,
+    categoryRules: state.categoryRules,
+    recurringTemplates: state.recurringTemplates,
+    settings: state.settings,
+    accountLimits: state.accountLimits,
+    accounts: state.accounts,
+    goals: state.goals,
+    debts: state.debts,
+    importPrefs: state.importPrefs,
+    transactionTypes: state.transactionTypes,
+  };
+}
+
+async function uploadBackupToDrive(){
+  setDriveStatus('Enviando backup…');
+  await requestDriveAccess();
+  const payload = JSON.stringify(buildBackupPayload(), null, 2);
+  const blob = new Blob([payload], { type: 'application/json' });
+  let file = await findDriveBackupFile();
+
+  if(file && file.id){
+    const res = await fetch('https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(file.id)+'?uploadType=media', {
+      method: 'PATCH',
+      headers: {
+        'Authorization': 'Bearer '+driveAccessToken,
+        'Content-Type': 'application/json'
+      },
+      body: blob
+    });
+    if(!res.ok) throw new Error('Falha ao atualizar arquivo no Drive.');
+    const meta = await res.json();
+    saveDriveFileId(meta.id || file.id);
+    setDriveStatus('Backup atualizado no Drive · '+new Date().toLocaleString('pt-BR'));
+    return meta;
+  }
+
+  // criar novo
+  const metadata = { name: DRIVE_FILE_NAME, mimeType: 'application/json' };
+  const form = new FormData();
+  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+  form.append('file', blob);
+  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer '+driveAccessToken },
+    body: form
+  });
+  if(!res.ok){
+    const errText = await res.text();
+    throw new Error('Falha ao criar arquivo no Drive. '+errText.slice(0,120));
+  }
+  const meta = await res.json();
+  saveDriveFileId(meta.id);
+  setDriveStatus('Backup criado no Drive · '+new Date().toLocaleString('pt-BR'));
+  return meta;
+}
+
+async function downloadBackupFromDrive(){
+  setDriveStatus('Baixando backup…');
+  await requestDriveAccess();
+  const file = await findDriveBackupFile();
+  if(!file || !file.id) throw new Error('Nenhum backup Livro-Caixa-backup.json encontrado no Drive.');
+  const res = await driveFetch('/files/'+encodeURIComponent(file.id)+'?alt=media');
+  if(!res.ok) throw new Error('Falha ao baixar o arquivo.');
+  const parsed = await res.json();
+  if(!parsed || !Array.isArray(parsed.transactions)) throw new Error('Arquivo do Drive não parece um backup válido.');
+  normalizeLoadedState(parsed);
+  saveState();
+  fillCategorySelects();
+  fillAccountSuggestions();
+  renderDashboard();
+  renderTransactions();
+  renderCategories();
+  setDriveStatus('Restaurado do Drive · '+ (file.modifiedTime ? new Date(file.modifiedTime).toLocaleString('pt-BR') : 'ok'));
+}
+
+function initDriveUI(){
+  const connectBtn = document.getElementById('btn-drive-connect');
+  const upBtn = document.getElementById('btn-drive-upload');
+  const downBtn = document.getElementById('btn-drive-download');
+  if(!connectBtn) return;
+
+  connectBtn.addEventListener('click', async ()=>{
+    try{
+      await requestDriveAccess();
+      const file = await findDriveBackupFile();
+      setDriveStatus(file
+        ? ('Conectado · backup encontrado (atualizado '+new Date(file.modifiedTime).toLocaleString('pt-BR')+')')
+        : 'Conectado · nenhum backup ainda (use Salvar no Drive)');
+      showToast('Google Drive conectado.');
+    }catch(e){
+      console.error(e);
+      setDriveStatus('Falha: '+(e.message||e));
+      showToast('Não conectou ao Drive. Verifique Client ID, API e HTTPS.');
+    }
+  });
+
+  upBtn.addEventListener('click', async ()=>{
+    try{
+      await uploadBackupToDrive();
+      showToast('Backup salvo no Google Drive.');
+    }catch(e){
+      console.error(e);
+      setDriveStatus('Falha: '+(e.message||e));
+      showToast('Erro ao salvar no Drive.');
+    }
+  });
+
+  downBtn.addEventListener('click', ()=>{
+    askConfirm('Restaurar do Drive', 'Isso substitui os dados atuais deste perfil pelos do arquivo no Google Drive. Continuar?', async ()=>{
+      try{
+        await downloadBackupFromDrive();
+        showToast('Dados restaurados do Drive.');
+      }catch(e){
+        console.error(e);
+        setDriveStatus('Falha: '+(e.message||e));
+        showToast('Erro ao restaurar do Drive.');
+      }
+    });
+  });
+
+  if(loadDriveToken()){
+    driveAccessToken = loadDriveToken();
+    setDriveStatus('Token Drive em sessão. Pode salvar/restaurar.');
+  }
+}
+
+
 async function init(){
   try{
-    await loadState();
-    if(!state.importPrefs) state.importPrefs = { lastAccountOfx:'', lastAccountPdf:'', lastAccountSheet:'', sheetMaps:{} };
-    if(!state.accounts) state.accounts = {};
-    if(!state.goals) state.goals = [];
-    if(!state.debts) state.debts = [];
+    initAuthUI();
+    const session = loadAuthSession();
+    if(session && (session.provider === 'google' || session.provider === 'local')){
+      currentUser = session;
+      STORAGE_KEY = activeStorageKey();
+      await loadState();
+      if(!state.importPrefs) state.importPrefs = { lastAccountOfx:'', lastAccountPdf:'', lastAccountSheet:'', sheetMaps:{} };
+      if(!state.accounts) state.accounts = {};
+      if(!state.goals) state.goals = [];
+      if(!state.debts) state.debts = [];
+      hideAuthGate();
+      updateAuthConfigUI();
+      setTimeout(renderGoogleButton, 500);
+    } else {
+      // mostra gate; dados só carregam após login/continuar
+      showAuthGate();
+      setTimeout(renderGoogleButton, 500);
+      updateAuthConfigUI();
+      return; // não inicializa o resto até entrar
+    }
     runRecurringGeneration();
     document.getElementById('type-toggle').innerHTML = typeToggleHTML('despesa');
     toggleTransferFields('despesa');
