@@ -929,6 +929,9 @@
         <span id="bulk-count">0 selecionados</span>
         <select id="bulk-category-select" style="font-size:12.5px;padding:6px 10px;"></select>
         <button class="btn secondary" id="bulk-category-btn" style="padding:7px 16px;font-size:12.5px;">Aplicar categoria</button>
+        <input type="text" id="bulk-account-input" list="account-suggestions" placeholder="Conta/cartão" style="font-size:12.5px;padding:6px 10px;min-width:120px;max-width:160px;">
+        <button class="btn secondary" id="bulk-account-btn" style="padding:7px 16px;font-size:12.5px;">Aplicar conta</button>
+        <button class="btn ghost" id="bulk-account-clear-btn" style="padding:7px 12px;font-size:12.5px;" title="Remove a conta dos selecionados">Limpar conta</button>
         <button class="btn warn" id="bulk-delete-btn" style="padding:7px 16px;font-size:12.5px;">Excluir selecionados</button>
         <button class="btn ghost" id="bulk-clear-btn" style="padding:7px 16px;font-size:12.5px;">Limpar seleção</button>
       </div>
@@ -1160,7 +1163,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-14-04 (filtro sem conta definida)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-14-05 (aplicar conta em lote)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -4196,6 +4199,47 @@ document.getElementById('bulk-category-btn').addEventListener('click', ()=>{
       renderDashboard();
       renderTransactions();
       showToast(`Categoria de ${count} lançamento${count===1?'':'s'} atualizada.`);
+    }
+  );
+});
+
+document.getElementById('bulk-account-btn').addEventListener('click', ()=>{
+  const count = selectedIds.size;
+  if(!count) return;
+  const account = (document.getElementById('bulk-account-input')?.value || '').trim();
+  if(!account){
+    showToast('Digite ou escolha a conta/cartão.');
+    return;
+  }
+  askConfirm(
+    'Alterar conta/cartão',
+    `Definir a conta/cartão de ${count} lançamento${count===1?'':'s'} como "${account}"?`,
+    ()=>{
+      const ids = new Set(selectedIds);
+      state.transactions.forEach(t=>{ if(ids.has(t.id)) t.account = account; });
+      saveState();
+      fillAccountSuggestions();
+      renderDashboard();
+      renderTransactions();
+      showToast(`Conta aplicada em ${count} lançamento${count===1?'':'s'}.`);
+    }
+  );
+});
+
+document.getElementById('bulk-account-clear-btn').addEventListener('click', ()=>{
+  const count = selectedIds.size;
+  if(!count) return;
+  askConfirm(
+    'Remover conta/cartão',
+    `Remover a conta/cartão de ${count} lançamento${count===1?'':'s'}?`,
+    ()=>{
+      const ids = new Set(selectedIds);
+      state.transactions.forEach(t=>{ if(ids.has(t.id)) delete t.account; });
+      saveState();
+      fillAccountSuggestions();
+      renderDashboard();
+      renderTransactions();
+      showToast(`Conta removida de ${count} lançamento${count===1?'':'s'}.`);
     }
   );
 });
