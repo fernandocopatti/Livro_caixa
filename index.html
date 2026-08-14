@@ -581,11 +581,44 @@
   #google-btn-wrap{display:flex;justify-content:center;min-height:44px;margin-bottom:8px;}
   .auth-note{font-size:11.5px;color:var(--ink-faint);line-height:1.45;margin-top:14px;}
 
+
+  /* ---------- Pacote 7 melhorias ---------- */
+  .alert-banner{border-radius:12px;padding:12px 14px;margin-bottom:12px;border:1px solid var(--line);background:var(--surface-2);font-size:13px;line-height:1.45;}
+  .alert-banner.warn{border-color:rgba(232,156,90,.35);background:rgba(232,156,90,.08);}
+  .alert-banner.danger{border-color:rgba(224,90,90,.4);background:rgba(224,90,90,.1);}
+  .alert-banner.info{border-color:rgba(90,160,220,.35);background:rgba(90,160,220,.08);}
+  .alert-banner + .alert-banner{margin-top:-4px;}
+  .networth-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+  .networth-grid .nw-item{background:var(--surface-2);border-radius:10px;padding:12px;}
+  .networth-grid .nw-label{font-size:11px;color:var(--ink-faint);margin-bottom:4px;}
+  .networth-grid .nw-val{font-family:var(--font-mono);font-weight:600;font-size:15px;}
+  @media (max-width:600px){ .networth-grid{grid-template-columns:1fr;} }
+  .split-row{display:grid;grid-template-columns:1fr 100px 32px;gap:8px;align-items:center;margin-bottom:8px;}
+  .changed-item{padding:8px 0;border-bottom:1px dashed var(--line);font-size:13px;color:var(--ink-dim);}
+  .rule-adv-row{display:grid;grid-template-columns:1fr 1fr 90px 90px auto;gap:8px;align-items:end;margin-bottom:10px;}
+  @media (max-width:700px){ .rule-adv-row{grid-template-columns:1fr 1fr; } }
+
+
+  /* ---------- Privacidade ---------- */
+  #privacy-toggle{
+    position:fixed;top:12px;right:12px;z-index:1500;
+    border:1px solid var(--line);background:var(--surface);color:var(--ink);
+    border-radius:999px;padding:8px 14px;font-size:12.5px;cursor:pointer;
+    display:flex;align-items:center;gap:6px;box-shadow:0 4px 16px rgba(0,0,0,.25);
+    font-family:var(--font-body);
+  }
+  #privacy-toggle:hover{background:var(--surface-2);}
+  body.privacy-on #privacy-toggle{border-color:var(--accent);color:var(--accent);}
+  @media (max-width:720px){
+    #privacy-toggle{top:8px;right:8px;padding:7px 12px;font-size:12px;}
+  }
+
 </style>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
 
+<button type="button" id="privacy-toggle" title="Ocultar ou exibir valores">👁 Ocultar valores</button>
 <div id="auth-gate">
   <div class="auth-card">
     <h1>Livro-Caixa</h1>
@@ -649,9 +682,28 @@
           <label for="dash-account-filter">Conta / cartão</label><br>
           <select id="dash-account-filter" style="min-width:200px;margin-top:4px;"><option value="">Todas as contas</option></select>
         </div>
-        <div style="font-size:12px;color:var(--ink-faint);max-width:360px;line-height:1.4;padding-top:14px;">
-          Filtra a visão geral (totais, limites, insights, top lojas) para um cartão ou conta.
+        <div style="padding-top:18px;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-dim);cursor:pointer;">
+            <input type="checkbox" id="dash-cycle-mode"> Só ciclo do cartão
+          </label>
+          <div style="font-size:11.5px;color:var(--ink-faint);margin-top:4px;max-width:220px;line-height:1.35;">Usa dia de fechamento do cartão selecionado (não o mês civil).</div>
         </div>
+        <div style="font-size:12px;color:var(--ink-faint);max-width:280px;line-height:1.4;padding-top:14px;">
+          Filtra a visão geral para um cartão ou conta.
+        </div>
+      </div>
+
+      <div id="alerts-banner-wrap" style="margin-bottom:8px;"></div>
+
+      <div class="card" style="margin-bottom:18px;" id="since-visit-card">
+        <div class="panel-title">Desde a última visita</div>
+        <div id="since-visit-content"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px;" id="networth-card">
+        <div class="panel-title">Patrimônio consolidado</div>
+        <p style="color:var(--ink-dim);font-size:12.5px;margin:-8px 0 12px;">Saldos das contas − dívidas. Cartões mostram ocupação do limite no ciclo atual.</p>
+        <div class="networth-grid" id="networth-grid"></div>
       </div>
 
       <div class="stat-row">
@@ -868,6 +920,7 @@
         <select id="filter-tag"><option value="">Todas as tags</option></select>
         <input class="text-input" id="filter-search" placeholder="Buscar descrição… (/)" style="flex:1;min-width:160px;">
         <button type="button" class="btn ghost" id="filter-clear-btn" style="padding:8px 12px;font-size:12px;">Limpar filtros</button>
+        <button type="button" class="btn secondary" id="btn-export-csv" style="padding:8px 12px;font-size:12px;">Exportar CSV</button>
       </div>
 
       <div class="filter-summary" id="filter-summary" style="display:none;"></div>
@@ -1077,6 +1130,22 @@
       </div>
 
       <div class="dash-cols" id="cat-groups-container" style="align-items:start;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));"></div>
+
+      <div class="card" style="margin-top:18px;" id="advanced-rules-card">
+        <div class="panel-title">Regras automáticas de categoria</div>
+        <p style="color:var(--ink-dim);font-size:13px;line-height:1.5;margin:0 0 12px;">
+          Além das palavras-chave da categoria, você pode criar regras com faixa de valor.
+          Ex.: descrição contém “farmácia” e valor entre 50 e 500 → Saúde.
+        </p>
+        <div id="advanced-rules-list"></div>
+        <div class="rule-adv-row" style="margin-top:12px;">
+          <div class="field" style="margin:0;"><label>Palavra-chave</label><input type="text" id="rule-kw" placeholder="ex.: uber"></div>
+          <div class="field" style="margin:0;"><label>Categoria</label><select id="rule-cat"></select></div>
+          <div class="field" style="margin:0;"><label>Mín R$</label><input type="number" id="rule-min" step="0.01" min="0" placeholder="0"></div>
+          <div class="field" style="margin:0;"><label>Máx R$</label><input type="number" id="rule-max" step="0.01" min="0" placeholder="∞"></div>
+          <button type="button" class="btn secondary" id="rule-add-btn" style="padding:10px 14px;">Adicionar</button>
+        </div>
+      </div>
     </section>
 
     <!-- ===================== CONFIG ===================== -->
@@ -1084,7 +1153,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-13-07 (login Google conclui entrada)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-14-02 (modo privacidade ocultar valores)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1112,6 +1181,18 @@
           <p style="font-size:11.5px;color:var(--ink-faint);margin:10px 0 0;line-height:1.45;">
             Crie um Client ID em <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" style="color:var(--accent);">Google Cloud Console</a>
             (tipo “Aplicativo da Web”). Ative também a <strong>Google Drive API</strong>. Em origens JavaScript autorizadas, use a URL HTTPS do app.
+          </p>
+        </div>
+        <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="privacy-config-card">
+          <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Privacidade dos valores</div>
+          <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;margin-bottom:8px;">
+            <input type="checkbox" id="cfg-hide-amounts"> Ocultar valores agora
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;">
+            <input type="checkbox" id="cfg-hide-on-open"> Iniciar com valores ocultos
+          </label>
+          <p style="font-size:11.5px;color:var(--ink-faint);margin:10px 0 0;line-height:1.45;">
+            Também pode usar o botão 👁 no canto superior direito. Útil ao abrir o app em público.
           </p>
         </div>
         <div class="btn-row" style="margin-top:12px;">
@@ -1386,6 +1467,15 @@
         <label>Comprovante</label>
         <img id="m-photo-img" style="max-width:100%;border-radius:8px;border:1px solid var(--line);">
       </div>
+      <div class="field full" id="m-split-wrap">
+        <label>Dividir despesa (split)</label>
+        <p style="font-size:12px;color:var(--ink-faint);margin:0 0 8px;">Rateia o valor em categorias. A soma deve fechar o total do lançamento.</p>
+        <div id="m-split-rows"></div>
+        <div class="btn-row" style="margin-top:6px;">
+          <button type="button" class="btn ghost" id="m-split-add" style="padding:6px 12px;font-size:12px;">+ Parte</button>
+          <span id="m-split-sum" style="font-size:12px;color:var(--ink-faint);font-family:var(--font-mono);"></span>
+        </div>
+      </div>
     </div>
     <div class="btn-row">
       <button class="btn" id="m-save">Salvar</button>
@@ -1537,7 +1627,7 @@ function normalizeLoadedState(parsed){
   state.categories = cats;
   state.categoryRules = parsed.categoryRules || [];
   state.recurringTemplates = parsed.recurringTemplates || [];
-  state.settings = { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null, ...(parsed.settings || {}) };
+  state.settings = { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null, hideAmounts: false, hideOnOpen: false, ...(parsed.settings || {}) };
   state.accountLimits = parsed.accountLimits && typeof parsed.accountLimits === 'object' ? parsed.accountLimits : {};
   state.accounts = parsed.accounts && typeof parsed.accounts === 'object' ? parsed.accounts : {};
   state.goals = Array.isArray(parsed.goals) ? parsed.goals : [];
@@ -1636,7 +1726,39 @@ function initials(name){
 }
 
 function fmtBRL(v){
+  if(state && state.settings && state.settings.hideAmounts){
+    return 'R$ ••••';
+  }
   return (v||0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+}
+function isPrivacyOn(){
+  return !!(state && state.settings && state.settings.hideAmounts);
+}
+function setPrivacy(on, persist){
+  if(!state.settings) state.settings = {};
+  state.settings.hideAmounts = !!on;
+  document.body.classList.toggle('privacy-on', !!on);
+  const btn = document.getElementById('privacy-toggle');
+  if(btn) btn.textContent = on ? '👁 Mostrar valores' : '👁 Ocultar valores';
+  const cfg = document.getElementById('cfg-hide-amounts');
+  if(cfg) cfg.checked = !!on;
+  if(persist !== false) saveState();
+  // re-render visible views
+  try{
+    const active = document.querySelector('.view.active');
+    if(active && active.id === 'view-dashboard') renderDashboard();
+    if(active && active.id === 'view-transactions') renderTransactions();
+  }catch(e){}
+}
+let privacyAppliedOnBoot = false;
+function applyPrivacyFromSettings(){
+  if(!state.settings) state.settings = {};
+  // Só na primeira aplicação da sessão: se "iniciar oculto", força escondido
+  if(!privacyAppliedOnBoot){
+    privacyAppliedOnBoot = true;
+    if(state.settings.hideOnOpen) state.settings.hideAmounts = true;
+  }
+  setPrivacy(!!state.settings.hideAmounts, false);
 }
 function fmtDate(iso){
   if(!iso) return '';
@@ -1706,6 +1828,10 @@ document.querySelectorAll('.spine-btn').forEach(btn=>{
       const g = state.settings.monthlyGoal;
       document.getElementById('monthly-goal-input').value = (g && g > 0) ? g : '';
       updateAuthConfigUI();
+      const h1 = document.getElementById('cfg-hide-amounts');
+      const h2 = document.getElementById('cfg-hide-on-open');
+      if(h1) h1.checked = !!(state.settings && state.settings.hideAmounts);
+      if(h2) h2.checked = !!(state.settings && state.settings.hideOnOpen);
       fillReductionConfig();
       renderAccountLimitsConfig();
       renderAccountsConfig();
@@ -2483,11 +2609,233 @@ function renderAccountLimitsConfig(){
 
 
 /* ---------- Contas, objetivos, tags, dívidas, fluxo, lembretes ---------- */
+
+/* ---------- Pacote 7: consolidado, alertas, ciclo, split, visita, CSV ---------- */
+function getCycleRangeForAccount(accountName, refDate){
+  const ref = refDate || todayISO();
+  const cfg = (state.accountLimits && state.accountLimits[accountName]) || {};
+  const closeDay = parseInt(cfg.closingDay, 10);
+  if(!closeDay || closeDay < 1 || closeDay > 28){
+    // mês civil
+    const [y,m] = ref.split('-').map(Number);
+    const start = y+'-'+pad2(m)+'-01';
+    const last = new Date(y, m, 0).getDate();
+    const end = y+'-'+pad2(m)+'-'+pad2(last);
+    return { start, end, label: monthLabel(y+'-'+pad2(m)), mode: 'civil' };
+  }
+  const d = new Date(ref+'T12:00:00');
+  let end = new Date(d.getFullYear(), d.getMonth(), closeDay);
+  if(d.getDate() > closeDay) end = new Date(d.getFullYear(), d.getMonth()+1, closeDay);
+  let start = new Date(end); start.setMonth(start.getMonth()-1); start.setDate(closeDay+1);
+  const toISO = dt => dt.getFullYear()+'-'+pad2(dt.getMonth()+1)+'-'+pad2(dt.getDate());
+  return { start: toISO(start), end: toISO(end), label: 'ciclo até '+toISO(end), mode: 'fatura' };
+}
+
+function buildSmartAlerts(scopedTx, dashAccount){
+  const alerts = [];
+  const today = todayISO();
+  const curKey = monthKey(today);
+  const day = parseInt(today.slice(8,10),10);
+  const dim = new Date(parseInt(today.slice(0,4),10), parseInt(today.slice(5,7),10), 0).getDate();
+  const monthTx = scopedTx.filter(t=> monthKey(t.date)===curKey);
+  const exp = monthTx.filter(t=> typeById(t.type).countsAsExpense).reduce((s,t)=>s+t.amount,0);
+  const goal = state.settings.monthlyGoal;
+  if(goal && goal > 0){
+    const pct = exp/goal*100;
+    if(pct >= 100) alerts.push({ level:'danger', text:`Meta mensal estourada: ${fmtBRL(exp)} de ${fmtBRL(goal)} (${Math.round(pct)}%).` });
+    else if(pct >= 90) alerts.push({ level:'warn', text:`Você já usou ${Math.round(pct)}% da meta mensal (${fmtBRL(exp)} de ${fmtBRL(goal)}).` });
+  }
+  // orçamentos de categoria
+  const byCat = {};
+  monthTx.filter(t=> typeById(t.type).countsAsExpense).forEach(t=>{ byCat[t.category]=(byCat[t.category]||0)+t.amount; });
+  state.categories.forEach(c=>{
+    if(!c.budget || c.budget<=0) return;
+    const used = byCat[c.id]||0;
+    if(used >= c.budget) alerts.push({ level:'danger', text:`Orçamento de ${c.name} estourado: ${fmtBRL(used)} / ${fmtBRL(c.budget)}.` });
+    else if(used >= c.budget*0.9) alerts.push({ level:'warn', text:`${c.name} em ${Math.round(used/c.budget*100)}% do orçamento.` });
+  });
+  // fechamento de fatura em breve
+  Object.entries(state.accountLimits||{}).forEach(([name, cfg])=>{
+    if(dashAccount && name !== dashAccount) return;
+    const cd = parseInt(cfg.closingDay,10);
+    if(!cd) return;
+    const range = getCycleRangeForAccount(name, today);
+    const daysLeft = Math.round((new Date(range.end+'T12:00:00') - new Date(today+'T12:00:00'))/86400000);
+    if(daysLeft >= 0 && daysLeft <= 2){
+      alerts.push({ level: daysLeft===0?'danger':'warn', text:`Fatura de ${name} fecha ${daysLeft===0?'hoje':('em '+daysLeft+' dia(s)')} (${range.end}).` });
+    }
+  });
+  // ritmo acelerado
+  if(day >= 5 && dim > 0){
+    const pace = exp / (day/dim);
+    if(goal && pace > goal * 1.15){
+      alerts.push({ level:'info', text:`No ritmo atual, o mês fecha perto de ${fmtBRL(pace)} — acima da meta.` });
+    }
+  }
+  return alerts.slice(0,5);
+}
+
+function computeNetWorth(dashAccount){
+  const names = Array.from(new Set([...knownAccounts(), ...Object.keys(state.accounts||{})]));
+  const filtered = dashAccount ? names.filter(n=>n===dashAccount) : names;
+  let liquid = 0;
+  filtered.forEach(n=>{ liquid += accountBalance(n); });
+  const debts = (state.debts||[]).reduce((s,d)=> s+(Number(d.remaining)||0), 0);
+  // cartões: ocupado no ciclo
+  let cardUsed = 0, cardLimit = 0;
+  Object.entries(state.accountLimits||{}).forEach(([name, cfg])=>{
+    if(!cfg.limit) return;
+    if(dashAccount && name !== dashAccount) return;
+    cardLimit += Number(cfg.limit)||0;
+    const range = getCycleRangeForAccount(name);
+    const used = state.transactions.filter(t=> t.account===name && t.date >= range.start && t.date <= range.end && typeById(t.type).countsAsExpense)
+      .reduce((s,t)=>s+t.amount,0);
+    cardUsed += used;
+  });
+  return { liquid, debts, net: liquid - debts, cardUsed, cardLimit };
+}
+
+function buildSinceVisitMessage(){
+  const snap = state.settings.lastSnapshot;
+  const nowCount = state.transactions.length;
+  const curKey = monthKey(todayISO());
+  const monthExp = state.transactions.filter(t=> monthKey(t.date)===curKey && typeById(t.type).countsAsExpense).reduce((s,t)=>s+t.amount,0);
+  if(!snap){
+    return { items: ['Primeira visita registrada neste perfil.'], isFirst: true };
+  }
+  const items = [];
+  const dCount = nowCount - (snap.txCount||0);
+  if(dCount > 0) items.push(`+${dCount} lançamento(s) novo(s) desde a última visita.`);
+  else if(dCount < 0) items.push(`${Math.abs(dCount)} lançamento(s) a menos (removidos ou outro perfil).`);
+  else items.push('Nenhum lançamento novo desde a última visita.');
+  const dExp = monthExp - (snap.monthExp||0);
+  if(Math.abs(dExp) >= 0.01){
+    items.push(`Despesas do mês: ${fmtBRL(monthExp)} (${dExp>0?'+':''}${fmtBRL(dExp)} vs última visita).`);
+  }
+  if(snap.at){
+    try{ items.push('Última visita: '+new Date(snap.at).toLocaleString('pt-BR')); }catch(e){}
+  }
+  return { items, isFirst: false };
+}
+
+function touchVisitSnapshot(){
+  const curKey = monthKey(todayISO());
+  const monthExp = state.transactions.filter(t=> monthKey(t.date)===curKey && typeById(t.type).countsAsExpense).reduce((s,t)=>s+t.amount,0);
+  state.settings.lastSnapshot = {
+    at: new Date().toISOString(),
+    txCount: state.transactions.length,
+    monthExp
+  };
+  saveState();
+}
+
+function exportFilteredCSV(list){
+  const rows = [['Data','Tipo','Descrição','Categoria','Valor','Conta','Tags','Origem','Observações']];
+  list.forEach(t=>{
+    rows.push([
+      t.date,
+      typeById(t.type).label || t.type,
+      t.desc||'',
+      catById(t.category).name || t.category||'',
+      String(t.amount).replace('.',','),
+      t.account||'',
+      (t.tags||[]).join('; '),
+      t.source||'',
+      (t.notes||'').replace(/\n/g,' ')
+    ]);
+  });
+  const esc = v => {
+    const s = String(v??'');
+    if(/[;"\n]/.test(s)) return '"'+s.replace(/"/g,'""')+'"';
+    return s;
+  };
+  const csv = rows.map(r=> r.map(esc).join(';')).join('\n');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (state.settings.filePrefix||'livro-caixa')+'-lancamentos.csv';
+  a.click();
+  setTimeout(()=> URL.revokeObjectURL(a.href), 2000);
+}
+
+function renderAdvancedRules(){
+  const list = document.getElementById('advanced-rules-list');
+  const sel = document.getElementById('rule-cat');
+  if(!list) return;
+  if(sel){
+    sel.innerHTML = state.categories.map(c=>`<option value="${escapeAttr(c.id)}">${escapeHTML(c.name)}</option>`).join('');
+  }
+  if(!(state.categoryRules||[]).length){
+    list.innerHTML = '<div class="empty-state" style="padding:10px 0;">Nenhuma regra ainda. As correções na importação também geram regras simples.</div>';
+    return;
+  }
+  list.innerHTML = state.categoryRules.map((r,i)=>{
+    const c = catById(r.category);
+    const faixa = (r.minAmount!=null||r.maxAmount!=null)
+      ? ` · R$ ${r.minAmount??'0'}–${r.maxAmount??'∞'}`
+      : '';
+    return `<div class="account-bal-row">
+      <div><strong style="color:var(--ink);">${escapeHTML(r.keyword||'')}</strong>
+      <span style="color:var(--ink-faint);font-size:12px;"> → ${escapeHTML(c.name||r.category)}${faixa}</span></div>
+      <button type="button" class="btn ghost rule-del" data-i="${i}" style="padding:4px 10px;font-size:12px;color:var(--warn);">Excluir</button>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('.rule-del').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      state.categoryRules.splice(parseInt(btn.dataset.i,10), 1);
+      saveState();
+      renderAdvancedRules();
+      showToast('Regra removida.');
+    });
+  });
+}
+
+function setupSplitRows(total, existing){
+  const wrap = document.getElementById('m-split-rows');
+  if(!wrap) return;
+  wrap.innerHTML = '';
+  const parts = existing && existing.length ? existing : [{ category: '', amount: '' }];
+  parts.forEach(p=> addSplitRow(p.category, p.amount));
+  updateSplitSum(total);
+}
+function addSplitRow(cat, amount){
+  const wrap = document.getElementById('m-split-rows');
+  if(!wrap) return;
+  const row = document.createElement('div');
+  row.className = 'split-row';
+  row.innerHTML = `
+    <select class="split-cat">${categoryOptionsHTML(cat||'')}</select>
+    <input type="number" class="split-amt" step="0.01" min="0" value="${amount!==undefined&&amount!==''?amount:''}" placeholder="R$">
+    <button type="button" class="btn ghost split-rm" style="padding:4px 8px;">×</button>`;
+  wrap.appendChild(row);
+  row.querySelector('.split-rm').addEventListener('click', ()=>{ row.remove(); updateSplitSum(); });
+  row.querySelector('.split-amt').addEventListener('input', ()=> updateSplitSum());
+}
+function updateSplitSum(total){
+  const el = document.getElementById('m-split-sum');
+  if(!el) return;
+  const amts = Array.from(document.querySelectorAll('#m-split-rows .split-amt')).map(i=> parseFloat(i.value)||0);
+  const sum = amts.reduce((s,v)=>s+v,0);
+  const tot = total !== undefined ? total : (parseFloat(document.getElementById('m-amount').value)||0);
+  const ok = Math.abs(sum - tot) < 0.02 || sum === 0;
+  el.textContent = sum === 0 ? 'Split opcional' : `Soma ${fmtBRL(sum)} / ${fmtBRL(tot)}${ok?'':' ⚠'} `;
+  el.style.color = ok ? 'var(--ink-faint)' : 'var(--warn)';
+}
+function readSplitParts(){
+  const rows = Array.from(document.querySelectorAll('#m-split-rows .split-row'));
+  return rows.map(r=>({
+    category: r.querySelector('.split-cat').value,
+    amount: parseFloat(r.querySelector('.split-amt').value)||0
+  })).filter(p=> p.amount > 0 && p.category);
+}
+
+
 const DEFAULT_DASH_CARDS = {
   goal: true, pace: true, insights: true, budget: true, yoy: true,
   accountsBalance: true, goals: true, debts: true, cashflow: true,
   merchants: true, agenda: true, compare3: true, subscriptions: true, reduction: true,
-  cardLimits: true, invoiceSim: true, installments: true
+  cardLimits: true, invoiceSim: true, installments: true,
+  networth: true, sinceVisit: true, alerts: true
 };
 function dashCardVisible(key){
   const cfg = state.settings.dashCards || DEFAULT_DASH_CARDS;
@@ -2661,7 +3009,8 @@ function renderDashConfig(){
     yoy:'Ano passado', accountsBalance:'Saldos', goals:'Objetivos', debts:'Dívidas',
     cashflow:'Fluxo projetado', merchants:'Top lojas', agenda:'Agenda', compare3:'Comparativo 3m',
     subscriptions:'Assinaturas', reduction:'Meta redução', cardLimits:'Limites cartão',
-    invoiceSim:'Simulador fatura', installments:'Parcelas futuras'
+    invoiceSim:'Simulador fatura', installments:'Parcelas futuras',
+    networth:'Patrimônio consolidado', sinceVisit:'Desde última visita', alerts:'Alertas'
   };
   const cfg = { ...DEFAULT_DASH_CARDS, ...(state.settings.dashCards||{}) };
   grid.innerHTML = Object.keys(labels).map(k=>`
@@ -2690,7 +3039,58 @@ function renderDashboard(){
     if(accs.includes(prevDashAcc)) dashAccSel.value = prevDashAcc;
   }
   const dashAccount = dashAccSel ? dashAccSel.value : '';
-  const scopedTx = dashAccount ? state.transactions.filter(t=> t.account === dashAccount) : state.transactions;
+  const cycleMode = !!(document.getElementById('dash-cycle-mode') && document.getElementById('dash-cycle-mode').checked);
+  let scopedTx = dashAccount ? state.transactions.filter(t=> t.account === dashAccount) : state.transactions;
+  if(cycleMode && dashAccount){
+    const range = getCycleRangeForAccount(dashAccount);
+    scopedTx = scopedTx.filter(t=> t.date >= range.start && t.date <= range.end);
+  }
+
+  // alertas inteligentes
+  {
+    const wrap = document.getElementById('alerts-banner-wrap');
+    if(wrap){
+      if(!dashCardVisible('alerts')){ wrap.innerHTML = ''; }
+      else {
+        const alerts = buildSmartAlerts(scopedTx, dashAccount);
+        wrap.innerHTML = alerts.map(a=>`<div class="alert-banner ${a.level}">${escapeHTML(a.text)}</div>`).join('');
+      }
+    }
+  }
+
+  // desde a última visita
+  {
+    const card = document.getElementById('since-visit-card');
+    const content = document.getElementById('since-visit-content');
+    if(card && content){
+      if(!dashCardVisible('sinceVisit')) card.style.display = 'none';
+      else {
+        card.style.display = '';
+        const msg = buildSinceVisitMessage();
+        content.innerHTML = msg.items.map(t=>`<div class="changed-item">${escapeHTML(t)}</div>`).join('');
+      }
+    }
+  }
+
+  // patrimônio consolidado
+  {
+    const card = document.getElementById('networth-card');
+    const grid = document.getElementById('networth-grid');
+    if(card && grid){
+      if(!dashCardVisible('networth')) card.style.display = 'none';
+      else {
+        card.style.display = '';
+        const nw = computeNetWorth(dashAccount||null);
+        grid.innerHTML = `
+          <div class="nw-item"><div class="nw-label">Saldos (contas)</div><div class="nw-val" style="color:${nw.liquid>=0?'var(--accent)':'var(--warn)'}">${fmtBRL(nw.liquid)}</div></div>
+          <div class="nw-item"><div class="nw-label">Dívidas</div><div class="nw-val" style="color:var(--warn)">${fmtBRL(nw.debts)}</div></div>
+          <div class="nw-item"><div class="nw-label">Líquido (saldos − dívidas)</div><div class="nw-val" style="color:${nw.net>=0?'var(--accent)':'var(--warn)'}">${fmtBRL(nw.net)}</div></div>
+          ${nw.cardLimit>0?`<div class="nw-item" style="grid-column:1/-1;"><div class="nw-label">Cartões no ciclo (ocupado / limite)</div><div class="nw-val">${fmtBRL(nw.cardUsed)} / ${fmtBRL(nw.cardLimit)} · ${Math.round(nw.cardUsed/nw.cardLimit*100)}%</div>
+            <div class="goal-bar" style="margin-top:8px;"><div class="goal-bar-fill" style="width:${Math.min(100,nw.cardUsed/nw.cardLimit*100)}%;background:${nw.cardUsed/nw.cardLimit>0.9?'var(--warn)':'var(--accent)'};"></div></div>
+          </div>`:''}`;
+      }
+    }
+  }
 
   const hasData = scopedTx.length > 0;
   const now = new Date();
@@ -3536,7 +3936,8 @@ function renderDashboard(){
     'goal-card':'goal', 'pace-card':'pace', 'insights-card':'insights', 'budget-panel-card':'budget',
     'yoy-card':'yoy', 'card-limits-card':'cardLimits', 'invoice-sim-card':'invoiceSim',
     'installments-card':'installments', 'merchants-card':'merchants', 'agenda-card':'agenda',
-    'compare3-card':'compare3', 'subscriptions-card':'subscriptions', 'reduction-card':'reduction'
+    'compare3-card':'compare3', 'subscriptions-card':'subscriptions', 'reduction-card':'reduction',
+    'networth-card':'networth', 'since-visit-card':'sinceVisit'
   };
   Object.entries(visMap).forEach(([id,key])=>{
     const el = document.getElementById(id);
@@ -3852,6 +4253,12 @@ function openEditModal(id){
   } else {
     document.getElementById('m-photo-field').style.display = 'none';
   }
+  const splitWrap = document.getElementById('m-split-wrap');
+  if(splitWrap){
+    const isExp = typeById(t.type||'despesa').countsAsExpense;
+    splitWrap.style.display = isExp ? '' : 'none';
+    if(isExp) setupSplitRows(t.amount, t.splits || []);
+  }
   document.getElementById('modal-bg').classList.add('active');
 }
 document.getElementById('m-type-toggle').addEventListener('click', (e)=>{
@@ -3881,13 +4288,47 @@ document.getElementById('m-save').addEventListener('click', ()=>{
   const accountVal = document.getElementById('m-account').value.trim();
   if(accountVal) t.account = accountVal; else delete t.account;
   t.type = getActiveType(document.getElementById('m-type-toggle'));
+
+  // split de despesa
+  const parts = readSplitParts();
+  if(parts.length >= 2){
+    const sum = parts.reduce((s,p)=>s+p.amount,0);
+    if(Math.abs(sum - t.amount) > 0.05){
+      showToast('A soma das partes do split deve fechar o valor total.');
+      return;
+    }
+    const groupId = t.splitGroupId || uid();
+    // remove original
+    state.transactions = state.transactions.filter(x=>x.id !== t.id);
+    parts.forEach((p,i)=>{
+      state.transactions.push({
+        id: uid(),
+        date: t.date,
+        desc: t.desc + (parts.length>1 ? ` (${i+1}/${parts.length})` : ''),
+        amount: p.amount,
+        category: p.category,
+        type: t.type,
+        source: t.source || 'manual',
+        notes: t.notes || '',
+        account: t.account,
+        photo: t.photo,
+        tags: t.tags || [],
+        splitGroupId: groupId,
+        createdAt: t.createdAt || new Date().toISOString()
+      });
+    });
+    showToast('Despesa dividida em '+parts.length+' partes.');
+  } else {
+    delete t.splits;
+    showToast('Lançamento atualizado.');
+  }
+
   saveState();
   document.getElementById('modal-bg').classList.remove('active');
   editingId = null;
   fillAccountSuggestions();
   renderDashboard();
   renderTransactions();
-  showToast('Lançamento atualizado.');
 });
 
 /* ============================================================
@@ -3947,7 +4388,7 @@ document.getElementById('type-toggle').addEventListener('click', (e)=>{
 document.getElementById('f-desc').addEventListener('change', ()=>{
   const desc = document.getElementById('f-desc').value.trim();
   const type = document.getElementById('f-type').value;
-  if(desc) document.getElementById('f-category').value = suggestCategory(desc, type);
+  if(desc) document.getElementById('f-category').value = suggestCategory(desc, type, document.getElementById('f-amount')?.value);
 });
 
 document.getElementById('manual-form').addEventListener('keydown', (e)=>{
@@ -4471,12 +4912,28 @@ function learnCategory(desc, categoryId){
 }
 
 // categoria sugerida: primeiro tenta as regras memorizadas pelo usuário (do mesmo tipo), depois cai no palpite padrão
-function suggestCategory(desc, type){
+function suggestCategory(desc, type, amount){
   const kind = type || 'despesa';
   const norm = normalizeDesc(desc);
+  const amt = (amount !== undefined && amount !== null && amount !== '') ? Number(amount) : null;
 
-  // 1. palavras-chave cadastradas manualmente na categoria — maior prioridade, pois foi
-  // uma escolha explícita do usuário, não um palpite
+  // 1. regras avançadas (keyword + faixa de valor) — prioridade alta
+  const adv = state.categoryRules.filter(r=>{
+    if(!r.keyword || !norm.includes(normalizeDesc(r.keyword))) return false;
+    const c = catById(r.category);
+    if(!c || c.kind !== kind) return false;
+    if(amt !== null && !isNaN(amt)){
+      if(r.minAmount != null && r.minAmount !== '' && amt < Number(r.minAmount)) return false;
+      if(r.maxAmount != null && r.maxAmount !== '' && amt > Number(r.maxAmount)) return false;
+    }
+    return true;
+  });
+  if(adv.length){
+    adv.sort((a,b)=> String(b.keyword).length - String(a.keyword).length);
+    return adv[0].category;
+  }
+
+  // 2. palavras-chave cadastradas na categoria
   let bestKwCat = null, bestKwLen = 0;
   state.categories.forEach(c=>{
     if(c.kind !== kind || !Array.isArray(c.keywords)) return;
@@ -4486,14 +4943,14 @@ function suggestCategory(desc, type){
   });
   if(bestKwCat) return bestKwCat;
 
-  // 2. regras aprendidas automaticamente durante importações (correções feitas pelo usuário)
+  // 3. regras simples aprendidas (sem faixa)
   const matches = state.categoryRules.filter(r=> r.keyword && norm.includes(r.keyword) && catById(r.category).kind === kind);
   if(matches.length){
     matches.sort((a,b)=> b.keyword.length - a.keyword.length);
     return matches[0].category;
   }
 
-  // 3. palpite padrão por regras fixas do app
+  // 4. palpite padrão
   return guessCategory(desc, kind);
 }
 
@@ -6206,7 +6663,7 @@ async function enterAppAs(user){
       categories: DEFAULT_CATEGORIES.slice(),
       categoryRules: [],
       recurringTemplates: [],
-      settings: { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null },
+      settings: { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null, hideAmounts: false, hideOnOpen: false },
       accountLimits: {},
       accounts: {},
       goals: [],
@@ -6229,6 +6686,7 @@ async function enterAppAs(user){
     try{ toggleTransferFields('despesa'); }catch(e){}
     const fDate = document.getElementById('f-date');
     if(fDate) fDate.value = todayISO();
+    try{ applyPrivacyFromSettings(); }catch(e){}
     try{ renderDashboard(); }catch(e){ console.error(e); }
     try{ renderTransactions(); }catch(e){ console.error(e); }
     try{ renderCategories(); }catch(e){ console.error(e); }
@@ -6236,6 +6694,7 @@ async function enterAppAs(user){
     updateAuthConfigUI();
     try{ maybeShowOnboarding(); }catch(e){}
     setTimeout(()=>{ try{ checkReminders(); }catch(e){} }, 600);
+    setTimeout(()=>{ try{ touchVisitSnapshot(); }catch(e){} }, 2500);
     showToast(user.provider==='google' ? ('Olá, '+(user.name||'bem-vindo')+'!') : 'Modo local ativo.');
   }catch(err){
     console.error('enterAppAs', err);
@@ -6308,6 +6767,71 @@ function renderGoogleButton(){
     if(hint) hint.style.display = '';
   }
 }
+
+document.getElementById('dash-cycle-mode') && document.getElementById('dash-cycle-mode').addEventListener('change', ()=> renderDashboard());
+document.getElementById('btn-export-csv') && document.getElementById('btn-export-csv').addEventListener('click', ()=>{
+  // reutiliza o mesmo filtro de renderTransactions
+  const month = document.getElementById('filter-month')?.value || '';
+  const type = document.getElementById('filter-type')?.value || '';
+  const category = document.getElementById('filter-category')?.value || '';
+  const source = document.getElementById('filter-source')?.value || '';
+  const account = document.getElementById('filter-account')?.value || '';
+  const tagFilter = document.getElementById('filter-tag')?.value || '';
+  const search = (document.getElementById('filter-search')?.value || '').trim().toLowerCase();
+  const from = document.getElementById('filter-from')?.value || '';
+  const to = document.getElementById('filter-to')?.value || '';
+  let list = state.transactions.slice();
+  if(from || to){
+    if(from) list = list.filter(t=> t.date >= from);
+    if(to) list = list.filter(t=> t.date <= to);
+  } else if(month) list = list.filter(t=> monthKey(t.date)===month);
+  if(type) list = list.filter(t=> t.type===type);
+  if(category) list = list.filter(t=> t.category===category);
+  if(source) list = list.filter(t=> t.source===source);
+  if(account) list = list.filter(t=> (t.account||'')===account);
+  if(tagFilter) list = list.filter(t=> (t.tags||[]).includes(tagFilter));
+  if(search) list = list.filter(t=> (t.desc||'').toLowerCase().includes(search));
+  if(!list.length){ showToast('Nenhum lançamento no filtro atual.'); return; }
+  exportFilteredCSV(list);
+  showToast(list.length+' lançamento(s) exportados em CSV.');
+});
+document.getElementById('rule-add-btn') && document.getElementById('rule-add-btn').addEventListener('click', ()=>{
+  const keyword = (document.getElementById('rule-kw')?.value || '').trim().toLowerCase();
+  const category = document.getElementById('rule-cat')?.value;
+  const minAmount = document.getElementById('rule-min')?.value;
+  const maxAmount = document.getElementById('rule-max')?.value;
+  if(!keyword || !category){ showToast('Informe palavra-chave e categoria.'); return; }
+  state.categoryRules.push({
+    keyword,
+    category,
+    minAmount: minAmount===''? null : parseFloat(minAmount),
+    maxAmount: maxAmount===''? null : parseFloat(maxAmount)
+  });
+  saveState();
+  document.getElementById('rule-kw').value = '';
+  document.getElementById('rule-min').value = '';
+  document.getElementById('rule-max').value = '';
+  renderAdvancedRules();
+  showToast('Regra adicionada.');
+});
+document.getElementById('m-split-add') && document.getElementById('m-split-add').addEventListener('click', ()=> addSplitRow('', ''));
+document.getElementById('m-amount') && document.getElementById('m-amount').addEventListener('input', ()=> updateSplitSum());
+
+
+
+document.getElementById('privacy-toggle') && document.getElementById('privacy-toggle').addEventListener('click', ()=>{
+  setPrivacy(!isPrivacyOn(), true);
+});
+document.getElementById('cfg-hide-amounts') && document.getElementById('cfg-hide-amounts').addEventListener('change', (e)=>{
+  setPrivacy(e.target.checked, true);
+});
+document.getElementById('cfg-hide-on-open') && document.getElementById('cfg-hide-on-open').addEventListener('change', (e)=>{
+  if(!state.settings) state.settings = {};
+  state.settings.hideOnOpen = e.target.checked;
+  saveState();
+  showToast(e.target.checked ? 'Na próxima abertura, valores virão ocultos.' : 'Abertura normal (valores visíveis).');
+});
+
 function initAuthUI(){
   const savedClient = getSavedGoogleClientId();
   const input = document.getElementById('auth-google-client-id');
@@ -6601,6 +7125,7 @@ async function init(){
       if(!state.debts) state.debts = [];
       hideAuthGate();
       updateAuthConfigUI();
+      try{ applyPrivacyFromSettings(); }catch(e){}
       setTimeout(renderGoogleButton, 500);
     } else {
       // mostra gate; dados só carregam após login/continuar
@@ -6627,6 +7152,7 @@ async function init(){
     registerPWA();
     maybeShowOnboarding();
     setTimeout(checkReminders, 600);
+    setTimeout(()=>{ try{ touchVisitSnapshot(); }catch(e){} }, 2500);
   }catch(err){
     console.error('Erro ao iniciar o app:', err);
     showToast('Algo não carregou direito ao abrir o app — veja o console para detalhes.');
