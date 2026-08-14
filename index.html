@@ -589,9 +589,12 @@
 <div id="auth-gate">
   <div class="auth-card">
     <h1>Livro-Caixa</h1>
-    <p class="auth-sub">Entre com sua conta Google para identificar seu perfil neste aparelho, ou continue só neste navegador.</p>
+    <p class="auth-sub">Toque no botão branco do Google abaixo para entrar. Se preferir não usar Google, use “Continuar sem conta”.</p>
     <div id="auth-logged-preview" style="display:none;"></div>
     <div id="google-btn-wrap"></div>
+    <p id="google-click-hint" style="font-size:12.5px;color:var(--accent);line-height:1.45;margin:8px 0 0;display:none;">
+      Conta Google detectada — toque no botão <strong>Fazer login como…</strong> para abrir o app.
+    </p>
     <p id="google-setup-hint" style="display:none;font-size:12.5px;color:var(--ink-dim);line-height:1.5;margin:0 0 12px;">
       Para ativar o botão Google, informe o <strong>Client ID</strong> em Config (depois do primeiro acesso local) ou no campo abaixo.
     </p>
@@ -1081,7 +1084,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-13-06 (backup Google Drive)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-13-07 (login Google conclui entrada)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -6196,72 +6199,100 @@ async function enterAppAs(user){
   currentUser = user;
   saveAuthSession(user);
   STORAGE_KEY = activeStorageKey();
-  // recarrega state do namespace do usuário
-  state = {
-    transactions: [],
-    categories: DEFAULT_CATEGORIES.slice(),
-    categoryRules: [],
-    recurringTemplates: [],
-    settings: { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null },
-    accountLimits: {},
-    accounts: {},
-    goals: [],
-    debts: [],
-    importPrefs: { lastAccountOfx:'', lastAccountPdf:'', lastAccountSheet:'', sheetMaps:{} },
-    transactionTypes: DEFAULT_TRANSACTION_TYPES.slice(),
-  };
-  await loadState();
-  if(!state.importPrefs) state.importPrefs = { lastAccountOfx:'', lastAccountPdf:'', lastAccountSheet:'', sheetMaps:{} };
-  if(!state.accounts) state.accounts = {};
-  if(!state.goals) state.goals = [];
-  if(!state.debts) state.debts = [];
-  runRecurringGeneration();
-  fillCategorySelects();
-  fillAccountSuggestions();
-  document.getElementById('type-toggle').innerHTML = typeToggleHTML('despesa');
-  document.getElementById('f-type').value = 'despesa';
-  toggleTransferFields('despesa');
-  document.getElementById('f-date').value = todayISO();
-  renderDashboard();
-  renderTransactions();
-  renderCategories();
-  renderConfigStorageSection();
-  updateAuthConfigUI();
-  hideAuthGate();
-  maybeShowOnboarding();
-  setTimeout(checkReminders, 600);
-  showToast(user.provider==='google' ? ('Olá, '+(user.name||'bem-vindo')+'!') : 'Modo local ativo.');
+  hideAuthGate(); // some logo para não ficar preso na tela de login
+  try{
+    state = {
+      transactions: [],
+      categories: DEFAULT_CATEGORIES.slice(),
+      categoryRules: [],
+      recurringTemplates: [],
+      settings: { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null },
+      accountLimits: {},
+      accounts: {},
+      goals: [],
+      debts: [],
+      importPrefs: { lastAccountOfx:'', lastAccountPdf:'', lastAccountSheet:'', sheetMaps:{} },
+      transactionTypes: DEFAULT_TRANSACTION_TYPES.slice(),
+    };
+    await loadState();
+    if(!state.importPrefs) state.importPrefs = { lastAccountOfx:'', lastAccountPdf:'', lastAccountSheet:'', sheetMaps:{} };
+    if(!state.accounts) state.accounts = {};
+    if(!state.goals) state.goals = [];
+    if(!state.debts) state.debts = [];
+    runRecurringGeneration();
+    try{ fillCategorySelects(); }catch(e){ console.warn(e); }
+    try{ fillAccountSuggestions(); }catch(e){ console.warn(e); }
+    const typeToggle = document.getElementById('type-toggle');
+    if(typeToggle) typeToggle.innerHTML = typeToggleHTML('despesa');
+    const fType = document.getElementById('f-type');
+    if(fType) fType.value = 'despesa';
+    try{ toggleTransferFields('despesa'); }catch(e){}
+    const fDate = document.getElementById('f-date');
+    if(fDate) fDate.value = todayISO();
+    try{ renderDashboard(); }catch(e){ console.error(e); }
+    try{ renderTransactions(); }catch(e){ console.error(e); }
+    try{ renderCategories(); }catch(e){ console.error(e); }
+    try{ renderConfigStorageSection(); }catch(e){}
+    updateAuthConfigUI();
+    try{ maybeShowOnboarding(); }catch(e){}
+    setTimeout(()=>{ try{ checkReminders(); }catch(e){} }, 600);
+    showToast(user.provider==='google' ? ('Olá, '+(user.name||'bem-vindo')+'!') : 'Modo local ativo.');
+  }catch(err){
+    console.error('enterAppAs', err);
+    showToast('Entrou, mas houve um erro ao carregar: '+(err.message||err));
+  }
 }
 function handleGoogleCredential(response){
-  const payload = parseJwtPayload(response.credential);
-  if(!payload || !payload.email){
-    showToast('Não foi possível ler a conta Google.');
-    return;
+  try{
+    if(!response || !response.credential){
+      showToast('Login Google cancelado ou sem credencial.');
+      return;
+    }
+    const payload = parseJwtPayload(response.credential);
+    if(!payload || !payload.email){
+      showToast('Não foi possível ler a conta Google.');
+      console.warn('JWT payload', payload);
+      return;
+    }
+    showToast('Entrando…');
+    const hint = document.getElementById('google-click-hint');
+    if(hint) hint.style.display = 'none';
+    enterAppAs({
+      provider: 'google',
+      email: payload.email,
+      name: payload.name || payload.email,
+      picture: payload.picture || '',
+      sub: payload.sub || ''
+    }).catch(err=>{
+      console.error(err);
+      showToast('Erro ao abrir o app após login: '+(err.message||err));
+      showAuthGate();
+    });
+  }catch(e){
+    console.error(e);
+    showToast('Falha no login Google.');
   }
-  enterAppAs({
-    provider: 'google',
-    email: payload.email,
-    name: payload.name || payload.email,
-    picture: payload.picture || '',
-    sub: payload.sub || ''
-  });
 }
 function renderGoogleButton(){
   const wrap = document.getElementById('google-btn-wrap');
   if(!wrap) return;
   wrap.innerHTML = '';
   const clientId = getSavedGoogleClientId();
+  const hint = document.getElementById('google-setup-hint');
+  const clickHint = document.getElementById('google-click-hint');
   if(!clientId || typeof google === 'undefined' || !google.accounts || !google.accounts.id){
-    document.getElementById('google-setup-hint').style.display = '';
+    if(hint) hint.style.display = '';
+    if(clickHint) clickHint.style.display = 'none';
     return;
   }
-  document.getElementById('google-setup-hint').style.display = 'none';
+  if(hint) hint.style.display = 'none';
   try{
     google.accounts.id.initialize({
       client_id: clientId,
       callback: handleGoogleCredential,
       auto_select: false,
-      cancel_on_tap_outside: true
+      cancel_on_tap_outside: true,
+      use_fedcm_for_prompt: false
     });
     google.accounts.id.renderButton(wrap, {
       theme: 'outline',
@@ -6271,9 +6302,10 @@ function renderGoogleButton(){
       locale: 'pt-BR',
       width: 320
     });
+    if(clickHint) clickHint.style.display = '';
   }catch(e){
     console.warn(e);
-    document.getElementById('google-setup-hint').style.display = '';
+    if(hint) hint.style.display = '';
   }
 }
 function initAuthUI(){
