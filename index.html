@@ -1163,7 +1163,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-14-05 (aplicar conta em lote)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-15-01 (fix filtro de mês/período)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1907,10 +1907,17 @@ function fillCategorySelects(){
 }
 
 function fillMonthFilter(){
-  const months = Array.from(new Set(state.transactions.map(t=>monthKey(t.date)))).sort().reverse();
+  const months = Array.from(new Set(
+    state.transactions.map(t=>monthKey(t.date)).filter(Boolean)
+  )).sort().reverse();
   const sel = document.getElementById('filter-month');
+  if(!sel) return;
+  const prev = sel.value;
   sel.innerHTML = '<option value="">Todo período</option>' +
-    months.map(m=>`<option value="${m}">${monthLabel(m)}</option>`).join('');
+    months.map(m=>`<option value="${escapeAttr(m)}">${monthLabel(m)}</option>`).join('');
+  // preserva o mês escolhido (bug: antes resetava e o filtro não aplicava)
+  if(prev && (prev === '' || months.includes(prev))) sel.value = prev;
+  else if(prev && !months.includes(prev)) sel.value = '';
 }
 
 function fillTypeFilter(){
@@ -4115,12 +4122,18 @@ function renderTransactions(){
   const search = document.getElementById('filter-search').value.trim().toLowerCase();
 
   let list = state.transactions.slice();
-  // período customizado tem prioridade sobre o filtro de mês isolado
-  if(from || to){
+  // Se há mês selecionado e NÃO há intervalo manual, filtra pelo mês.
+  // (from/to só têm prioridade quando o usuário preencheu explicitamente)
+  if(month && !from && !to){
+    list = list.filter(t=>{
+      const k = monthKey(t.date);
+      if(k === month) return true;
+      // fallback se a data vier em formato inesperado
+      return String(t.date || '').startsWith(month);
+    });
+  } else if(from || to){
     if(from) list = list.filter(t=> t.date >= from);
     if(to) list = list.filter(t=> t.date <= to);
-  } else if(month){
-    list = list.filter(t=>monthKey(t.date)===month);
   }
   if(type) list = list.filter(t=> (t.type||'despesa')===type);
   if(cat) list = list.filter(t=>t.category===cat);
@@ -6860,10 +6873,12 @@ document.getElementById('btn-export-csv') && document.getElementById('btn-export
   const from = document.getElementById('filter-from')?.value || '';
   const to = document.getElementById('filter-to')?.value || '';
   let list = state.transactions.slice();
-  if(from || to){
+  if(month && !from && !to){
+    list = list.filter(t=> monthKey(t.date)===month || String(t.date||'').startsWith(month));
+  } else if(from || to){
     if(from) list = list.filter(t=> t.date >= from);
     if(to) list = list.filter(t=> t.date <= to);
-  } else if(month) list = list.filter(t=> monthKey(t.date)===month);
+  }
   if(type) list = list.filter(t=> t.type===type);
   if(category) list = list.filter(t=> t.category===category);
   if(source) list = list.filter(t=> t.source===source);
