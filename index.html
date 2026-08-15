@@ -1182,7 +1182,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-15-05 (select categorias nas regras)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-15-06 (editar regra ao tocar)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -2856,37 +2856,99 @@ function exportFilteredCSV(list){
   setTimeout(()=> URL.revokeObjectURL(a.href), 2000);
 }
 
+let editingRuleIndex = null;
+
+function fillRuleCategorySelect(selectedId){
+  const sel = document.getElementById('rule-cat');
+  if(!sel) return;
+  const cats = (state.categories || []).slice().sort((a,b)=>
+    ((a.kind||'')+(a.name||'')).localeCompare((b.kind||'')+(b.name||''),'pt-BR')
+  );
+  const kindLabel = k => k==='receita' ? 'Receita' : (k==='transferencia' ? 'Transferência' : 'Despesa');
+  if(!cats.length){
+    sel.innerHTML = '<option value="">Nenhuma categoria cadastrada</option>';
+    return;
+  }
+  sel.innerHTML = cats.map(c=>
+    `<option value="${escapeAttr(c.id)}">${escapeHTML(c.name)} (${kindLabel(c.kind)})</option>`
+  ).join('');
+  if(selectedId && cats.some(c=>c.id===selectedId)) sel.value = selectedId;
+}
+
+function clearRuleForm(){
+  editingRuleIndex = null;
+  const kw = document.getElementById('rule-kw');
+  const min = document.getElementById('rule-min');
+  const max = document.getElementById('rule-max');
+  const btn = document.getElementById('rule-add-btn');
+  if(kw) kw.value = '';
+  if(min) min.value = '';
+  if(max) max.value = '';
+  fillRuleCategorySelect();
+  if(btn) btn.textContent = 'Adicionar';
+}
+
+function loadRuleIntoForm(index){
+  const r = state.categoryRules[index];
+  if(!r) return;
+  editingRuleIndex = index;
+  const kw = document.getElementById('rule-kw');
+  const min = document.getElementById('rule-min');
+  const max = document.getElementById('rule-max');
+  const btn = document.getElementById('rule-add-btn');
+  if(kw) kw.value = r.keyword || '';
+  if(min) min.value = (r.minAmount!=null && r.minAmount!=='') ? r.minAmount : '';
+  if(max) max.value = (r.maxAmount!=null && r.maxAmount!=='') ? r.maxAmount : '';
+  fillRuleCategorySelect(r.category);
+  if(btn) btn.textContent = 'Salvar alteração';
+  if(kw){ try{ kw.focus(); kw.scrollIntoView({ behavior:'smooth', block:'center' }); }catch(e){} }
+  showToast('Editando regra — altere e toque em Salvar alteração.');
+  renderAdvancedRules();
+}
+
 function renderAdvancedRules(){
   const list = document.getElementById('advanced-rules-list');
-  const sel = document.getElementById('rule-cat');
+  fillRuleCategorySelect(editingRuleIndex!=null ? (state.categoryRules[editingRuleIndex]||{}).category : (document.getElementById('rule-cat')||{}).value);
   if(!list) return;
-  if(sel){
-    sel.innerHTML = state.categories.map(c=>`<option value="${escapeAttr(c.id)}">${escapeHTML(c.name)}</option>`).join('');
-  }
   if(!(state.categoryRules||[]).length){
-    list.innerHTML = '<div class="empty-state" style="padding:10px 0;">Nenhuma regra ainda. As correções na importação também geram regras simples.</div>';
+    list.innerHTML = '<div class="empty-state" style="padding:10px 0;">Nenhuma regra ainda. Toque em um item da lista para editar. As correções na importação também geram regras.</div>';
     return;
   }
   list.innerHTML = state.categoryRules.map((r,i)=>{
     const c = catById(r.category);
-    const faixa = (r.minAmount!=null||r.maxAmount!=null)
+    const faixa = (r.minAmount!=null&&r.minAmount!=='') || (r.maxAmount!=null&&r.maxAmount!=='')
       ? ` · R$ ${r.minAmount??'0'}–${r.maxAmount??'∞'}`
       : '';
-    return `<div class="account-bal-row">
-      <div><strong style="color:var(--ink);">${escapeHTML(r.keyword||'')}</strong>
-      <span style="color:var(--ink-faint);font-size:12px;"> → ${escapeHTML(c.name||r.category)}${faixa}</span></div>
+    const editing = editingRuleIndex === i;
+    return `<div class="account-bal-row rule-item" data-edit="${i}" style="cursor:pointer;${editing?'outline:1px solid var(--accent);border-radius:8px;':''}">
+      <div>
+        <strong style="color:var(--ink);">${escapeHTML(r.keyword||'')}</strong>
+        <span style="color:var(--ink-faint);font-size:12px;"> → ${escapeHTML(c.name||r.category)}${faixa}</span>
+        <div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">toque para editar</div>
+      </div>
       <button type="button" class="btn ghost rule-del" data-i="${i}" style="padding:4px 10px;font-size:12px;color:var(--warn);">Excluir</button>
     </div>`;
   }).join('');
+  list.querySelectorAll('.rule-item').forEach(row=>{
+    row.addEventListener('click', (e)=>{
+      if(e.target.closest('.rule-del')) return;
+      loadRuleIntoForm(parseInt(row.dataset.edit,10));
+    });
+  });
   list.querySelectorAll('.rule-del').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      state.categoryRules.splice(parseInt(btn.dataset.i,10), 1);
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const idx = parseInt(btn.dataset.i,10);
+      state.categoryRules.splice(idx, 1);
+      if(editingRuleIndex === idx) clearRuleForm();
+      else if(editingRuleIndex != null && editingRuleIndex > idx) editingRuleIndex--;
       saveState();
       renderAdvancedRules();
       showToast('Regra removida.');
     });
   });
 }
+
 
 function setupSplitRows(total, existing){
   const wrap = document.getElementById('m-split-rows');
@@ -7120,18 +7182,25 @@ document.getElementById('rule-add-btn') && document.getElementById('rule-add-btn
   const minAmount = document.getElementById('rule-min')?.value;
   const maxAmount = document.getElementById('rule-max')?.value;
   if(!keyword || !category){ showToast('Informe palavra-chave e categoria.'); return; }
-  state.categoryRules.push({
+  const payload = {
     keyword,
     category,
     minAmount: minAmount===''? null : parseFloat(minAmount),
     maxAmount: maxAmount===''? null : parseFloat(maxAmount)
-  });
-  saveState();
-  document.getElementById('rule-kw').value = '';
-  document.getElementById('rule-min').value = '';
-  document.getElementById('rule-max').value = '';
-  renderAdvancedRules();
-  showToast('Regra adicionada.');
+  };
+  if(editingRuleIndex != null && state.categoryRules[editingRuleIndex]){
+    state.categoryRules[editingRuleIndex] = payload;
+    saveState();
+    clearRuleForm();
+    renderAdvancedRules();
+    showToast('Regra atualizada.');
+  } else {
+    state.categoryRules.push(payload);
+    saveState();
+    clearRuleForm();
+    renderAdvancedRules();
+    showToast('Regra adicionada.');
+  }
 });
 document.getElementById('m-split-add') && document.getElementById('m-split-add').addEventListener('click', ()=> addSplitRow('', ''));
 document.getElementById('m-amount') && document.getElementById('m-amount').addEventListener('input', ()=> updateSplitSum());
