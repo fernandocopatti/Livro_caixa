@@ -1156,6 +1156,25 @@
           <button type="button" class="btn secondary" id="rule-add-btn" style="padding:10px 14px;">Adicionar</button>
         </div>
       </div>
+
+      <div class="card" style="margin-top:18px;" id="reclassify-card">
+        <div class="panel-title">Reclassificar lançamentos</div>
+        <p style="color:var(--ink-dim);font-size:13px;line-height:1.5;margin:0 0 12px;">
+          Aplica as <strong>palavras-chave das categorias</strong> e as <strong>regras automáticas</strong> nos lançamentos já salvos, sem reimportar.
+        </p>
+        <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;margin-bottom:10px;">
+          <input type="checkbox" id="reclassify-only-rules" style="margin-top:3px;" checked>
+          <span>Só regras/palavras-chave explícitas (não usar o palpite genérico do app)</span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;margin-bottom:14px;">
+          <input type="checkbox" id="reclassify-preview-only" style="margin-top:3px;">
+          <span>Só prévia (mostrar quantos mudariam, sem aplicar)</span>
+        </label>
+        <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
+          <button type="button" class="btn" id="btn-reclassify" style="padding:10px 16px;">Atualizar categorias dos lançamentos</button>
+        </div>
+        <div id="reclassify-result" style="margin-top:12px;font-size:13px;color:var(--ink-dim);line-height:1.45;"></div>
+      </div>
     </section>
 
     <!-- ===================== CONFIG ===================== -->
@@ -1163,7 +1182,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-15-03 (limite cartão: ciclo aberto + parcelas)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-15-04 (reclassificar por palavras-chave)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -5086,6 +5105,129 @@ function suggestCategory(desc, type, amount){
   return guessCategory(desc, kind);
 }
 
+/** Sugere categoria só com regras/palavras-chave (sem palpite genérico). null se nada bater. */
+function suggestCategoryFromRulesOnly(desc, type, amount){
+  const kind = type || 'despesa';
+  const norm = normalizeDesc(desc);
+  const amt = (amount !== undefined && amount !== null && amount !== '') ? Number(amount) : null;
+
+  const adv = state.categoryRules.filter(r=>{
+    if(!r.keyword || !norm.includes(normalizeDesc(r.keyword))) return false;
+    const c = catById(r.category);
+    if(!c || c.kind !== kind) return false;
+    if(amt !== null && !isNaN(amt)){
+      if(r.minAmount != null && r.minAmount !== '' && amt < Number(r.minAmount)) return false;
+      if(r.maxAmount != null && r.maxAmount !== '' && amt > Number(r.maxAmount)) return false;
+    }
+    return true;
+  });
+  if(adv.length){
+    adv.sort((a,b)=> String(b.keyword).length - String(a.keyword).length);
+    return adv[0].category;
+  }
+
+  let bestKwCat = null, bestKwLen = 0;
+  state.categories.forEach(c=>{
+    if(c.kind !== kind || !Array.isArray(c.keywords)) return;
+    c.keywords.forEach(k=>{
+      const kk = normalizeDesc(k);
+      if(kk && norm.includes(kk) && kk.length > bestKwLen){ bestKwCat = c.id; bestKwLen = kk.length; }
+    });
+  });
+  if(bestKwCat) return bestKwCat;
+
+  const matches = state.categoryRules.filter(r=>{
+    if(!r.keyword || !norm.includes(normalizeDesc(r.keyword))) return false;
+    const c = catById(r.category);
+    return c && c.kind === kind;
+  });
+  if(matches.length){
+    matches.sort((a,b)=> String(b.keyword).length - String(a.keyword).length);
+    return matches[0].category;
+  }
+  return null;
+}
+
+function reclassifyTransactions(opts={}){
+  const rulesOnly = !!opts.rulesOnly;
+  const dryRun = !!opts.dryRun;
+  let changed = 0;
+  const samples = [];
+  const byCat = {};
+
+  state.transactions.forEach(t=>{
+    if(t.type === 'transferencia' || t.type === 'pagamento_fatura') return;
+    const tt = typeById(t.type);
+    if(tt.flowSign === 0 && !tt.countsAsExpense) return;
+
+    const kind = t.type || 'despesa';
+    const suggested = rulesOnly
+      ? suggestCategoryFromRulesOnly(t.desc, kind, t.amount)
+      : suggestCategory(t.desc, kind, t.amount);
+
+    if(!suggested || suggested === t.category) return;
+
+    const fromName = catById(t.category).name || t.category || '—';
+    const toName = catById(suggested).name || suggested;
+    if(samples.length < 8){
+      samples.push({ desc: t.desc, from: fromName, to: toName, amount: t.amount });
+    }
+    byCat[toName] = (byCat[toName]||0) + 1;
+    changed++;
+    if(!dryRun) t.category = suggested;
+  });
+
+  if(!dryRun && changed > 0){
+    saveState();
+    try{ renderDashboard(); }catch(e){}
+    try{ renderTransactions(); }catch(e){}
+    try{ if(typeof renderCategoriesView==='function') renderCategoriesView(); }catch(e){}
+  }
+  return { changed, samples, byCat };
+}
+
+function runReclassifyUI(){
+  const rulesOnly = !!(document.getElementById('reclassify-only-rules')||{}).checked;
+  const dryRun = !!(document.getElementById('reclassify-preview-only')||{}).checked;
+  const resultEl = document.getElementById('reclassify-result');
+
+  const preview = reclassifyTransactions({ rulesOnly, dryRun: true });
+  if(preview.changed === 0){
+    if(resultEl) resultEl.innerHTML = 'Nenhum lançamento mudaria com as regras/palavras-chave atuais.';
+    showToast('Nada a reclassificar.');
+    return;
+  }
+
+  const sampleHtml = preview.samples.map(s=>
+    `• ${escapeHTML((s.desc||'').slice(0,42))}${(s.desc||'').length>42?'…':''}: <em>${escapeHTML(s.from)}</em> → <strong>${escapeHTML(s.to)}</strong>`
+  ).join('<br>');
+
+  if(dryRun){
+    if(resultEl) resultEl.innerHTML =
+      `<strong>${preview.changed}</strong> lançamento(s) mudariam.` +
+      (sampleHtml ? `<div style="margin-top:8px;">${sampleHtml}</div>` : '');
+    showToast(preview.changed+' mudariam (prévia).');
+    return;
+  }
+
+  askConfirm(
+    'Reclassificar lançamentos',
+    preview.changed+' lançamento(s) terão a categoria atualizada com base nas palavras-chave e regras atuais. Continuar?',
+    ()=>{
+      const res = reclassifyTransactions({ rulesOnly, dryRun: false });
+      if(resultEl){
+        const top = Object.entries(res.byCat).sort((a,b)=>b[1]-a[1]).slice(0,6)
+          .map(([n,c])=> escapeHTML(n)+': '+c).join(' · ');
+        resultEl.innerHTML =
+          `<strong>${res.changed}</strong> lançamento(s) atualizados.` +
+          (top ? `<div style="margin-top:6px;color:var(--ink-faint);">${top}</div>` : '') +
+          (sampleHtml ? `<div style="margin-top:8px;">${sampleHtml}</div>` : '');
+      }
+      showToast(res.changed+' lançamento(s) reclassificados.');
+    }
+  );
+}
+
 /* ---------- detecção de duplicados (importação + base) ---------- */
 function installmentKey(inst){
   if(!inst || !inst.current || !inst.total) return '';
@@ -7007,6 +7149,8 @@ document.getElementById('cfg-hide-on-open') && document.getElementById('cfg-hide
   saveState();
   showToast(e.target.checked ? 'Na próxima abertura, valores virão ocultos.' : 'Abertura normal (valores visíveis).');
 });
+
+document.getElementById('btn-reclassify') && document.getElementById('btn-reclassify').addEventListener('click', runReclassifyUI);
 
 function initAuthUI(){
   const savedClient = getSavedGoogleClientId();
