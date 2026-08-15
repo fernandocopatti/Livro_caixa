@@ -1163,7 +1163,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-15-01 (fix filtro de mês/período)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-15-03 (limite cartão: ciclo aberto + parcelas)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -2189,26 +2189,44 @@ function ensureCanvas(wrapId, canvasId){
    LIMITES, PARCELAS, INSIGHTS, RITMO, SIMULADOR
    ============================================================ */
 function getPendingInstallmentItems(){
+  // Agrupa por loja + total de parcelas + valor da parcela + conta
+  // (evita misturar duas compras diferentes no mesmo estabelecimento)
   const groups = {};
   state.transactions.forEach(t=>{
-    if(!t.installment) return;
-    const key = normalizeDesc(t.desc)+'|'+t.installment.total+(t.account?'|'+normalizeDesc(t.account):'');
+    if(!t.installment || !t.installment.current || !t.installment.total) return;
+    if(!typeById(t.type).countsAsExpense) return;
+    const amt = Number(t.amount).toFixed(2);
+    const key = [
+      normalizeDesc(t.desc),
+      t.installment.total,
+      amt,
+      t.account ? normalizeDesc(t.account) : ''
+    ].join('|');
     if(!groups[key]) groups[key] = [];
     groups[key].push(t);
   });
   const pendingItems = [];
   Object.values(groups).forEach(txs=>{
-    const latest = txs.reduce((a,b)=> b.installment.current > a.installment.current ? b : a);
-    const remaining = latest.installment.total - latest.installment.current;
+    const latest = txs.reduce((a,b)=> {
+      if(b.installment.current !== a.installment.current)
+        return b.installment.current > a.installment.current ? b : a;
+      return (b.date > a.date) ? b : a;
+    });
+    const remaining = Math.max(0, Number(latest.installment.total) - Number(latest.installment.current));
     if(remaining <= 0) return;
     const [y,m] = latest.date.split('-').map(Number);
     const contribMonths = [];
     for(let k=1;k<=remaining;k++){
       const d = new Date(y, (m-1)+k, 1);
-      const key = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-      contribMonths.push(key);
+      const mk = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      contribMonths.push(mk);
     }
-    pendingItems.push({ ...latest, remaining, contribMonths });
+    pendingItems.push({
+      ...latest,
+      remaining,
+      contribMonths,
+      committed: Number(latest.amount) * remaining
+    });
   });
   return pendingItems;
 }
@@ -2233,7 +2251,47 @@ function prevMonthKey(monthKeyStr){
 
 function pad2(n){ return String(n).padStart(2,'0'); }
 
-/** Ciclo da fatura: se closingDay definido, ciclo vai do (closingDay+1) do mês anterior até closingDay do mês de referência. */
+/**
+ * Ciclo de fatura que CONTÉM a data de referência (ciclo aberto / vigente).
+ * closingDay 10 e hoje 15/08 → 11/08 → 10/09
+ * closingDay 10 e hoje 05/08 → 11/07 → 10/08
+ */
+function getOpenBillingCycle(accountName, refISO){
+  const cfg = (state.accountLimits && state.accountLimits[accountName]) || {};
+  const closingDay = cfg.closingDay ? Math.min(28, Math.max(1, parseInt(cfg.closingDay,10))) : null;
+  const ref = refISO || todayISO();
+  const [ry, rm, rd] = ref.split('-').map(Number);
+  if(!closingDay){
+    const start = `${ry}-${pad2(rm)}-01`;
+    const last = new Date(ry, rm, 0).getDate();
+    const end = `${ry}-${pad2(rm)}-${pad2(last)}`;
+    return { start, end, label: monthLabel(`${ry}-${pad2(rm)}`), closingDay: null, isCalendar: true, refMonthKey: `${ry}-${pad2(rm)}` };
+  }
+  // mês em que este ciclo FECHA
+  let endY = ry, endM = rm;
+  if(rd > closingDay){
+    endM += 1;
+    if(endM > 12){ endM = 1; endY += 1; }
+  }
+  const end = `${endY}-${pad2(endM)}-${pad2(closingDay)}`;
+  // início = dia seguinte ao fechamento anterior
+  let startDate = new Date(endY, endM - 1, closingDay);
+  startDate.setDate(startDate.getDate() + 1);
+  // na verdade: fechamento anterior é 1 mês antes
+  startDate = new Date(endY, endM - 2, closingDay);
+  startDate.setDate(startDate.getDate() + 1);
+  const startISO = startDate.getFullYear()+'-'+pad2(startDate.getMonth()+1)+'-'+pad2(startDate.getDate());
+  return {
+    start: startISO,
+    end,
+    label: `${fmtDate(startISO)} → ${fmtDate(end)}`,
+    closingDay,
+    isCalendar: false,
+    refMonthKey: `${endY}-${pad2(endM)}`
+  };
+}
+
+/** Compat: ciclo que fecha no mês civil informado (para agenda/simulações). */
 function getBillingCycle(accountName, refMonthKey){
   const cfg = (state.accountLimits && state.accountLimits[accountName]) || {};
   const closingDay = cfg.closingDay ? Math.min(28, Math.max(1, parseInt(cfg.closingDay,10))) : null;
@@ -2242,17 +2300,10 @@ function getBillingCycle(accountName, refMonthKey){
     const start = `${refMonthKey}-01`;
     const last = new Date(y, m, 0).getDate();
     const end = `${refMonthKey}-${pad2(last)}`;
-    return { start, end, label: monthLabel(refMonthKey), closingDay: null, isCalendar: true };
+    return { start, end, label: monthLabel(refMonthKey), closingDay: null, isCalendar: true, refMonthKey };
   }
-  // ciclo que "fecha" no mês refMonthKey no dia closingDay
   const end = `${refMonthKey}-${pad2(closingDay)}`;
-  const prev = new Date(y, m-2, 1);
-  const py = prev.getFullYear(), pm = prev.getMonth()+1;
-  const startDay = Math.min(closingDay + 1, new Date(py, pm, 0).getDate());
-  // se fecha dia 10, ciclo é 11/mês-ant até 10/mês
-  const start = `${py}-${pad2(pm)}-${pad2(Math.min(closingDay, new Date(py, pm, 0).getDate()))}`;
-  // ajuste: início = dia seguinte ao fechamento anterior
-  let startDate = new Date(py, pm-1, closingDay);
+  let startDate = new Date(y, m - 2, closingDay);
   startDate.setDate(startDate.getDate() + 1);
   const startISO = startDate.getFullYear()+'-'+pad2(startDate.getMonth()+1)+'-'+pad2(startDate.getDate());
   return {
@@ -2260,21 +2311,37 @@ function getBillingCycle(accountName, refMonthKey){
     end,
     label: `${fmtDate(startISO)} → ${fmtDate(end)}`,
     closingDay,
-    isCalendar: false
+    isCalendar: false,
+    refMonthKey
   };
 }
 
-function accountOccupied(accountName, cycleMonthKey, pendingItems){
-  const cycle = getBillingCycle(accountName, cycleMonthKey);
+/**
+ * Ocupação do limite:
+ * - spentCycle: despesas (compras/parcelas) no CICLO ABERTO
+ * - futureInst: soma das parcelas ainda não cobradas (após a última registrada)
+ * - total: comprometido aproximado no limite
+ * Não inclui pagamento_fatura / transferências (countsAsExpense=false).
+ */
+function accountOccupied(accountName, _cycleMonthKeyIgnored, pendingItems){
+  const cycle = getOpenBillingCycle(accountName, todayISO());
   const spentCycle = state.transactions
     .filter(t=> t.account===accountName
       && t.date >= cycle.start && t.date <= cycle.end
       && typeById(t.type).countsAsExpense)
     .reduce((s,t)=>s+t.amount, 0);
-  const futureInst = pendingItems
+  const pending = pendingItems || getPendingInstallmentItems();
+  const futureInst = pending
     .filter(t=> t.account===accountName)
-    .reduce((s,t)=> s + t.amount * t.remaining, 0);
-  return { spentCycle, futureInst, total: spentCycle + futureInst, cycle };
+    .reduce((s,t)=> s + (t.committed != null ? t.committed : t.amount * t.remaining), 0);
+  // parcelas que JÁ caíram neste ciclo já estão em spentCycle; futureInst só conta as seguintes
+  return {
+    spentCycle,
+    futureInst,
+    total: spentCycle + futureInst,
+    cycle,
+    open: true
+  };
 }
 
 function normalizeMerchant(desc){
@@ -2633,23 +2700,13 @@ function renderAccountLimitsConfig(){
 
 /* ---------- Pacote 7: consolidado, alertas, ciclo, split, visita, CSV ---------- */
 function getCycleRangeForAccount(accountName, refDate){
-  const ref = refDate || todayISO();
-  const cfg = (state.accountLimits && state.accountLimits[accountName]) || {};
-  const closeDay = parseInt(cfg.closingDay, 10);
-  if(!closeDay || closeDay < 1 || closeDay > 28){
-    // mês civil
-    const [y,m] = ref.split('-').map(Number);
-    const start = y+'-'+pad2(m)+'-01';
-    const last = new Date(y, m, 0).getDate();
-    const end = y+'-'+pad2(m)+'-'+pad2(last);
-    return { start, end, label: monthLabel(y+'-'+pad2(m)), mode: 'civil' };
-  }
-  const d = new Date(ref+'T12:00:00');
-  let end = new Date(d.getFullYear(), d.getMonth(), closeDay);
-  if(d.getDate() > closeDay) end = new Date(d.getFullYear(), d.getMonth()+1, closeDay);
-  let start = new Date(end); start.setMonth(start.getMonth()-1); start.setDate(closeDay+1);
-  const toISO = dt => dt.getFullYear()+'-'+pad2(dt.getMonth()+1)+'-'+pad2(dt.getDate());
-  return { start: toISO(start), end: toISO(end), label: 'ciclo até '+toISO(end), mode: 'fatura' };
+  const c = getOpenBillingCycle(accountName, refDate || todayISO());
+  return {
+    start: c.start,
+    end: c.end,
+    label: c.isCalendar ? c.label : ('ciclo até '+c.end),
+    mode: c.isCalendar ? 'civil' : 'fatura'
+  };
 }
 
 function buildSmartAlerts(scopedTx, dashAccount){
@@ -3524,7 +3581,7 @@ function renderDashboard(){
             <span class="limit-row-meta" style="color:${color};">${fmtBRL(occ.total)} / ${fmtBRL(limit)} · ${pct}%</span>
           </div>
           <div class="goal-bar"><div class="goal-bar-fill" style="width:${pct}%;background:${color};"></div></div>
-          <div class="limit-row-meta">Ciclo ${cycleLabel}: ${fmtBRL(occ.spentCycle)} · Parcelas futuras: ${fmtBRL(occ.futureInst)}${cfg.closingDay?` · fecha dia ${cfg.closingDay}`:''}${over?' · acima do limite':(near?' · perto do limite':'')}</div>
+          <div class="limit-row-meta">Ciclo aberto ${cycleLabel}: gastos ${fmtBRL(occ.spentCycle)} · a vencer (parcelas) ${fmtBRL(occ.futureInst)} · comprometido ${fmtBRL(occ.total)}${cfg.closingDay?` · fecha dia ${cfg.closingDay}`:''}${over?' · acima do limite':(near?' · perto do limite':'')}</div>
         </div>`;
       }).join('');
     }
@@ -5030,15 +5087,30 @@ function suggestCategory(desc, type, amount){
 }
 
 /* ---------- detecção de duplicados (importação + base) ---------- */
+function installmentKey(inst){
+  if(!inst || !inst.current || !inst.total) return '';
+  return String(inst.current)+'/'+String(inst.total);
+}
+/** true se A e B são parcelas distintas da mesma compra (não devem ser duplicata) */
+function isDistinctInstallments(a, b){
+  const ia = a && a.installment, ib = b && b.installment;
+  if(!ia || !ib) return false;
+  // mesma "série" aproximada: mesmo total de parcelas e valores iguais, mas current diferente
+  if(Number(ia.total) === Number(ib.total) && Number(ia.current) !== Number(ib.current)) return true;
+  // current/total diferentes de qualquer forma
+  if(installmentKey(ia) && installmentKey(ib) && installmentKey(ia) !== installmentKey(ib)) return true;
+  return false;
+}
 function txSignature(date, desc, amount, installment, externalId){
   if(externalId) return 'ext:'+String(externalId);
-  const instPart = (installment && installment.current && installment.total) ? `|${installment.current}/${installment.total}` : '';
+  const instPart = installmentKey(installment) ? `|${installmentKey(installment)}` : '';
   return `${date}|${normalizeDesc(desc)}|${Number(amount).toFixed(2)}${instPart}`;
 }
-function softSignature(date, desc, amount){
-  // descrição normalizada "frouxa" (primeiras palavras) + data + valor arredondado
+function softSignature(date, desc, amount, installment){
+  // descrição normalizada "frouxa" (primeiras palavras) + data + valor + parcela
   const words = normalizeDesc(desc).split(' ').filter(w=>w.length>=3).slice(0,3).join(' ');
-  return `${date}|${words}|${Number(amount).toFixed(2)}`;
+  const instPart = installmentKey(installment) ? `|${installmentKey(installment)}` : '';
+  return `${date}|${words}|${Number(amount).toFixed(2)}${instPart}`;
 }
 const existingTxSignatures = ()=> new Set(
   state.transactions.map(t=> txSignature(t.date, t.desc, t.amount, t.installment, t.externalId))
@@ -5065,12 +5137,14 @@ function findDuplicateMatch(candidate, { batchSeenSigs, batchSeenExt } = {}){
     reasons.push({ level:'exact', reason:'linha repetida no arquivo' });
 
   // near-duplicate: mesmo dia, mesmo valor, descrição parecida (soft), mesma conta se houver
-  const soft = softSignature(candidate.date, candidate.desc, candidate.amount);
+  // Parcelas diferentes (2/4 vs 3/4) NÃO são duplicata — são cobranças subsequentes
+  const soft = softSignature(candidate.date, candidate.desc, candidate.amount, candidate.installment);
   const near = state.transactions.find(t=>{
     if(t.date !== candidate.date) return false;
     if(Math.abs(Number(t.amount) - Number(candidate.amount)) > 0.009) return false;
     if(candidate.account && t.account && candidate.account !== t.account) return false;
-    if(softSignature(t.date, t.desc, t.amount) !== soft) return false;
+    if(isDistinctInstallments(candidate, t)) return false;
+    if(softSignature(t.date, t.desc, t.amount, t.installment) !== soft) return false;
     // se já deu exact por sig completa, não precisa near
     if(txSignature(t.date, t.desc, t.amount, t.installment, null) === sig) return false;
     return true;
@@ -5128,17 +5202,24 @@ function scanDatabaseDuplicates(){
   });
 
   // near groups by soft signature (só se ainda não usados)
+  // não agrupa parcelas distintas da mesma compra
   const bySoft = {};
   state.transactions.forEach(t=>{
     if(used.has(t.id)) return;
-    const soft = softSignature(t.date, t.desc, t.amount) + '|' + (t.account||'');
+    const soft = softSignature(t.date, t.desc, t.amount, t.installment) + '|' + (t.account||'');
     if(!bySoft[soft]) bySoft[soft] = [];
     bySoft[soft].push(t);
   });
   Object.values(bySoft).forEach(arr=>{
     if(arr.length < 2) return;
-    // exige pelo menos duas descrições não idênticas normalizadas (senão já seria exact)
-    groups.push({ reason: 'mesmo dia/valor e descrição parecida', level:'near', items: arr.slice().sort((a,b)=> (a.date+a.createdAt).localeCompare(b.date+b.createdAt)) });
+    // filtra pares que são só parcelas diferentes
+    const filtered = [];
+    arr.forEach(t=>{
+      const clashes = filtered.some(o=> isDistinctInstallments(t, o));
+      if(!clashes) filtered.push(t);
+    });
+    if(filtered.length < 2) return;
+    groups.push({ reason: 'mesmo dia/valor e descrição parecida', level:'near', items: filtered.slice().sort((a,b)=> (a.date+a.createdAt).localeCompare(b.date+b.createdAt)) });
   });
 
   return groups;
