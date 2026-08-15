@@ -1146,7 +1146,18 @@
         <p style="color:var(--ink-dim);font-size:13px;line-height:1.5;margin:0 0 12px;">
           Além das palavras-chave da categoria, você pode criar regras com faixa de valor.
           Ex.: descrição contém “farmácia” e valor entre 50 e 500 → Saúde.
+          <br><span style="color:var(--ink-faint);font-size:12px;">Etiqueta <strong>Manual</strong> = você cadastrou · <strong>App</strong> = aprendida na importação/correção.</span>
         </p>
+        <div id="rules-bulk-bar" style="display:none;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);">
+          <span id="rules-bulk-count" style="font-size:12.5px;color:var(--ink-dim);">0 selecionadas</span>
+          <button type="button" class="btn warn" id="rules-bulk-delete" style="padding:6px 12px;font-size:12px;">Excluir selecionadas</button>
+          <button type="button" class="btn ghost" id="rules-bulk-clear" style="padding:6px 12px;font-size:12px;">Limpar seleção</button>
+        </div>
+        <div class="btn-row" style="margin:0 0 10px;flex-wrap:wrap;gap:8px;">
+          <button type="button" class="btn ghost" id="rules-select-all" style="padding:6px 12px;font-size:12px;">Selecionar todas</button>
+          <button type="button" class="btn ghost" id="rules-select-app" style="padding:6px 12px;font-size:12px;">Selecionar só do App</button>
+          <button type="button" class="btn ghost" id="rules-select-manual" style="padding:6px 12px;font-size:12px;">Selecionar só Manuais</button>
+        </div>
         <div id="advanced-rules-list"></div>
         <div class="rule-adv-row" style="margin-top:12px;">
           <div class="field" style="margin:0;"><label>Palavra-chave</label><input type="text" id="rule-kw" placeholder="ex.: uber"></div>
@@ -1182,7 +1193,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-15-07 (edição inline das regras)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-15-08 (origem das regras + exclusão em lote)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1655,6 +1666,7 @@ function normalizeLoadedState(parsed){
     .forEach(dc => cats.push(dc));
   state.categories = cats;
   state.categoryRules = parsed.categoryRules || [];
+  state.categoryRules.forEach(r=>{ if(r && !r.source) r.source = ruleSourceOf(r); });
   state.recurringTemplates = parsed.recurringTemplates || [];
   state.settings = { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null, hideAmounts: false, hideOnOpen: false, ...(parsed.settings || {}) };
   state.accountLimits = parsed.accountLimits && typeof parsed.accountLimits === 'object' ? parsed.accountLimits : {};
@@ -2857,6 +2869,7 @@ function exportFilteredCSV(list){
 }
 
 let editingRuleIndex = null;
+let selectedRuleIndexes = new Set();
 
 function fillRuleCategorySelectEl(sel, selectedId){
   if(!sel) return;
@@ -2897,25 +2910,44 @@ function saveRuleAtIndex(index, payload){
     showToast('Informe palavra-chave e categoria.');
     return false;
   }
-  state.categoryRules[index] = payload;
+  const prev = state.categoryRules[index] || {};
+  state.categoryRules[index] = { ...prev, ...payload, source: prev.source === 'manual' ? 'manual' : (payload.source || prev.source || 'manual') };
   saveState();
   return true;
 }
 
+function updateRulesBulkBar(){
+  const bar = document.getElementById('rules-bulk-bar');
+  const countEl = document.getElementById('rules-bulk-count');
+  if(!bar) return;
+  const n = selectedRuleIndexes.size;
+  bar.style.display = n ? 'flex' : 'none';
+  if(countEl) countEl.textContent = n + ' selecionada' + (n===1?'':'s');
+}
+
 function renderAdvancedRules(){
+  migrateCategoryRuleSources();
   const list = document.getElementById('advanced-rules-list');
   fillRuleCategorySelect();
   if(!list) return;
+  // limpa índices inválidos
+  selectedRuleIndexes = new Set([...selectedRuleIndexes].filter(i=> i>=0 && i < state.categoryRules.length));
   if(!(state.categoryRules||[]).length){
-    list.innerHTML = '<div class="empty-state" style="padding:10px 0;">Nenhuma regra ainda. As correções na importação também geram regras.</div>';
+    list.innerHTML = '<div class="empty-state" style="padding:10px 0;">Nenhuma regra ainda. As que você cadastrar ficam como Manual; as da importação como App.</div>';
+    updateRulesBulkBar();
     return;
   }
   list.innerHTML = state.categoryRules.map((r,i)=>{
     const c = catById(r.category);
+    const src = ruleSourceOf(r);
+    const srcBadge = src === 'manual'
+      ? '<span style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(89,179,163,.15);color:var(--accent);margin-left:6px;">Manual</span>'
+      : '<span style="font-size:10px;padding:2px 7px;border-radius:999px;background:rgba(203,161,53,.12);color:var(--gold);margin-left:6px;">App</span>';
     const faixa = (r.minAmount!=null&&r.minAmount!=='') || (r.maxAmount!=null&&r.maxAmount!=='')
       ? ` · R$ ${r.minAmount??'0'}–${r.maxAmount??'∞'}`
       : '';
     const isEdit = editingRuleIndex === i;
+    const checked = selectedRuleIndexes.has(i) ? 'checked' : '';
     if(isEdit){
       return `<div class="rule-inline-edit" data-i="${i}" style="padding:10px 0;border-bottom:1px solid var(--line);">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
@@ -2937,26 +2969,37 @@ function renderAdvancedRules(){
         </div>
       </div>`;
     }
-    return `<div class="account-bal-row rule-item" data-edit="${i}" style="cursor:pointer;">
-      <div>
-        <strong style="color:var(--ink);">${escapeHTML(r.keyword||'')}</strong>
+    return `<div class="account-bal-row rule-item" data-edit="${i}" style="cursor:pointer;gap:10px;">
+      <label style="display:flex;align-items:center;cursor:pointer;" onclick="event.stopPropagation()">
+        <input type="checkbox" class="rule-check" data-i="${i}" ${checked} style="width:18px;height:18px;">
+      </label>
+      <div style="flex:1;min-width:0;">
+        <strong style="color:var(--ink);">${escapeHTML(r.keyword||'')}</strong>${srcBadge}
         <span style="color:var(--ink-faint);font-size:12px;"> → ${escapeHTML(c.name||r.category)}${faixa}</span>
-        <div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">toque para editar aqui</div>
+        <div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">toque para editar · marque para excluir em lote</div>
       </div>
       <button type="button" class="btn ghost rule-del" data-i="${i}" style="padding:4px 10px;font-size:12px;color:var(--warn);">Excluir</button>
     </div>`;
   }).join('');
 
-  // preenche selects das linhas em edição
   list.querySelectorAll('.rule-inline-edit').forEach(row=>{
     const i = parseInt(row.dataset.i,10);
     const r = state.categoryRules[i];
     fillRuleCategorySelectEl(row.querySelector('.rule-inline-cat'), r && r.category);
   });
 
+  list.querySelectorAll('.rule-check').forEach(chk=>{
+    chk.addEventListener('change', ()=>{
+      const i = parseInt(chk.dataset.i,10);
+      if(chk.checked) selectedRuleIndexes.add(i);
+      else selectedRuleIndexes.delete(i);
+      updateRulesBulkBar();
+    });
+  });
+
   list.querySelectorAll('.rule-item').forEach(row=>{
     row.addEventListener('click', (e)=>{
-      if(e.target.closest('.rule-del')) return;
+      if(e.target.closest('.rule-del') || e.target.closest('.rule-check') || e.target.closest('label')) return;
       editingRuleIndex = parseInt(row.dataset.edit,10);
       renderAdvancedRules();
       const input = list.querySelector('.rule-inline-kw');
@@ -2976,7 +3019,8 @@ function renderAdvancedRules(){
         keyword,
         category,
         minAmount: minRaw===''? null : parseFloat(minRaw),
-        maxAmount: maxRaw===''? null : parseFloat(maxRaw)
+        maxAmount: maxRaw===''? null : parseFloat(maxRaw),
+        source: 'manual'
       });
       if(!ok) return;
       editingRuleIndex = null;
@@ -2997,6 +3041,9 @@ function renderAdvancedRules(){
       e.stopPropagation();
       const idx = parseInt(btn.dataset.i,10);
       state.categoryRules.splice(idx, 1);
+      selectedRuleIndexes.delete(idx);
+      // reindex selection
+      selectedRuleIndexes = new Set([...selectedRuleIndexes].map(i=> i>idx ? i-1 : i).filter(i=>i>=0));
       if(editingRuleIndex === idx) editingRuleIndex = null;
       else if(editingRuleIndex != null && editingRuleIndex > idx) editingRuleIndex--;
       saveState();
@@ -3004,6 +3051,8 @@ function renderAdvancedRules(){
       showToast('Regra removida.');
     });
   });
+
+  updateRulesBulkBar();
 }
 
 
@@ -5176,10 +5225,31 @@ function extractKeyword(desc){
 function learnCategory(desc, categoryId){
   const keyword = extractKeyword(desc);
   if(!keyword) return;
-  const existing = state.categoryRules.find(r=>r.keyword===keyword);
-  if(existing) existing.category = categoryId;
-  else state.categoryRules.push({keyword, category: categoryId});
+  const existing = state.categoryRules.find(r=> normalizeDesc(r.keyword)===normalizeDesc(keyword));
+  if(existing){
+    // não sobrescreve regra cadastrada manualmente
+    if(existing.source === 'manual') return;
+    existing.category = categoryId;
+    existing.source = existing.source || 'app';
+  } else {
+    state.categoryRules.push({ keyword, category: categoryId, source: 'app' });
+  }
   saveState();
+}
+
+function ruleSourceOf(r){
+  if(!r) return 'app';
+  if(r.source === 'manual' || r.source === 'app') return r.source;
+  // heurística p/ regras antigas sem source
+  if((r.minAmount!=null && r.minAmount!=='') || (r.maxAmount!=null && r.maxAmount!=='')) return 'manual';
+  return 'app';
+}
+
+function migrateCategoryRuleSources(){
+  if(!Array.isArray(state.categoryRules)) return;
+  state.categoryRules.forEach(r=>{
+    if(!r.source) r.source = ruleSourceOf(r);
+  });
 }
 
 // categoria sugerida: primeiro tenta as regras memorizadas pelo usuário (do mesmo tipo), depois cai no palpite padrão
@@ -7233,6 +7303,37 @@ document.getElementById('btn-export-csv') && document.getElementById('btn-export
   exportFilteredCSV(list);
   showToast(list.length+' lançamento(s) exportados em CSV.');
 });
+
+document.getElementById('rules-select-all') && document.getElementById('rules-select-all').addEventListener('click', ()=>{
+  selectedRuleIndexes = new Set(state.categoryRules.map((_,i)=>i));
+  renderAdvancedRules();
+});
+document.getElementById('rules-select-app') && document.getElementById('rules-select-app').addEventListener('click', ()=>{
+  selectedRuleIndexes = new Set(state.categoryRules.map((r,i)=> ruleSourceOf(r)==='app' ? i : -1).filter(i=>i>=0));
+  renderAdvancedRules();
+});
+document.getElementById('rules-select-manual') && document.getElementById('rules-select-manual').addEventListener('click', ()=>{
+  selectedRuleIndexes = new Set(state.categoryRules.map((r,i)=> ruleSourceOf(r)==='manual' ? i : -1).filter(i=>i>=0));
+  renderAdvancedRules();
+});
+document.getElementById('rules-bulk-clear') && document.getElementById('rules-bulk-clear').addEventListener('click', ()=>{
+  selectedRuleIndexes = new Set();
+  renderAdvancedRules();
+});
+document.getElementById('rules-bulk-delete') && document.getElementById('rules-bulk-delete').addEventListener('click', ()=>{
+  const n = selectedRuleIndexes.size;
+  if(!n) return;
+  askConfirm('Excluir regras', 'Excluir '+n+' regra(s) selecionada(s)?', ()=>{
+    const idxs = [...selectedRuleIndexes].sort((a,b)=>b-a);
+    idxs.forEach(i=> state.categoryRules.splice(i,1));
+    selectedRuleIndexes = new Set();
+    editingRuleIndex = null;
+    saveState();
+    renderAdvancedRules();
+    showToast(n+' regra(s) excluída(s).');
+  });
+});
+
 document.getElementById('rule-add-btn') && document.getElementById('rule-add-btn').addEventListener('click', ()=>{
   const keyword = (document.getElementById('rule-kw')?.value || '').trim().toLowerCase();
   const category = document.getElementById('rule-cat')?.value;
@@ -7247,12 +7348,13 @@ document.getElementById('rule-add-btn') && document.getElementById('rule-add-btn
     keyword,
     category,
     minAmount: minAmount===''? null : parseFloat(minAmount),
-    maxAmount: maxAmount===''? null : parseFloat(maxAmount)
+    maxAmount: maxAmount===''? null : parseFloat(maxAmount),
+    source: 'manual'
   });
   saveState();
   clearRuleForm();
   renderAdvancedRules();
-  showToast('Regra adicionada.');
+  showToast('Regra manual adicionada.');
 });
 document.getElementById('m-split-add') && document.getElementById('m-split-add').addEventListener('click', ()=> addSplitRow('', ''));
 document.getElementById('m-amount') && document.getElementById('m-amount').addEventListener('input', ()=> updateSplitSum());
