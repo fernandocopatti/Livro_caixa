@@ -1182,7 +1182,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-15-06 (editar regra ao tocar)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-15-07 (edição inline das regras)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -2858,21 +2858,24 @@ function exportFilteredCSV(list){
 
 let editingRuleIndex = null;
 
-function fillRuleCategorySelect(selectedId){
-  const sel = document.getElementById('rule-cat');
+function fillRuleCategorySelectEl(sel, selectedId){
   if(!sel) return;
   const cats = (state.categories || []).slice().sort((a,b)=>
     ((a.kind||'')+(a.name||'')).localeCompare((b.kind||'')+(b.name||''),'pt-BR')
   );
   const kindLabel = k => k==='receita' ? 'Receita' : (k==='transferencia' ? 'Transferência' : 'Despesa');
   if(!cats.length){
-    sel.innerHTML = '<option value="">Nenhuma categoria cadastrada</option>';
+    sel.innerHTML = '<option value="">Nenhuma categoria</option>';
     return;
   }
   sel.innerHTML = cats.map(c=>
     `<option value="${escapeAttr(c.id)}">${escapeHTML(c.name)} (${kindLabel(c.kind)})</option>`
   ).join('');
   if(selectedId && cats.some(c=>c.id===selectedId)) sel.value = selectedId;
+}
+
+function fillRuleCategorySelect(selectedId){
+  fillRuleCategorySelectEl(document.getElementById('rule-cat'), selectedId);
 }
 
 function clearRuleForm(){
@@ -2888,30 +2891,23 @@ function clearRuleForm(){
   if(btn) btn.textContent = 'Adicionar';
 }
 
-function loadRuleIntoForm(index){
-  const r = state.categoryRules[index];
-  if(!r) return;
-  editingRuleIndex = index;
-  const kw = document.getElementById('rule-kw');
-  const min = document.getElementById('rule-min');
-  const max = document.getElementById('rule-max');
-  const btn = document.getElementById('rule-add-btn');
-  if(kw) kw.value = r.keyword || '';
-  if(min) min.value = (r.minAmount!=null && r.minAmount!=='') ? r.minAmount : '';
-  if(max) max.value = (r.maxAmount!=null && r.maxAmount!=='') ? r.maxAmount : '';
-  fillRuleCategorySelect(r.category);
-  if(btn) btn.textContent = 'Salvar alteração';
-  if(kw){ try{ kw.focus(); kw.scrollIntoView({ behavior:'smooth', block:'center' }); }catch(e){} }
-  showToast('Editando regra — altere e toque em Salvar alteração.');
-  renderAdvancedRules();
+function saveRuleAtIndex(index, payload){
+  if(index == null || index < 0 || index >= state.categoryRules.length) return false;
+  if(!payload.keyword || !payload.category){
+    showToast('Informe palavra-chave e categoria.');
+    return false;
+  }
+  state.categoryRules[index] = payload;
+  saveState();
+  return true;
 }
 
 function renderAdvancedRules(){
   const list = document.getElementById('advanced-rules-list');
-  fillRuleCategorySelect(editingRuleIndex!=null ? (state.categoryRules[editingRuleIndex]||{}).category : (document.getElementById('rule-cat')||{}).value);
+  fillRuleCategorySelect();
   if(!list) return;
   if(!(state.categoryRules||[]).length){
-    list.innerHTML = '<div class="empty-state" style="padding:10px 0;">Nenhuma regra ainda. Toque em um item da lista para editar. As correções na importação também geram regras.</div>';
+    list.innerHTML = '<div class="empty-state" style="padding:10px 0;">Nenhuma regra ainda. As correções na importação também geram regras.</div>';
     return;
   }
   list.innerHTML = state.categoryRules.map((r,i)=>{
@@ -2919,28 +2915,89 @@ function renderAdvancedRules(){
     const faixa = (r.minAmount!=null&&r.minAmount!=='') || (r.maxAmount!=null&&r.maxAmount!=='')
       ? ` · R$ ${r.minAmount??'0'}–${r.maxAmount??'∞'}`
       : '';
-    const editing = editingRuleIndex === i;
-    return `<div class="account-bal-row rule-item" data-edit="${i}" style="cursor:pointer;${editing?'outline:1px solid var(--accent);border-radius:8px;':''}">
+    const isEdit = editingRuleIndex === i;
+    if(isEdit){
+      return `<div class="rule-inline-edit" data-i="${i}" style="padding:10px 0;border-bottom:1px solid var(--line);">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div class="field" style="margin:0;"><label>Palavra-chave</label>
+            <input type="text" class="rule-inline-kw" value="${escapeAttr(r.keyword||'')}"></div>
+          <div class="field" style="margin:0;"><label>Categoria</label>
+            <select class="rule-inline-cat"></select></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div class="field" style="margin:0;"><label>Mín R$</label>
+            <input type="number" class="rule-inline-min" step="0.01" min="0" value="${r.minAmount!=null&&r.minAmount!==''?escapeAttr(r.minAmount):''}" placeholder="0"></div>
+          <div class="field" style="margin:0;"><label>Máx R$</label>
+            <input type="number" class="rule-inline-max" step="0.01" min="0" value="${r.maxAmount!=null&&r.maxAmount!==''?escapeAttr(r.maxAmount):''}" placeholder="∞"></div>
+        </div>
+        <div class="btn-row" style="margin:0;flex-wrap:wrap;gap:8px;">
+          <button type="button" class="btn secondary rule-inline-save" data-i="${i}" style="padding:7px 14px;font-size:12.5px;">Salvar</button>
+          <button type="button" class="btn ghost rule-inline-cancel" style="padding:7px 14px;font-size:12.5px;">Cancelar</button>
+          <button type="button" class="btn ghost rule-del" data-i="${i}" style="padding:7px 14px;font-size:12.5px;color:var(--warn);">Excluir</button>
+        </div>
+      </div>`;
+    }
+    return `<div class="account-bal-row rule-item" data-edit="${i}" style="cursor:pointer;">
       <div>
         <strong style="color:var(--ink);">${escapeHTML(r.keyword||'')}</strong>
         <span style="color:var(--ink-faint);font-size:12px;"> → ${escapeHTML(c.name||r.category)}${faixa}</span>
-        <div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">toque para editar</div>
+        <div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">toque para editar aqui</div>
       </div>
       <button type="button" class="btn ghost rule-del" data-i="${i}" style="padding:4px 10px;font-size:12px;color:var(--warn);">Excluir</button>
     </div>`;
   }).join('');
+
+  // preenche selects das linhas em edição
+  list.querySelectorAll('.rule-inline-edit').forEach(row=>{
+    const i = parseInt(row.dataset.i,10);
+    const r = state.categoryRules[i];
+    fillRuleCategorySelectEl(row.querySelector('.rule-inline-cat'), r && r.category);
+  });
+
   list.querySelectorAll('.rule-item').forEach(row=>{
     row.addEventListener('click', (e)=>{
       if(e.target.closest('.rule-del')) return;
-      loadRuleIntoForm(parseInt(row.dataset.edit,10));
+      editingRuleIndex = parseInt(row.dataset.edit,10);
+      renderAdvancedRules();
+      const input = list.querySelector('.rule-inline-kw');
+      if(input){ try{ input.focus(); }catch(e){} }
     });
   });
+
+  list.querySelectorAll('.rule-inline-save').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const row = btn.closest('.rule-inline-edit');
+      const idx = parseInt(btn.dataset.i,10);
+      const keyword = (row.querySelector('.rule-inline-kw')?.value || '').trim().toLowerCase();
+      const category = row.querySelector('.rule-inline-cat')?.value;
+      const minRaw = row.querySelector('.rule-inline-min')?.value;
+      const maxRaw = row.querySelector('.rule-inline-max')?.value;
+      const ok = saveRuleAtIndex(idx, {
+        keyword,
+        category,
+        minAmount: minRaw===''? null : parseFloat(minRaw),
+        maxAmount: maxRaw===''? null : parseFloat(maxRaw)
+      });
+      if(!ok) return;
+      editingRuleIndex = null;
+      renderAdvancedRules();
+      showToast('Regra atualizada.');
+    });
+  });
+
+  list.querySelectorAll('.rule-inline-cancel').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      editingRuleIndex = null;
+      renderAdvancedRules();
+    });
+  });
+
   list.querySelectorAll('.rule-del').forEach(btn=>{
     btn.addEventListener('click', (e)=>{
       e.stopPropagation();
       const idx = parseInt(btn.dataset.i,10);
       state.categoryRules.splice(idx, 1);
-      if(editingRuleIndex === idx) clearRuleForm();
+      if(editingRuleIndex === idx) editingRuleIndex = null;
       else if(editingRuleIndex != null && editingRuleIndex > idx) editingRuleIndex--;
       saveState();
       renderAdvancedRules();
@@ -7182,25 +7239,20 @@ document.getElementById('rule-add-btn') && document.getElementById('rule-add-btn
   const minAmount = document.getElementById('rule-min')?.value;
   const maxAmount = document.getElementById('rule-max')?.value;
   if(!keyword || !category){ showToast('Informe palavra-chave e categoria.'); return; }
-  const payload = {
+  // formulário de baixo sempre cria regra NOVA; edição é na linha
+  if(editingRuleIndex != null){
+    editingRuleIndex = null;
+  }
+  state.categoryRules.push({
     keyword,
     category,
     minAmount: minAmount===''? null : parseFloat(minAmount),
     maxAmount: maxAmount===''? null : parseFloat(maxAmount)
-  };
-  if(editingRuleIndex != null && state.categoryRules[editingRuleIndex]){
-    state.categoryRules[editingRuleIndex] = payload;
-    saveState();
-    clearRuleForm();
-    renderAdvancedRules();
-    showToast('Regra atualizada.');
-  } else {
-    state.categoryRules.push(payload);
-    saveState();
-    clearRuleForm();
-    renderAdvancedRules();
-    showToast('Regra adicionada.');
-  }
+  });
+  saveState();
+  clearRuleForm();
+  renderAdvancedRules();
+  showToast('Regra adicionada.');
 });
 document.getElementById('m-split-add') && document.getElementById('m-split-add').addEventListener('click', ()=> addSplitRow('', ''));
 document.getElementById('m-amount') && document.getElementById('m-amount').addEventListener('input', ()=> updateSplitSum());
