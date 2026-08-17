@@ -1193,7 +1193,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-15-08 (origem das regras + exclusão em lote)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-16-01 (período fechado / conferido)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1234,6 +1234,23 @@
           <p style="font-size:11.5px;color:var(--ink-faint);margin:10px 0 0;line-height:1.45;">
             Também pode usar o botão 👁 no canto superior direito. Útil ao abrir o app em público.
           </p>
+        </div>
+
+        <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="lock-config-card">
+          <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Período conferido (fechamento)</div>
+          <p style="font-size:12.5px;color:var(--ink-dim);line-height:1.45;margin:0 0 10px;">
+            Lançamentos com data <strong>até</strong> esta data ficam protegidos: reclassificar e alterações em massa não os alteram.
+            Edição individual continua permitida.
+          </p>
+          <div class="field" style="margin:0 0 8px;max-width:220px;">
+            <label>Conferido até</label>
+            <input type="date" id="cfg-closed-until">
+          </div>
+          <div class="btn-row" style="margin:0;flex-wrap:wrap;gap:8px;">
+            <button type="button" class="btn secondary" id="cfg-save-closed-until" style="padding:8px 14px;">Salvar fechamento</button>
+            <button type="button" class="btn ghost" id="cfg-clear-closed-until" style="padding:8px 14px;">Limpar (sem trava)</button>
+          </div>
+          <p id="cfg-closed-until-status" style="font-size:12px;color:var(--ink-faint);margin:10px 0 0;line-height:1.4;"></p>
         </div>
         <div class="btn-row" style="margin-top:12px;">
           <button type="button" class="btn secondary" id="btn-reload-app" style="padding:8px 14px;" title="Equivale a atualizar a página. Não apaga seus lançamentos.">Recarregar app</button>
@@ -1668,7 +1685,7 @@ function normalizeLoadedState(parsed){
   state.categoryRules = parsed.categoryRules || [];
   state.categoryRules.forEach(r=>{ if(r && !r.source) r.source = ruleSourceOf(r); });
   state.recurringTemplates = parsed.recurringTemplates || [];
-  state.settings = { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null, hideAmounts: false, hideOnOpen: false, ...(parsed.settings || {}) };
+  state.settings = { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null, hideAmounts: false, hideOnOpen: false, closedUntil: null, ...(parsed.settings || {}) };
   state.accountLimits = parsed.accountLimits && typeof parsed.accountLimits === 'object' ? parsed.accountLimits : {};
   state.accounts = parsed.accounts && typeof parsed.accounts === 'object' ? parsed.accounts : {};
   state.goals = Array.isArray(parsed.goals) ? parsed.goals : [];
@@ -1810,6 +1827,29 @@ function todayISO(){
   const d = new Date();
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 }
+function isTxLocked(t){
+  const until = state.settings && state.settings.closedUntil;
+  if(!until || !t || !t.date) return false;
+  return String(t.date) <= String(until);
+}
+function getClosedUntil(){ return (state.settings && state.settings.closedUntil) || ''; }
+function setClosedUntil(iso){
+  if(!state.settings) state.settings = {};
+  state.settings.closedUntil = iso || null;
+  saveState();
+  updateClosedUntilUI();
+}
+function updateClosedUntilUI(){
+  const input = document.getElementById('cfg-closed-until');
+  const status = document.getElementById('cfg-closed-until-status');
+  const until = getClosedUntil();
+  if(input) input.value = until || '';
+  if(status){
+    status.textContent = until
+      ? ('Período fechado até '+fmtDate(until)+'. Reclassificação e ações em massa não alteram esses lançamentos.')
+      : 'Nenhuma trava ativa — todos os lançamentos podem ser reclassificados em massa.';
+  }
+}
 function monthKey(iso){ return iso ? iso.slice(0,7) : ''; }
 function monthLabel(key){
   const [y,m] = key.split('-');
@@ -1873,6 +1913,7 @@ document.querySelectorAll('.spine-btn').forEach(btn=>{
       const h2 = document.getElementById('cfg-hide-on-open');
       if(h1) h1.checked = !!(state.settings && state.settings.hideAmounts);
       if(h2) h2.checked = !!(state.settings && state.settings.hideOnOpen);
+      try{ updateClosedUntilUI(); }catch(e){}
       fillReductionConfig();
       renderAccountLimitsConfig();
       renderAccountsConfig();
@@ -4233,7 +4274,7 @@ function rowHTML(t, selectable){
   <div class="ledger-row${selectable?' selectable':''}" data-id="${t.id}">
     ${selectable ? `<input type="checkbox" class="row-select-chk" data-select="${t.id}">` : ''}
     <span class="ledger-date">${fmtDate(t.date)}</span>
-    <span class="ledger-desc">${escapeHTML(t.desc)}${t.photo ? ' 📎' : ''}${t.transferId ? ` <span style="color:#5C8FD6;font-size:11px;">↔ ${t.transferLeg==='in'?'entrada':'saída'}</span>` : ''}${t.installment ? ` <span style="color:var(--gold);font-size:11px;">📅${t.installment.current}/${t.installment.total}</span>` : ''}${t.account ? `<span class="ledger-desc-sub">💳 ${escapeHTML(t.account)}</span>` : ''}${t.notes ? `<span class="ledger-desc-sub">${escapeHTML(t.notes)}</span>`:''}</span>
+    <span class="ledger-desc">${escapeHTML(t.desc)}${t.photo ? ' 📎' : ''}${t.transferId ? ` <span style="color:#5C8FD6;font-size:11px;">↔ ${t.transferLeg==='in'?'entrada':'saída'}</span>` : ''}${t.installment ? ` <span style="color:var(--gold);font-size:11px;">📅${t.installment.current}/${t.installment.total}</span>` : ''}${isTxLocked(t) ? ` <span style="color:var(--ink-faint);font-size:11px;" title="Período conferido">🔒</span>` : ''}${t.account ? `<span class="ledger-desc-sub">💳 ${escapeHTML(t.account)}</span>` : ''}${t.notes ? `<span class="ledger-desc-sub">${escapeHTML(t.notes)}</span>`:''}</span>
     <span class="cat-tag cat-quick-wrap" data-cat-edit="${t.id}" title="Clique para mudar a categoria"><span class="stamp" style="background:${c.color}">${initials(c.name)}</span>${c.name}</span>
     <span class="ledger-amt" style="color:${tType.color};">${tType.flowSign===0 ? '↔' : (isInflow ? '+' : '−')} ${fmtBRL(t.amount)}</span>
     <button class="row-del" data-del="${t.id}" title="Excluir">✕</button>
@@ -5345,10 +5386,12 @@ function reclassifyTransactions(opts={}){
   const samples = [];
   const byCat = {};
 
+  let skippedLocked = 0;
   state.transactions.forEach(t=>{
     if(t.type === 'transferencia' || t.type === 'pagamento_fatura') return;
     const tt = typeById(t.type);
     if(tt.flowSign === 0 && !tt.countsAsExpense) return;
+    if(isTxLocked(t)){ skippedLocked++; return; }
 
     const kind = t.type || 'despesa';
     const suggested = rulesOnly
@@ -5373,7 +5416,7 @@ function reclassifyTransactions(opts={}){
     try{ renderTransactions(); }catch(e){}
     try{ if(typeof renderCategoriesView==='function') renderCategoriesView(); }catch(e){}
   }
-  return { changed, samples, byCat };
+  return { changed, samples, byCat, skippedLocked };
 }
 
 function runReclassifyUI(){
@@ -5383,7 +5426,7 @@ function runReclassifyUI(){
 
   const preview = reclassifyTransactions({ rulesOnly, dryRun: true });
   if(preview.changed === 0){
-    if(resultEl) resultEl.innerHTML = 'Nenhum lançamento mudaria com as regras/palavras-chave atuais.';
+    if(resultEl) resultEl.innerHTML = 'Nenhum lançamento aberto mudaria.'+(preview.skippedLocked?(' '+preview.skippedLocked+' no período conferido ignorados.'):'');
     showToast('Nada a reclassificar.');
     return;
   }
@@ -7168,7 +7211,7 @@ async function enterAppAs(user){
       categories: DEFAULT_CATEGORIES.slice(),
       categoryRules: [],
       recurringTemplates: [],
-      settings: { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null, hideAmounts: false, hideOnOpen: false },
+      settings: { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null, hideAmounts: false, hideOnOpen: false, closedUntil: null },
       accountLimits: {},
       accounts: {},
       goals: [],
@@ -7364,6 +7407,19 @@ document.getElementById('m-amount') && document.getElementById('m-amount').addEv
 document.getElementById('privacy-toggle') && document.getElementById('privacy-toggle').addEventListener('click', ()=>{
   setPrivacy(!isPrivacyOn(), true);
 });
+
+document.getElementById('cfg-save-closed-until') && document.getElementById('cfg-save-closed-until').addEventListener('click', ()=>{
+  const v = (document.getElementById('cfg-closed-until')||{}).value || '';
+  setClosedUntil(v || null);
+  showToast(v ? ('Período conferido até '+fmtDate(v)) : 'Trava removida.');
+  try{ renderTransactions(); }catch(e){}
+});
+document.getElementById('cfg-clear-closed-until') && document.getElementById('cfg-clear-closed-until').addEventListener('click', ()=>{
+  setClosedUntil(null);
+  showToast('Trava de período removida.');
+  try{ renderTransactions(); }catch(e){}
+});
+
 document.getElementById('cfg-hide-amounts') && document.getElementById('cfg-hide-amounts').addEventListener('change', (e)=>{
   setPrivacy(e.target.checked, true);
 });
