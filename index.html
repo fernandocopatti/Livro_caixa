@@ -1193,7 +1193,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-16-01 (período fechado / conferido)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-19-01 (parcelas futuras sem meses vencidos)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -2261,44 +2261,72 @@ function ensureCanvas(wrapId, canvasId){
 /* ============================================================
    LIMITES, PARCELAS, INSIGHTS, RITMO, SIMULADOR
    ============================================================ */
-function getPendingInstallmentItems(){
-  // Agrupa por loja + total de parcelas + valor da parcela + conta
-  // (evita misturar duas compras diferentes no mesmo estabelecimento)
+function getPendingInstallmentItems(opts){
+  // Agrupa compras parceladas e estima o que AINDA vai cair (só meses >= mês atual)
+  opts = opts || {};
+  const accountFilter = opts.account || null;
+  const curMk = monthKey(todayISO());
+
   const groups = {};
   state.transactions.forEach(t=>{
     if(!t.installment || !t.installment.current || !t.installment.total) return;
     if(!typeById(t.type).countsAsExpense) return;
-    const amt = Number(t.amount).toFixed(2);
-    const key = [
-      normalizeDesc(t.desc),
-      t.installment.total,
-      amt,
-      t.account ? normalizeDesc(t.account) : ''
-    ].join('|');
+    if(accountFilter && t.account !== accountFilter) return;
+    // total de parcelas inválido
+    const total = Number(t.installment.total);
+    const current = Number(t.installment.current);
+    if(!(total >= 2) || !(current >= 1) || current > total) return;
+
+    const merchant = (typeof normalizeMerchant === 'function' ? normalizeMerchant(t.desc) : normalizeDesc(t.desc));
+    // agrupa por loja + nº de parcelas + conta (valor aproximado em faixas de R$0,05)
+    const amtBucket = (Math.round(Number(t.amount) * 20) / 20).toFixed(2);
+    const key = [merchant, total, amtBucket, t.account ? normalizeDesc(t.account) : ''].join('|');
     if(!groups[key]) groups[key] = [];
     groups[key].push(t);
   });
+
   const pendingItems = [];
   Object.values(groups).forEach(txs=>{
-    const latest = txs.reduce((a,b)=> {
-      if(b.installment.current !== a.installment.current)
-        return b.installment.current > a.installment.current ? b : a;
+    // maior número de parcela já registrado = progresso real
+    const latest = txs.reduce((a,b)=>{
+      if(Number(b.installment.current) !== Number(a.installment.current))
+        return Number(b.installment.current) > Number(a.installment.current) ? b : a;
       return (b.date > a.date) ? b : a;
     });
-    const remaining = Math.max(0, Number(latest.installment.total) - Number(latest.installment.current));
+    const total = Number(latest.installment.total);
+    const current = Number(latest.installment.current);
+    // quantas parcelas distintas já existem no grupo (cobertas)
+    const seenCurrents = new Set(txs.map(t=> Number(t.installment.current)));
+    // remaining = o que falta após a última; se já temos todas 1..total, zero
+    let remaining = Math.max(0, total - current);
+    if(seenCurrents.size >= total) remaining = 0;
     if(remaining <= 0) return;
+
+    // valor típico da parcela = mediana dos valores do grupo
+    const amounts = txs.map(t=> Number(t.amount)).sort((a,b)=>a-b);
+    const mid = amounts[Math.floor(amounts.length/2)];
+    const parcelAmount = mid || Number(latest.amount);
+
+    // projeta meses a partir da data da última parcela
     const [y,m] = latest.date.split('-').map(Number);
     const contribMonths = [];
-    for(let k=1;k<=remaining;k++){
+    for(let k=1; k<=remaining; k++){
       const d = new Date(y, (m-1)+k, 1);
       const mk = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-      contribMonths.push(mk);
+      // só meses atuais/futuros — meses já passados não são "a vencer"
+      if(mk >= curMk) contribMonths.push(mk);
     }
+    if(!contribMonths.length) return; // série antiga já deveria ter caído
+
     pendingItems.push({
       ...latest,
-      remaining,
+      amount: parcelAmount,
+      remaining: contribMonths.length,
+      remainingRaw: remaining,
       contribMonths,
-      committed: Number(latest.amount) * remaining
+      committed: parcelAmount * contribMonths.length,
+      _groupSize: txs.length,
+      _merchant: typeof normalizeMerchant === 'function' ? normalizeMerchant(latest.desc) : latest.desc
     });
   });
   return pendingItems;
@@ -2403,9 +2431,8 @@ function accountOccupied(accountName, _cycleMonthKeyIgnored, pendingItems){
       && t.date >= cycle.start && t.date <= cycle.end
       && typeById(t.type).countsAsExpense)
     .reduce((s,t)=>s+t.amount, 0);
-  const pending = pendingItems || getPendingInstallmentItems();
+  const pending = pendingItems || getPendingInstallmentItems({ account: accountName });
   const futureInst = pending
-    .filter(t=> t.account===accountName)
     .reduce((s,t)=> s + (t.committed != null ? t.committed : t.amount * t.remaining), 0);
   // parcelas que JÁ caíram neste ciclo já estão em spentCycle; futureInst só conta as seguintes
   return {
@@ -3874,13 +3901,16 @@ function renderDashboard(){
     }
   }
 
-  // parcelas futuras: projeta os meses seguintes a partir de lançamentos com número de parcela
+  // parcelas futuras: só meses >= mês atual; filtra conta do dashboard
   {
-    const pendingItems = getPendingInstallmentItems();
+    const pendingItems = getPendingInstallmentItems({ account: dashAccount || null });
     const byMonth = {};
+    const byMonthItems = {};
     pendingItems.forEach(t=>{
       t.contribMonths.forEach(key=>{
         byMonth[key] = (byMonth[key]||0) + t.amount;
+        if(!byMonthItems[key]) byMonthItems[key] = [];
+        byMonthItems[key].push(t);
       });
     });
 
@@ -3891,7 +3921,15 @@ function renderDashboard(){
       instCard.style.display = 'none';
     } else {
       instCard.style.display = '';
-      const totalPending = pendingItems.reduce((s,t)=> s + t.amount*t.remaining, 0);
+      const totalPending = pendingItems.reduce((s,t)=> s + (t.committed != null ? t.committed : t.amount*t.remaining), 0);
+      // aviso se ultrapassar limite do cartão filtrado
+      let limitNote = '';
+      if(dashAccount && state.accountLimits && state.accountLimits[dashAccount] && state.accountLimits[dashAccount].limit){
+        const lim = Number(state.accountLimits[dashAccount].limit);
+        if(totalPending > lim){
+          limitNote = `<p style="font-size:12px;color:var(--warn);margin:8px 0 0;line-height:1.4;">⚠ Parcelas a vencer (${fmtBRL(totalPending)}) acima do limite (${fmtBRL(lim)}). Pode haver lançamentos parcelados duplicados ou séries antigas — confira as compras com 📅 na lista.</p>`;
+        }
+      }
       const maxMonthVal = Math.max(...monthKeys.map(k=>byMonth[k]));
       const monthsRows = monthKeys.map(k=>`
         <div class="account-row matrix-clickable" data-inst-month="${k}">
@@ -3907,8 +3945,9 @@ function renderDashboard(){
         .join('');
       instEl.innerHTML = `
         <div style="margin-bottom:14px;">
-          <span style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;">Ainda comprometido em parcelas futuras</span><br>
+          <span style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;">Ainda a vencer (a partir deste mês)</span><br>
           <span style="font-family:var(--font-mono);font-size:22px;font-weight:700;color:var(--gold);">${fmtBRL(totalPending)}</span>
+          ${limitNote||''}
         </div>
         <div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;margin-bottom:6px;">Por mês — clique pra ver quais compras compõem o valor</div>
         ${monthsRows}
