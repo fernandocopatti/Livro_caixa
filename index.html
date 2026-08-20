@@ -1186,6 +1186,35 @@
         </div>
         <div id="reclassify-result" style="margin-top:12px;font-size:13px;color:var(--ink-dim);line-height:1.45;"></div>
       </div>
+
+      <div class="card" style="margin-top:18px;" id="harvest-keywords-card">
+        <div class="panel-title">Gerar palavras-chave a partir dos lançamentos</div>
+        <p style="color:var(--ink-dim);font-size:13px;line-height:1.5;margin:0 0 12px;">
+          Lê as categorias que você já revisou e grava <strong>palavras-chave nas categorias</strong>
+          (e opcionalmente regras). Assim, numa reimportação o app já reconhece Mercado, Combustível, etc.
+        </p>
+        <div class="field" style="margin:0 0 10px;max-width:160px;">
+          <label>Mín. ocorrências</label>
+          <input type="number" id="harvest-min-count" min="1" max="50" value="2" style="width:100%;">
+        </div>
+        <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;margin-bottom:8px;">
+          <input type="checkbox" id="harvest-into-categories" style="margin-top:3px;" checked>
+          <span>Gravar nas <strong>palavras-chave da categoria</strong></span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;margin-bottom:8px;">
+          <input type="checkbox" id="harvest-into-rules" style="margin-top:3px;" checked>
+          <span>Criar também <strong>regras Manual</strong> (palavra → categoria)</span>
+        </label>
+        <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;margin-bottom:14px;">
+          <input type="checkbox" id="harvest-skip-outros" style="margin-top:3px;" checked>
+          <span>Ignorar categoria “Outros” / genéricas</span>
+        </label>
+        <div class="btn-row" style="margin:0;flex-wrap:wrap;gap:8px;">
+          <button type="button" class="btn secondary" id="btn-harvest-preview" style="padding:10px 16px;">Prévia</button>
+          <button type="button" class="btn" id="btn-harvest-apply" style="padding:10px 16px;">Gerar e gravar</button>
+        </div>
+        <div id="harvest-result" style="margin-top:12px;font-size:13px;color:var(--ink-dim);line-height:1.45;"></div>
+      </div>
     </section>
 
     <!-- ===================== CONFIG ===================== -->
@@ -1193,7 +1222,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-19-01 (parcelas futuras sem meses vencidos)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-19-02 (gerar palavras-chave dos lançamentos)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -5302,6 +5331,164 @@ function extractKeyword(desc){
   return words.slice(0,2).join(' ');
 }
 
+function isGenericCategoryName(name){
+  const n = normalizeDesc(name || '');
+  return !n || n === 'outros' || n === 'outro' || n === 'geral' || n === 'diversos' || n === 'sem categoria';
+}
+
+/**
+ * Extrai candidatos a keyword a partir dos lançamentos já categorizados.
+ * Retorna { byCatId: { catId: [{keyword, count}] }, candidates: [...] }
+ */
+function harvestKeywordsFromTransactions(opts){
+  opts = opts || {};
+  const minCount = Math.max(1, parseInt(opts.minCount, 10) || 2);
+  const skipOutros = opts.skipOutros !== false;
+
+  // catId -> keyword -> count
+  const map = {};
+  state.transactions.forEach(t=>{
+    if(!t.category || !t.desc) return;
+    if(t.type === 'transferencia' || t.type === 'pagamento_fatura') return;
+    const cat = catById(t.category);
+    if(!cat || !cat.id) return;
+    if(skipOutros && isGenericCategoryName(cat.name)) return;
+
+    const kw = extractKeyword(t.desc);
+    if(!kw || kw.length < 3) return;
+    if(!map[cat.id]) map[cat.id] = {};
+    map[cat.id][kw] = (map[cat.id][kw] || 0) + 1;
+  });
+
+  const candidates = [];
+  Object.keys(map).forEach(catId=>{
+    const cat = catById(catId);
+    Object.keys(map[catId]).forEach(kw=>{
+      const count = map[catId][kw];
+      if(count < minCount) return;
+      // já existe na categoria?
+      const alreadyKw = Array.isArray(cat.keywords) && cat.keywords.some(k=> normalizeDesc(k) === normalizeDesc(kw));
+      // já existe regra?
+      const alreadyRule = (state.categoryRules||[]).some(r=>
+        normalizeDesc(r.keyword) === normalizeDesc(kw) && r.category === catId
+      );
+      candidates.push({
+        catId,
+        catName: cat.name,
+        keyword: kw,
+        count,
+        alreadyKw,
+        alreadyRule
+      });
+    });
+  });
+
+  candidates.sort((a,b)=> b.count - a.count || a.catName.localeCompare(b.catName,'pt-BR'));
+  return { candidates, minCount };
+}
+
+function applyHarvestedKeywords(opts){
+  opts = opts || {};
+  const intoCats = opts.intoCategories !== false;
+  const intoRules = !!opts.intoRules;
+  const { candidates } = harvestKeywordsFromTransactions(opts);
+
+  let addedKw = 0, addedRules = 0, skipped = 0;
+  const byCat = {};
+
+  candidates.forEach(c=>{
+    if(c.alreadyKw && c.alreadyRule){ skipped++; return; }
+    if(intoCats && !c.alreadyKw){
+      const cat = state.categories.find(x=> x.id === c.catId);
+      if(cat){
+        if(!Array.isArray(cat.keywords)) cat.keywords = [];
+        if(!cat.keywords.some(k=> normalizeDesc(k) === normalizeDesc(c.keyword))){
+          cat.keywords.push(c.keyword);
+          addedKw++;
+          byCat[c.catName] = (byCat[c.catName]||0) + 1;
+        }
+      }
+    }
+    if(intoRules && !c.alreadyRule){
+      state.categoryRules.push({
+        keyword: c.keyword,
+        category: c.catId,
+        minAmount: null,
+        maxAmount: null,
+        source: 'manual'
+      });
+      addedRules++;
+    }
+    if((intoCats && c.alreadyKw) && (intoRules && c.alreadyRule)) skipped++;
+  });
+
+  if(addedKw || addedRules){
+    saveState();
+    try{ renderCategoriesView(); }catch(e){}
+    try{ renderAdvancedRules(); }catch(e){}
+  }
+  return { addedKw, addedRules, skipped, totalCandidates: candidates.length, byCat, candidates };
+}
+
+function formatHarvestPreview(result){
+  const { candidates } = result;
+  if(!candidates.length) return 'Nenhum padrão encontrado com essa frequência mínima.';
+  const samples = candidates.slice(0, 20).map(c=>
+    `• <strong>${escapeHTML(c.keyword)}</strong> → ${escapeHTML(c.catName)} (${c.count}x)` +
+    (c.alreadyKw || c.alreadyRule ? ' <span style="color:var(--ink-faint);">já existe</span>' : '')
+  ).join('<br>');
+  const novos = candidates.filter(c=> !c.alreadyKw || !c.alreadyRule).length;
+  return `<strong>${candidates.length}</strong> padrão(ões) · <strong>${novos}</strong> novo(s) para gravar.<br><div style="margin-top:8px;">${samples}</div>` +
+    (candidates.length > 20 ? `<div style="margin-top:6px;color:var(--ink-faint);">… e mais ${candidates.length-20}</div>` : '');
+}
+
+function runHarvestPreview(){
+  const minCount = parseInt((document.getElementById('harvest-min-count')||{}).value, 10) || 2;
+  const skipOutros = !!(document.getElementById('harvest-skip-outros')||{}).checked;
+  const result = harvestKeywordsFromTransactions({ minCount, skipOutros });
+  const el = document.getElementById('harvest-result');
+  if(el) el.innerHTML = formatHarvestPreview(result);
+  showToast(result.candidates.length ? (result.candidates.length+' padrões na prévia') : 'Nada encontrado');
+}
+
+function runHarvestApply(){
+  const minCount = parseInt((document.getElementById('harvest-min-count')||{}).value, 10) || 2;
+  const skipOutros = !!(document.getElementById('harvest-skip-outros')||{}).checked;
+  const intoCategories = !!(document.getElementById('harvest-into-categories')||{}).checked;
+  const intoRules = !!(document.getElementById('harvest-into-rules')||{}).checked;
+  if(!intoCategories && !intoRules){
+    showToast('Marque pelo menos um destino (categoria ou regras).');
+    return;
+  }
+  const preview = harvestKeywordsFromTransactions({ minCount, skipOutros });
+  const novos = preview.candidates.filter(c=>
+    (intoCategories && !c.alreadyKw) || (intoRules && !c.alreadyRule)
+  ).length;
+  if(!novos){
+    const el = document.getElementById('harvest-result');
+    if(el) el.innerHTML = formatHarvestPreview(preview) + '<div style="margin-top:8px;">Nada novo para gravar.</div>';
+    showToast('Nada novo para gravar.');
+    return;
+  }
+  askConfirm(
+    'Gerar palavras-chave',
+    'Gravar '+novos+' padrão(ões) a partir dos lançamentos revisados?',
+    ()=>{
+      const res = applyHarvestedKeywords({ minCount, skipOutros, intoCategories, intoRules });
+      const el = document.getElementById('harvest-result');
+      const top = Object.entries(res.byCat||{}).sort((a,b)=>b[1]-a[1]).slice(0,8)
+        .map(([n,c])=> escapeHTML(n)+': +'+c).join(' · ');
+      if(el){
+        el.innerHTML =
+          `<strong>${res.addedKw}</strong> palavra(s)-chave em categorias · <strong>${res.addedRules}</strong> regra(s) criada(s).` +
+          (top ? `<div style="margin-top:6px;">${top}</div>` : '');
+      }
+      showToast('Mapeamento gravado.');
+    }
+  );
+}
+
+
 function learnCategory(desc, categoryId){
   const keyword = extractKeyword(desc);
   if(!keyword) return;
@@ -7470,6 +7657,10 @@ document.getElementById('cfg-hide-on-open') && document.getElementById('cfg-hide
 });
 
 document.getElementById('btn-reclassify') && document.getElementById('btn-reclassify').addEventListener('click', runReclassifyUI);
+
+document.getElementById('btn-harvest-preview') && document.getElementById('btn-harvest-preview').addEventListener('click', runHarvestPreview);
+document.getElementById('btn-harvest-apply') && document.getElementById('btn-harvest-apply').addEventListener('click', runHarvestApply);
+
 
 function initAuthUI(){
   const savedClient = getSavedGoogleClientId();
