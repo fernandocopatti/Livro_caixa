@@ -622,28 +622,40 @@
 <div id="auth-gate">
   <div class="auth-card">
     <h1>Livro-Caixa</h1>
-    <p class="auth-sub">Toque no botão branco do Google abaixo para entrar. Se preferir não usar Google, use “Continuar sem conta”.</p>
-    <div id="auth-logged-preview" style="display:none;"></div>
-    <div id="google-btn-wrap"></div>
-    <p id="google-click-hint" style="font-size:12.5px;color:var(--accent);line-height:1.45;margin:8px 0 0;display:none;">
-      Conta Google detectada — toque no botão <strong>Fazer login como…</strong> para abrir o app.
-    </p>
-    <p id="google-setup-hint" style="display:none;font-size:12.5px;color:var(--ink-dim);line-height:1.5;margin:0 0 12px;">
-      Para ativar o botão Google, informe o <strong>Client ID</strong> em Config (depois do primeiro acesso local) ou no campo abaixo.
-    </p>
-    <div class="field" id="auth-client-id-field" style="margin-bottom:12px;">
-      <label>Google Client ID (opcional)</label>
-      <input type="text" id="auth-google-client-id" placeholder="123456789-abc.apps.googleusercontent.com" autocomplete="off">
+    <p class="auth-sub">Cadastro local neste aparelho. Escolha um perfil, crie um novo ou importe um backup JSON se já tiver dados salvos.</p>
+
+    <div id="auth-profiles-list" style="margin-bottom:14px;"></div>
+
+    <div class="field" style="margin-bottom:10px;">
+      <label>Novo perfil</label>
+      <input type="text" id="auth-new-profile-name" placeholder="Seu nome ou “Casa”, “Pessoal”…" autocomplete="name">
     </div>
-    <button type="button" class="btn secondary" id="auth-save-client-id" style="width:100%;margin-bottom:8px;">Salvar Client ID e carregar Google</button>
-    <div class="auth-divider">ou</div>
-    <button type="button" class="btn" id="auth-continue-local" style="width:100%;">Continuar sem conta</button>
-    <div class="field" style="margin-top:14px;">
-      <label>Nome local (opcional)</label>
-      <input type="text" id="auth-local-name" placeholder="Como quer ser chamado?">
-    </div>
+    <button type="button" class="btn" id="auth-create-profile" style="width:100%;margin-bottom:10px;">Criar perfil e entrar</button>
+
+    <div class="auth-divider">recuperar dados</div>
+    <button type="button" class="btn secondary" id="auth-import-backup" style="width:100%;margin-bottom:8px;">Importar backup (.json)</button>
+    <input type="file" id="auth-backup-input" accept="application/json,.json" style="display:none;">
+    <p style="font-size:12px;color:var(--ink-faint);line-height:1.45;margin:0 0 12px;">
+      Use o arquivo de backup exportado em Config. Ideal se trocou de celular ou limpou o navegador.
+    </p>
+
+    <details style="margin-top:8px;">
+      <summary style="cursor:pointer;color:var(--ink-dim);font-size:13px;">Opções avançadas (Google / legado)</summary>
+      <div style="margin-top:12px;">
+        <div id="google-btn-wrap"></div>
+        <p id="google-click-hint" style="font-size:12.5px;color:var(--accent);line-height:1.45;margin:8px 0 0;display:none;"></p>
+        <div class="field" id="auth-client-id-field" style="margin:10px 0;">
+          <label>Google Client ID (opcional)</label>
+          <input type="text" id="auth-google-client-id" placeholder="xxx.apps.googleusercontent.com" autocomplete="off">
+        </div>
+        <button type="button" class="btn secondary" id="auth-save-client-id" style="width:100%;margin-bottom:8px;">Salvar Client ID</button>
+        <button type="button" class="btn ghost" id="auth-continue-local" style="width:100%;">Entrar no perfil legado (sem nome)</button>
+        <input type="hidden" id="auth-local-name" value="">
+      </div>
+    </details>
+
     <p class="auth-note">
-      O login Google neste app é só identificação local (nome/e-mail). Os lançamentos continuam salvos neste navegador/aparelho — não há nuvem automática. Em sites HTTP/arquivo local o Google pode bloquear o botão; use HTTPS ou o modo sem conta.
+      Dados ficam neste navegador/aparelho. Exporte backup com frequência. Não depende de Google para funcionar.
     </p>
   </div>
 </div>
@@ -1112,9 +1124,9 @@
             <input type="text" id="import-account-pdf" placeholder="Ex.: Cartão Nubank, Cartão Inter" list="account-suggestions">
           </div>
           <div class="drop-zone" id="drop-pdf">
-            <strong>Arraste o extrato em PDF aqui</strong><br>ou clique para escolher — vamos ler o texto e sugerir os lançamentos
+            <strong>Arraste um ou vários PDFs aqui</strong><br>ou clique para escolher — pode selecionar vários arquivos de uma vez
           </div>
-          <input type="file" id="input-pdf" accept=".pdf" style="display:none;">
+          <input type="file" id="input-pdf" accept=".pdf,application/pdf" multiple style="display:none;">
           <div id="review-pdf"></div>
         </div>
 
@@ -1124,9 +1136,9 @@
             <input type="text" id="import-account-planilha" placeholder="Ex.: Conta Corrente, Cartão Nubank" list="account-suggestions">
           </div>
           <div class="drop-zone" id="drop-planilha">
-            <strong>Arraste a planilha aqui</strong><br>.xlsx, .xls ou .csv — mapeamento de colunas é lembrado para a próxima vez
+            <strong>Arraste uma ou várias planilhas aqui</strong><br>.xlsx, .xls ou .csv — vários arquivos na mesma conta; mapeamento lembrado
           </div>
-          <input type="file" id="input-planilha" accept=".xlsx,.xls,.csv,text/csv" style="display:none;">
+          <input type="file" id="input-planilha" accept=".xlsx,.xls,.csv,text/csv" multiple style="display:none;">
           <div id="review-planilha"></div>
         </div>
       </div>
@@ -1222,7 +1234,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-19-02 (gerar palavras-chave dos lançamentos)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-20-03 (sync GitHub Gist)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1440,6 +1452,31 @@
           </p>
           <div id="recurring-list" style="margin-top:12px;"></div>
         </div>
+      </div>
+
+      <div class="card" style="margin-top:18px;" id="github-gist-card">
+        <div class="panel-title">Nuvem GitHub (Gist)</div>
+        <p style="color:var(--ink-dim);font-size:13px;line-height:1.5;margin:0 0 14px;">
+          Guarda o backup num <strong>Gist secreto</strong> da sua conta GitHub.
+          Token: GitHub → Settings → Developer settings → Personal access tokens
+          (clássico: permissão <code>gist</code>). Fica só neste aparelho.
+        </p>
+        <div class="form-grid" style="max-width:640px;">
+          <div class="field">
+            <label>Personal Access Token</label>
+            <input type="password" id="gist-token" placeholder="ghp_…" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Gist ID (após o 1º envio)</label>
+            <input type="text" id="gist-id" placeholder="opcional se já tiver" autocomplete="off">
+          </div>
+        </div>
+        <div class="btn-row" style="margin-top:8px;flex-wrap:wrap;gap:8px;">
+          <button type="button" class="btn secondary" id="gist-save-creds" style="padding:8px 14px;">Salvar token / ID</button>
+          <button type="button" class="btn" id="gist-upload" style="padding:8px 14px;">Enviar backup ao GitHub</button>
+          <button type="button" class="btn secondary" id="gist-download" style="padding:8px 14px;">Baixar do GitHub e restaurar</button>
+        </div>
+        <p id="gist-status" style="font-size:12px;color:var(--ink-faint);margin:12px 0 0;line-height:1.45;">GitHub Gist não configurado.</p>
       </div>
 
       <div class="card" style="margin-top:18px;" id="types-section">
@@ -1674,17 +1711,101 @@ const AUTH_CLIENT_ID_KEY = 'lc-google-client-id';
 
 let currentUser = null; // { provider:'google'|'local', email?, name?, picture?, sub? }
 
+const PROFILES_KEY = 'lc-profiles';
+
 function storageKeyForUser(user){
   if(user && user.provider === 'google' && user.email){
-    // namespace por e-mail para não misturar perfis no mesmo navegador
     const safe = String(user.email).toLowerCase().replace(/[^a-z0-9._-]+/g, '_');
     return STORAGE_KEY_BASE + '::' + safe;
+  }
+  if(user && user.provider === 'local' && user.profileId){
+    return STORAGE_KEY_BASE + '::local::' + user.profileId;
   }
   return STORAGE_KEY_BASE;
 }
 function activeStorageKey(){
   return storageKeyForUser(currentUser);
 }
+
+function loadProfiles(){
+  try{
+    const raw = localStorage.getItem(PROFILES_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  }catch(e){ return []; }
+}
+function saveProfiles(list){
+  try{ localStorage.setItem(PROFILES_KEY, JSON.stringify(list)); }catch(e){}
+}
+function upsertProfileMeta(profile){
+  const list = loadProfiles();
+  const i = list.findIndex(p=> p.id === profile.id);
+  if(i >= 0) list[i] = { ...list[i], ...profile };
+  else list.push(profile);
+  saveProfiles(list);
+  return profile;
+}
+function createProfile(name){
+  const id = 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+  const profile = {
+    id,
+    name: (name||'Meu perfil').trim() || 'Meu perfil',
+    createdAt: new Date().toISOString(),
+    lastOpen: new Date().toISOString()
+  };
+  upsertProfileMeta(profile);
+  return profile;
+}
+function touchProfile(id){
+  const list = loadProfiles();
+  const p = list.find(x=> x.id === id);
+  if(p){ p.lastOpen = new Date().toISOString(); saveProfiles(list); }
+}
+function deleteProfileMeta(id){
+  saveProfiles(loadProfiles().filter(p=> p.id !== id));
+  try{ localStorage.removeItem(STORAGE_KEY_BASE + '::local::' + id); }catch(e){}
+}
+
+function renderAuthProfilesList(){
+  const el = document.getElementById('auth-profiles-list');
+  if(!el) return;
+  const list = loadProfiles().slice().sort((a,b)=> String(b.lastOpen||'').localeCompare(String(a.lastOpen||'')));
+  if(!list.length){
+    el.innerHTML = '<div style="font-size:13px;color:var(--ink-faint);padding:8px 0;">Nenhum perfil ainda. Crie o primeiro abaixo ou importe um backup.</div>';
+    return;
+  }
+  el.innerHTML = '<div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;margin-bottom:8px;">Seus perfis</div>' +
+    list.map(p=>`
+      <div class="account-bal-row" style="cursor:pointer;gap:10px;" data-profile-enter="${escapeAttr(p.id)}">
+        <div style="flex:1;min-width:0;">
+          <strong style="color:var(--ink);">${escapeHTML(p.name)}</strong>
+          <div style="font-size:11px;color:var(--ink-faint);">toque para entrar</div>
+        </div>
+        <button type="button" class="btn ghost" data-profile-del="${escapeAttr(p.id)}" style="padding:4px 10px;font-size:12px;color:var(--warn);">Excluir</button>
+      </div>`).join('');
+  el.querySelectorAll('[data-profile-enter]').forEach(row=>{
+    row.addEventListener('click', (e)=>{
+      if(e.target.closest('[data-profile-del]')) return;
+      const id = row.getAttribute('data-profile-enter');
+      const p = loadProfiles().find(x=> x.id === id);
+      if(!p) return;
+      enterAppAs({ provider:'local', name: p.name, profileId: p.id });
+    });
+  });
+  el.querySelectorAll('[data-profile-del]').forEach(btn=>{
+    btn.addEventListener('click', (e)=>{
+      e.stopPropagation();
+      const id = btn.getAttribute('data-profile-del');
+      const p = loadProfiles().find(x=> x.id === id);
+      if(!p) return;
+      if(!confirm('Excluir o perfil "'+p.name+'" e os dados salvos nele neste aparelho?')) return;
+      deleteProfileMeta(id);
+      renderAuthProfilesList();
+      showToast('Perfil excluído.');
+    });
+  });
+}
+
 // compat: código antigo usava STORAGE_KEY
 let STORAGE_KEY = STORAGE_KEY_BASE;
 
@@ -1932,6 +2053,7 @@ document.querySelectorAll('.spine-btn').forEach(btn=>{
     }
     if(btn.dataset.view==='categories') renderCategoriesView();
     if(btn.dataset.view==='config'){
+      try{ refreshGistUI(); }catch(e){}
       renderRecurringList();
       renderTypesList();
       document.getElementById('file-prefix-input').value = state.settings.filePrefix || 'livro-caixa';
@@ -5244,16 +5366,23 @@ document.querySelectorAll('.import-tab').forEach(tab=>{
   });
 });
 
-function setupDropZone(zoneId, inputId, onFile){
+function setupDropZone(zoneId, inputId, onFiles){
+  // onFiles recebe FileList ou array — pode ser 1 ou vários arquivos
   const zone = document.getElementById(zoneId);
   const input = document.getElementById(inputId);
+  if(!zone || !input) return;
+  const handle = (fileList)=>{
+    const files = Array.from(fileList || []);
+    if(!files.length) return;
+    onFiles(files);
+    try{ input.value = ''; }catch(e){}
+  };
   zone.addEventListener('click', ()=>input.click());
-  input.addEventListener('change', e=>{ if(e.target.files[0]) onFile(e.target.files[0]); });
+  input.addEventListener('change', e=>{ handle(e.target.files); });
   ['dragover','dragenter'].forEach(ev=>zone.addEventListener(ev, e=>{ e.preventDefault(); zone.classList.add('drag'); }));
   ['dragleave','drop'].forEach(ev=>zone.addEventListener(ev, e=>{ e.preventDefault(); zone.classList.remove('drag'); }));
   zone.addEventListener('drop', e=>{
-    const file = e.dataTransfer.files[0];
-    if(file) onFile(file);
+    if(e.dataTransfer.files && e.dataTransfer.files.length) handle(e.dataTransfer.files);
   });
 }
 
@@ -6222,49 +6351,65 @@ if(window.pdfjsLib){
   pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.worker.min.js';
 }
 
-setupDropZone('drop-pdf','input-pdf', async file=>{
+async function readPdfFileToItems(file){
+  if(typeof pdfjsLib === 'undefined') throw new Error('pdfjs');
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+  let fullText = '';
+  for(let i=1;i<=pdf.numPages;i++){
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    fullText += content.items.map(it=>it.str).join(' ') + '\n';
+  }
+  const textLen = fullText.replace(/\s+/g,'').length;
+  if(textLen < 40) return { items: [], imageOnly: true, fileName: file.name };
+  const items = parseStatementText(fullText);
+  items.forEach(it=>{ it._srcFile = file.name; });
+  return { items, imageOnly: false, fileName: file.name };
+}
+
+setupDropZone('drop-pdf','input-pdf', async (files)=>{
   const container = document.getElementById('review-pdf');
-  container.innerHTML = '<div class="empty-state">Lendo o PDF…</div>';
+  const list = Array.isArray(files) ? files : Array.from(files||[]);
+  if(!list.length) return;
+  container.innerHTML = '<div class="empty-state">Lendo '+list.length+' PDF(s)…</div>';
   try{
     if(typeof pdfjsLib === 'undefined'){
       container.innerHTML = '<div class="empty-state">Biblioteca de PDF não carregou (CDN). Recarregue a página ou use OFX/planilha.</div>';
       return;
     }
-    const buf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({data: buf}).promise;
-    let fullText = '';
-    for(let i=1;i<=pdf.numPages;i++){
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      const strings = content.items.map(it=>it.str);
-      fullText += strings.join(' ') + '\n';
+    const allItems = [];
+    const notes = [];
+    for(const file of list){
+      try{
+        const res = await readPdfFileToItems(file);
+        if(res.imageOnly) notes.push(file.name+': parece só imagem (sem texto)');
+        else if(!res.items.length) notes.push(file.name+': nenhum lançamento reconhecido');
+        else {
+          allItems.push(...res.items);
+          notes.push(file.name+': '+res.items.length+' item(ns)');
+        }
+      }catch(err){
+        console.error(err);
+        notes.push(file.name+': falha na leitura');
+      }
     }
-    const textLen = fullText.replace(/\s+/g,'').length;
-    if(textLen < 40){
-      container.innerHTML = `<div class="empty-state" style="text-align:left;max-width:520px;margin:0 auto;">
-        <strong style="color:var(--ink);">Este PDF parece ser só imagem (sem texto selecionável).</strong><br><br>
-        Bancos às vezes exportam fatura “escaneada”. Opções:
-        <ul style="margin:10px 0 0 18px;color:var(--ink-dim);line-height:1.6;">
-          <li>Exporte o extrato em <strong>OFX</strong> ou <strong>CSV/XLSX</strong> no app do banco</li>
-          <li>Ou fotografe a página e use <strong>Novo lançamento → Foto (OCR)</strong></li>
-        </ul>
-      </div>`;
+    const account = (document.getElementById('import-account-pdf')?.value || '').trim();
+    if(account) allItems.forEach(it=> it.account = account);
+    if(!allItems.length){
+      container.innerHTML = '<div class="empty-state" style="text-align:left;max-width:520px;margin:0 auto;">Não encontrei lançamentos nos PDFs.<br><br>'+
+        notes.map(n=> '• '+escapeHTML(n)).join('<br>')+
+        '<br><br>Tente OFX/planilha, ou PDF com texto selecionável.</div>';
       return;
     }
-    const items = parseStatementText(fullText);
-    if(!items.length){
-      container.innerHTML = `<div class="empty-state" style="text-align:left;max-width:520px;margin:0 auto;">
-        Li o PDF, mas não reconheci linhas de lançamento (data + valor).<br><br>
-        Tente <strong>OFX</strong> ou <strong>planilha</strong> do banco, ou use OCR na foto do extrato.
-      </div>`;
-      return;
-    }
-    const account = document.getElementById('import-account-pdf').value.trim();
-    if(account) items.forEach(it=> it.account = account);
-    renderReviewTable('review-pdf', items, 'pdf');
+    renderReviewTable('review-pdf', allItems, 'pdf');
+    const meta = document.createElement('div');
+    meta.style.cssText = 'font-size:12px;color:var(--ink-dim);margin:0 0 10px;line-height:1.45;';
+    meta.innerHTML = '<strong>'+list.length+' arquivo(s)</strong> · '+allItems.length+' lançamento(s) · '+notes.map(n=>escapeHTML(n)).join(' · ');
+    container.insertBefore(meta, container.firstChild);
   }catch(err){
     console.error(err);
-    container.innerHTML = '<div class="empty-state">Não consegui ler esse PDF. Ele pode estar escaneado como imagem — tente exportar em OFX ou planilha, ou use OCR.</div>';
+    container.innerHTML = '<div class="empty-state">Não consegui ler o(s) PDF(s). Tente OFX ou planilha.</div>';
   }
 });
 
@@ -6349,29 +6494,75 @@ function parseCsvToRows(text, delimiter){
   return rows;
 }
 
-setupDropZone('drop-planilha','input-planilha', file=>{
-  const isCsv = /\.csv$/i.test(file.name) || file.type === 'text/csv';
-  const reader = new FileReader();
-  reader.onload = (e)=>{
-    try{
-      let rows;
-      if(isCsv){
-        const text = typeof e.target.result === 'string' ? e.target.result : new TextDecoder('utf-8').decode(e.target.result);
-        const delimiter = detectCsvDelimiter(text);
-        rows = parseCsvToRows(text, delimiter).map(r=> r.map(c=>c.trim()));
-      } else {
-        const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        rows = XLSX.utils.sheet_to_json(sheet, {header:1, raw:false, defval:''});
+function readSheetFileToRows(file){
+  return new Promise((resolve, reject)=>{
+    const isCsv = /\.csv$/i.test(file.name) || file.type === 'text/csv';
+    const reader = new FileReader();
+    reader.onload = (e)=>{
+      try{
+        let rows;
+        if(isCsv){
+          const text = typeof e.target.result === 'string' ? e.target.result : new TextDecoder('utf-8').decode(e.target.result);
+          const delimiter = detectCsvDelimiter(text);
+          rows = parseCsvToRows(text, delimiter).map(r=> r.map(c=> String(c).trim()));
+        } else {
+          const wb = XLSX.read(e.target.result, {type:'array', cellDates:true});
+          const sheet = wb.Sheets[wb.SheetNames[0]];
+          rows = XLSX.utils.sheet_to_json(sheet, {header:1, raw:false, defval:''});
+        }
+        resolve(rows || []);
+      }catch(err){ reject(err); }
+    };
+    reader.onerror = ()=> reject(new Error('read fail'));
+    if(isCsv) reader.readAsText(file, 'utf-8');
+    else reader.readAsArrayBuffer(file);
+  });
+}
+
+setupDropZone('drop-planilha','input-planilha', async (files)=>{
+  const list = Array.isArray(files) ? files : Array.from(files||[]);
+  if(!list.length) return;
+  const review = document.getElementById('review-planilha');
+  if(review) review.innerHTML = '<div class="empty-state">Lendo '+list.length+' planilha(s)…</div>';
+  try{
+    let combined = [];
+    const notes = [];
+    for(let fi=0; fi<list.length; fi++){
+      const file = list[fi];
+      try{
+        const rows = await readSheetFileToRows(file);
+        if(!rows.length){ notes.push(file.name+': vazia'); continue; }
+        if(!combined.length){
+          combined = rows.slice();
+          notes.push(file.name+': '+rows.length+' linha(s)');
+        } else {
+          // concatena só dados (pula cabeçalho se parecer igual)
+          const hIdx = findHeaderRowIndex(rows);
+          const data = rows.slice(hIdx + 1);
+          combined = combined.concat(data);
+          notes.push(file.name+': +'+data.length+' linha(s)');
+        }
+      }catch(err){
+        console.error(err);
+        notes.push(file.name+': falha');
       }
-      sheetRawRows = rows;
-      renderColumnMapper(rows);
-    }catch(err){
-      document.getElementById('review-planilha').innerHTML = '<div class="empty-state">Não consegui ler essa planilha.</div>';
     }
-  };
-  if(isCsv) reader.readAsText(file, 'utf-8');
-  else reader.readAsArrayBuffer(file);
+    if(!combined.length){
+      if(review) review.innerHTML = '<div class="empty-state">Não consegui ler as planilhas.</div>';
+      return;
+    }
+    sheetRawRows = combined;
+    renderColumnMapper(combined);
+    if(review && notes.length){
+      const meta = document.createElement('div');
+      meta.style.cssText = 'font-size:12px;color:var(--ink-dim);margin:0 0 10px;';
+      meta.textContent = list.length+' arquivo(s): '+notes.join(' · ');
+      review.insertBefore(meta, review.firstChild);
+    }
+  }catch(err){
+    console.error(err);
+    if(review) review.innerHTML = '<div class="empty-state">Não consegui ler essa planilha.</div>';
+  }
 });
 
 function findHeaderRowIndex(rows){
@@ -6803,13 +6994,19 @@ document.getElementById('cfg-btn-import-sheet').addEventListener('click', ()=>{
    INICIALIZAÇÃO
    ============================================================ */
 /* ============================================================
-   BACKUP COMPLETO (JSON)
+   BACKUP COMPLETO (JSON) + GitHub Gist
    ============================================================ */
-document.getElementById('export-backup-btn').addEventListener('click', ()=>{
-  const backup = {
+const GIST_TOKEN_KEY = 'lc-gist-token';
+const GIST_ID_KEY = 'lc-gist-id';
+const GIST_FILENAME = 'livro-caixa-backup.json';
+
+function buildBackupObject(){
+  return {
     exportedAt: new Date().toISOString(),
     app: 'livro-caixa',
     version: 2,
+    profileName: (currentUser && currentUser.name) || '',
+    profileId: (currentUser && currentUser.profileId) || '',
     transactions: state.transactions,
     categories: state.categories,
     categoryRules: state.categoryRules,
@@ -6822,6 +7019,124 @@ document.getElementById('export-backup-btn').addEventListener('click', ()=>{
     importPrefs: state.importPrefs,
     transactionTypes: state.transactionTypes,
   };
+}
+
+function getGistToken(){ try{ return localStorage.getItem(GIST_TOKEN_KEY) || ''; }catch(e){ return ''; } }
+function setGistToken(t){ try{ if(t) localStorage.setItem(GIST_TOKEN_KEY, t); else localStorage.removeItem(GIST_TOKEN_KEY); }catch(e){} }
+function getGistId(){ try{ return localStorage.getItem(GIST_ID_KEY) || ''; }catch(e){ return ''; } }
+function setGistId(id){ try{ if(id) localStorage.setItem(GIST_ID_KEY, id); else localStorage.removeItem(GIST_ID_KEY); }catch(e){} }
+
+function updateGistStatus(msg){
+  const el = document.getElementById('gist-status');
+  if(el) el.textContent = msg;
+}
+function refreshGistUI(){
+  const tok = document.getElementById('gist-token');
+  const gid = document.getElementById('gist-id');
+  if(tok && !tok.value) tok.value = getGistToken();
+  if(gid && !gid.value) gid.value = getGistId();
+  const hasTok = !!getGistToken();
+  const hasId = !!getGistId();
+  if(!hasTok) updateGistStatus('GitHub Gist não configurado — cole o token e salve.');
+  else if(!hasId) updateGistStatus('Token salvo. Envie o backup uma vez para criar o Gist.');
+  else updateGistStatus('Pronto · Gist '+getGistId().slice(0,12)+'… · token configurado');
+}
+
+async function gistApi(path, opts){
+  const token = getGistToken();
+  if(!token) throw new Error('Token GitHub ausente');
+  const res = await fetch('https://api.github.com'+path, {
+    ...opts,
+    headers: {
+      'Accept': 'application/vnd.github+json',
+      'Authorization': 'Bearer '+token,
+      'X-GitHub-Api-Version': '2022-11-28',
+      'Content-Type': 'application/json',
+      ...(opts && opts.headers || {})
+    }
+  });
+  const textBody = await res.text();
+  let data = null;
+  try{ data = textBody ? JSON.parse(textBody) : null; }catch(e){ data = { raw: textBody }; }
+  if(!res.ok){
+    const msg = (data && (data.message || data.error)) || ('HTTP '+res.status);
+    throw new Error(msg);
+  }
+  return data;
+}
+
+async function uploadBackupToGist(){
+  const backup = buildBackupObject();
+  const content = JSON.stringify(backup, null, 2);
+  const gistId = getGistId();
+  updateGistStatus('Enviando…');
+  if(gistId){
+    await gistApi('/gists/'+encodeURIComponent(gistId), {
+      method: 'PATCH',
+      body: JSON.stringify({
+        description: 'Livro-Caixa backup '+new Date().toISOString().slice(0,10),
+        files: { [GIST_FILENAME]: { content } }
+      })
+    });
+    updateGistStatus('Backup atualizado no Gist '+gistId.slice(0,12)+'… · '+backup.transactions.length+' lançamentos');
+    showToast('Backup enviado ao GitHub.');
+    return gistId;
+  }
+  const created = await gistApi('/gists', {
+    method: 'POST',
+    body: JSON.stringify({
+      description: 'Livro-Caixa backup (secreto)',
+      public: false,
+      files: { [GIST_FILENAME]: { content } }
+    })
+  });
+  if(created && created.id){
+    setGistId(created.id);
+    const gidInput = document.getElementById('gist-id');
+    if(gidInput) gidInput.value = created.id;
+    updateGistStatus('Gist criado '+created.id.slice(0,12)+'… · '+backup.transactions.length+' lançamentos');
+    showToast('Gist criado e backup enviado.');
+    return created.id;
+  }
+  throw new Error('Resposta sem id de Gist');
+}
+
+async function downloadBackupFromGist(){
+  const gistId = getGistId() || (document.getElementById('gist-id')||{}).value;
+  if(!gistId) throw new Error('Informe o Gist ID');
+  updateGistStatus('Baixando…');
+  const gist = await gistApi('/gists/'+encodeURIComponent(gistId), { method: 'GET' });
+  const files = gist.files || {};
+  let file = files[GIST_FILENAME] || files[Object.keys(files)[0]];
+  if(!file) throw new Error('Gist sem arquivos');
+  let content = file.content;
+  if(file.truncated && file.raw_url){
+    const raw = await fetch(file.raw_url, {
+      headers: { 'Authorization': 'Bearer '+getGistToken(), 'Accept': 'application/vnd.github.raw' }
+    });
+    if(!raw.ok) throw new Error('Falha ao baixar raw');
+    content = await raw.text();
+  }
+  const parsed = JSON.parse(content);
+  if(!parsed || !Array.isArray(parsed.transactions)) throw new Error('JSON do Gist não é um backup válido');
+  return parsed;
+}
+
+function applyImportedBackup(parsed){
+  normalizeLoadedState(parsed);
+  saveState();
+  try{ document.getElementById('type-toggle').innerHTML = typeToggleHTML('despesa'); }catch(e){}
+  try{ fillCategorySelects(); }catch(e){}
+  try{ fillAccountSuggestions(); }catch(e){}
+  try{ renderDashboard(); }catch(e){}
+  try{ renderTransactions(); }catch(e){}
+  try{ renderCategoriesView(); }catch(e){}
+  try{ renderRecurringList(); }catch(e){}
+  try{ renderTypesList(); }catch(e){}
+}
+
+document.getElementById('export-backup-btn').addEventListener('click', ()=>{
+  const backup = buildBackupObject();
   const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -6870,6 +7185,54 @@ document.getElementById('import-backup-input').addEventListener('change', (e)=>{
   document.getElementById('import-backup-input').value = '';
 });
 
+document.getElementById('gist-save-creds') && document.getElementById('gist-save-creds').addEventListener('click', ()=>{
+  const t = (document.getElementById('gist-token')?.value || '').trim();
+  const id = (document.getElementById('gist-id')?.value || '').trim();
+  setGistToken(t);
+  setGistId(id);
+  refreshGistUI();
+  showToast(t ? 'Credenciais Gist salvas neste aparelho.' : 'Token removido.');
+});
+
+document.getElementById('gist-upload') && document.getElementById('gist-upload').addEventListener('click', async ()=>{
+  const t = (document.getElementById('gist-token')?.value || '').trim() || getGistToken();
+  if(t) setGistToken(t);
+  const id = (document.getElementById('gist-id')?.value || '').trim();
+  if(id) setGistId(id);
+  if(!getGistToken()){ showToast('Cole o token GitHub e salve.'); return; }
+  try{
+    await uploadBackupToGist();
+  }catch(err){
+    console.error(err);
+    updateGistStatus('Erro: '+(err.message||err));
+    showToast('Falha ao enviar: '+(err.message||'erro'));
+  }
+});
+
+document.getElementById('gist-download') && document.getElementById('gist-download').addEventListener('click', async ()=>{
+  const t = (document.getElementById('gist-token')?.value || '').trim() || getGistToken();
+  if(t) setGistToken(t);
+  const id = (document.getElementById('gist-id')?.value || '').trim();
+  if(id) setGistId(id);
+  if(!getGistToken()){ showToast('Cole o token GitHub e salve.'); return; }
+  if(!getGistId()){ showToast('Informe o Gist ID.'); return; }
+  try{
+    const parsed = await downloadBackupFromGist();
+    askConfirm(
+      'Restaurar do GitHub',
+      'Isso vai SUBSTITUIR os dados do perfil atual pelo backup do Gist ('+parsed.transactions.length+' lançamentos). Continuar?',
+      ()=>{
+        applyImportedBackup(parsed);
+        updateGistStatus('Restaurado do Gist · '+parsed.transactions.length+' lançamentos · '+ (parsed.exportedAt||''));
+        showToast('Backup do GitHub restaurado.');
+      }
+    );
+  }catch(err){
+    console.error(err);
+    updateGistStatus('Erro: '+(err.message||err));
+    showToast('Falha ao baixar: '+(err.message||'erro'));
+  }
+});
 
 /* ============================================================
    LANÇAMENTOS RECORRENTES
@@ -7413,6 +7776,7 @@ function hideAuthGate(){
 function showAuthGate(){
   const g = document.getElementById('auth-gate');
   if(g) g.classList.remove('hidden');
+  try{ renderAuthProfilesList(); }catch(e){}
 }
 function updateAuthConfigUI(){
   const el = document.getElementById('auth-config-user');
@@ -7428,6 +7792,9 @@ function updateAuthConfigUI(){
 }
 async function enterAppAs(user){
   currentUser = user;
+  if(user && user.provider === 'local' && user.profileId){
+    try{ touchProfile(user.profileId); }catch(e){}
+  }
   saveAuthSession(user);
   STORAGE_KEY = activeStorageKey();
   hideAuthGate(); // some logo para não ficar preso na tela de login
@@ -7663,6 +8030,8 @@ document.getElementById('btn-harvest-apply') && document.getElementById('btn-har
 
 
 function initAuthUI(){
+  try{ renderAuthProfilesList(); }catch(e){}
+
   const savedClient = getSavedGoogleClientId();
   const input = document.getElementById('auth-google-client-id');
   if(input && savedClient) input.value = savedClient;
@@ -7679,9 +8048,66 @@ function initAuthUI(){
     }
   });
 
-  document.getElementById('auth-continue-local').addEventListener('click', ()=>{
-    const name = (document.getElementById('auth-local-name').value || '').trim() || 'Usuário local';
-    enterAppAs({ provider: 'local', name, email: '' });
+  document.getElementById('auth-continue-local') && document.getElementById('auth-continue-local').addEventListener('click', ()=>{
+    enterAppAs({ provider: 'local', name: 'Usuário local', email: '' });
+  });
+
+  document.getElementById('auth-create-profile') && document.getElementById('auth-create-profile').addEventListener('click', ()=>{
+    const name = (document.getElementById('auth-new-profile-name')?.value || '').trim();
+    if(!name){ showToast('Informe um nome para o perfil.'); return; }
+    const p = createProfile(name);
+    enterAppAs({ provider:'local', name: p.name, profileId: p.id });
+  });
+
+  document.getElementById('auth-import-backup') && document.getElementById('auth-import-backup').addEventListener('click', ()=>{
+    document.getElementById('auth-backup-input')?.click();
+  });
+
+  document.getElementById('auth-backup-input') && document.getElementById('auth-backup-input').addEventListener('change', async (e)=>{
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if(!file) return;
+    try{
+      const textJson = await file.text();
+      const parsed = JSON.parse(textJson);
+      if(!parsed || typeof parsed !== 'object'){ showToast('Backup inválido.'); return; }
+      // aceita backup completo ou só state
+      const payload = parsed.transactions ? parsed : (parsed.state || parsed.data || parsed);
+      if(!payload || !Array.isArray(payload.transactions) && !payload.categories){
+        // ainda pode ser state sem transactions
+        if(!payload || typeof payload !== 'object'){ showToast('Arquivo não parece backup do Livro-Caixa.'); return; }
+      }
+      let name = (document.getElementById('auth-new-profile-name')?.value || '').trim();
+      if(!name) name = (parsed.profileName || parsed.userName || file.name.replace(/\.json$/i,'').slice(0,40) || 'Restaurado');
+      const p = createProfile(name);
+      const user = { provider:'local', name: p.name, profileId: p.id };
+      currentUser = user;
+      saveAuthSession(user);
+      STORAGE_KEY = activeStorageKey();
+      // grava direto no storage do perfil
+      try{
+        if(STORAGE_MODE === 'local'){
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(payload.transactions ? payload : {
+            transactions: payload.transactions || [],
+            categories: payload.categories,
+            categoryRules: payload.categoryRules,
+            settings: payload.settings,
+            accountLimits: payload.accountLimits,
+            accounts: payload.accounts,
+            goals: payload.goals,
+            debts: payload.debts,
+            importPrefs: payload.importPrefs,
+            recurringTemplates: payload.recurringTemplates,
+            transactionTypes: payload.transactionTypes
+          }));
+        }
+      }catch(err){ console.warn(err); }
+      await enterAppAs(user);
+      showToast('Backup importado no perfil '+p.name);
+    }catch(err){
+      console.error(err);
+      showToast('Não consegui ler o backup.');
+    }
   });
 
   document.getElementById('cfg-save-google-client').addEventListener('click', ()=>{
