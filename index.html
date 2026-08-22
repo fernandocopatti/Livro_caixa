@@ -931,6 +931,12 @@
         <select id="filter-account"><option value="">Toda conta/cartão</option><!-- Sem conta definida é preenchida dinamicamente --></select>
         <select id="filter-tag"><option value="">Todas as tags</option></select>
         <input class="text-input" id="filter-search" placeholder="Buscar descrição… (/)" style="flex:1;min-width:160px;">
+        <div class="date-range-row" title="Filtrar por valor">
+          <label for="filter-amount-min">R$ min</label>
+          <input type="number" id="filter-amount-min" step="0.01" min="0" placeholder="0" style="width:90px;" title="Valor mínimo">
+          <label for="filter-amount-max">máx</label>
+          <input type="number" id="filter-amount-max" step="0.01" min="0" placeholder="∞" style="width:90px;" title="Valor máximo">
+        </div>
         <button type="button" class="btn ghost" id="filter-clear-btn" style="padding:8px 12px;font-size:12px;">Limpar filtros</button>
         <button type="button" class="btn secondary" id="btn-export-csv" style="padding:8px 12px;font-size:12px;">Exportar CSV</button>
       </div>
@@ -1234,7 +1240,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-21-02 (patrimônio sem saldo de cartão)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-22-02 (palavra-chave com limite de valor)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1558,8 +1564,10 @@
       </div>
       <div class="field full">
         <label>Palavras-chave (opcional)</label>
-        <input type="text" id="cat-keywords" placeholder="Ex.: netflix, spotify, hbo — separadas por vírgula">
-        <span style="font-size:11px;color:var(--ink-faint);margin-top:4px;display:block;">Quando a descrição de um lançamento contiver uma dessas palavras, essa categoria é sugerida automaticamente — em lançamentos manuais e em importações.</span>
+        <input type="text" id="cat-keywords" placeholder="Ex.: netflix, coasa:50, uber:20-80">
+        <span style="font-size:11px;color:var(--ink-faint);margin-top:4px;display:block;">
+          Separe por vírgula. Com limite: <code>coasa:50</code> (até R$&nbsp;50) ou <code>coasa:10-50</code> (entre 10 e 50). Ex.: COASA até 50 em Lanche → <code>coasa:50</code>.
+        </span>
       </div>
     </div>
     <div class="btn-row">
@@ -2267,7 +2275,7 @@ function renderCategoriesView(){
       </div>` : ''}
       ${(c.keywords && c.keywords.length) ? `
       <div style="flex-basis:100%;font-size:11px;color:var(--ink-faint);margin-top:2px;">
-        🔑 ${c.keywords.map(escapeHTML).join(', ')}
+        🔑 ${c.keywords.map(k=>escapeHTML(formatKeywordBadge(k))).join(', ')}
       </div>` : ''}
     </div>`;
   };
@@ -2341,7 +2349,7 @@ function openCatModal(kind, editId){
     document.getElementById('cat-name').value = c.name;
     document.getElementById('cat-color').value = c.color;
     document.getElementById('cat-budget').value = c.budget || '';
-    document.getElementById('cat-keywords').value = (c.keywords || []).join(', ');
+    document.getElementById('cat-keywords').value = keywordsToInputValue(c.keywords || []);
   } else {
     document.getElementById('cat-name').value = '';
     document.getElementById('cat-color').value = randomCategoryColor();
@@ -2359,13 +2367,69 @@ document.getElementById('cat-cancel').addEventListener('click', ()=>{
 document.getElementById('cat-modal-bg').addEventListener('click', (e)=>{
   if(e.target.id==='cat-modal-bg'){ document.getElementById('cat-modal-bg').classList.remove('active'); editingCatId = null; }
 });
+/**
+ * "netflix" | "coasa:50" (máx) | "coasa:10-50" (min-max)
+ * Retorna string ou { keyword, minAmount?, maxAmount? }.
+ */
 function parseKeywordsInput(raw){
-  return Array.from(new Set(
-    raw.split(',')
-      .map(k=> normalizeDesc(k))
-      .filter(k=> k.length>=2)
-  ));
+  const parts = String(raw||'').split(',').map(s=> s.trim()).filter(Boolean);
+  const out = [];
+  const seen = new Set();
+  parts.forEach(part=>{
+    const m = part.match(/^(.+?)\s*:\s*(\d+(?:[.,]\d+)?)\s*(?:-\s*(\d+(?:[.,]\d+)?))?$/);
+    let keyword, minAmount = null, maxAmount = null;
+    if(m){
+      keyword = normalizeDesc(m[1]);
+      const a = parseFloat(String(m[2]).replace(',', '.'));
+      const b = m[3] != null ? parseFloat(String(m[3]).replace(',', '.')) : null;
+      if(b != null && !isNaN(b)){ minAmount = a; maxAmount = b; }
+      else if(!isNaN(a)){ maxAmount = a; }
+    } else {
+      keyword = normalizeDesc(part);
+    }
+    if(!keyword || keyword.length < 2) return;
+    const key = keyword+'|'+(minAmount??'')+'|'+(maxAmount??'');
+    if(seen.has(key)) return;
+    seen.add(key);
+    if(minAmount != null || maxAmount != null) out.push({ keyword, minAmount, maxAmount });
+    else out.push(keyword);
+  });
+  return out;
 }
+function keywordEntryText(k){
+  if(k && typeof k === 'object'){
+    const w = k.keyword || '';
+    if(k.minAmount != null && k.maxAmount != null) return w+':'+k.minAmount+'-'+k.maxAmount;
+    if(k.maxAmount != null) return w+':'+k.maxAmount;
+    return w;
+  }
+  return String(k||'');
+}
+function keywordsToInputValue(list){
+  return (list||[]).map(keywordEntryText).join(', ');
+}
+function formatKeywordBadge(k){
+  if(k && typeof k === 'object'){
+    const w = k.keyword || '';
+    if(k.minAmount != null && k.maxAmount != null) return w+' (R$ '+k.minAmount+'–'+k.maxAmount+')';
+    if(k.maxAmount != null) return w+' (até R$ '+k.maxAmount+')';
+    return w;
+  }
+  return String(k||'');
+}
+function keywordMatches(entry, normDesc, amount){
+  const kw = typeof entry === 'object' ? entry.keyword : entry;
+  const minA = typeof entry === 'object' ? entry.minAmount : null;
+  const maxA = typeof entry === 'object' ? entry.maxAmount : null;
+  if(!kw || !normDesc.includes(normalizeDesc(String(kw)))) return false;
+  if(amount != null && !isNaN(Number(amount))){
+    const amt = Number(amount);
+    if(minA != null && minA !== '' && amt < Number(minA)) return false;
+    if(maxA != null && maxA !== '' && amt > Number(maxA)) return false;
+  }
+  return true;
+}
+
 document.getElementById('cat-save').addEventListener('click', ()=>{
   const name = document.getElementById('cat-name').value.trim();
   const kind = document.getElementById('cat-kind').value;
@@ -4646,6 +4710,12 @@ function renderTransactions(){
   else if(account) list = list.filter(t=>t.account===account);
   if(tagFilter) list = list.filter(t=> (t.tags||[]).includes(tagFilter));
   if(search) list = list.filter(t=>t.desc.toLowerCase().includes(search));
+  const aminRaw = (document.getElementById('filter-amount-min')||{}).value;
+  const amaxRaw = (document.getElementById('filter-amount-max')||{}).value;
+  const amin = aminRaw !== '' && aminRaw != null ? Number(aminRaw) : null;
+  const amax = amaxRaw !== '' && amaxRaw != null ? Number(amaxRaw) : null;
+  if(amin != null && !isNaN(amin)) list = list.filter(t=> Number(t.amount) >= amin);
+  if(amax != null && !isNaN(amax)) list = list.filter(t=> Number(t.amount) <= amax);
   list.sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt));
   currentTxList = list;
   selectedIds = new Set();
@@ -4786,7 +4856,7 @@ document.getElementById('bulk-delete-btn').addEventListener('click', ()=>{
   );
 });
 
-['filter-month','filter-type','filter-category','filter-source','filter-account','filter-tag','filter-from','filter-to'].forEach(id=>{
+['filter-month','filter-type','filter-category','filter-source','filter-account','filter-tag','filter-from','filter-to','filter-amount-min','filter-amount-max'].forEach(id=>{
   document.getElementById(id).addEventListener('change', ()=>{
     // se escolher mês, limpa período customizado; se escolher período, o mês é ignorado na filtragem
     if(id === 'filter-month' && document.getElementById('filter-month').value){
@@ -4800,6 +4870,8 @@ document.getElementById('bulk-delete-btn').addEventListener('click', ()=>{
   });
 });
 document.getElementById('filter-search').addEventListener('input', renderTransactions);
+document.getElementById('filter-amount-min') && document.getElementById('filter-amount-min').addEventListener('input', renderTransactions);
+document.getElementById('filter-amount-max') && document.getElementById('filter-amount-max').addEventListener('input', renderTransactions);
 document.getElementById('filter-clear-btn').addEventListener('click', ()=>{
   document.getElementById('filter-month').value = '';
   document.getElementById('filter-from').value = '';
@@ -4809,6 +4881,12 @@ document.getElementById('filter-clear-btn').addEventListener('click', ()=>{
   document.getElementById('filter-source').value = '';
   document.getElementById('filter-account').value = '';
   document.getElementById('filter-search').value = '';
+  const famin = document.getElementById('filter-amount-min');
+  const famax = document.getElementById('filter-amount-max');
+  if(famin) famin.value = '';
+  if(famax) famax.value = '';
+  const ftag = document.getElementById('filter-tag');
+  if(ftag) ftag.value = '';
   renderTransactions();
 });
 
@@ -5698,12 +5776,18 @@ function suggestCategory(desc, type, amount){
     return adv[0].category;
   }
 
-  // 2. palavras-chave cadastradas na categoria
-  let bestKwCat = null, bestKwLen = 0;
+  // 2. palavras-chave da categoria (com faixa de valor opcional)
+  let bestKwCat = null, bestKwLen = -1, bestHasRange = false;
   state.categories.forEach(c=>{
     if(c.kind !== kind || !Array.isArray(c.keywords)) return;
     c.keywords.forEach(k=>{
-      if(k && norm.includes(k) && k.length > bestKwLen){ bestKwCat = c.id; bestKwLen = k.length; }
+      if(!keywordMatches(k, norm, amt)) return;
+      const kw = typeof k === 'object' ? (k.keyword||'') : String(k||'');
+      const hasRange = typeof k === 'object' && (k.minAmount != null || k.maxAmount != null);
+      // prefere match com faixa de valor; depois palavra mais longa
+      if(hasRange && !bestHasRange){ bestKwCat = c.id; bestKwLen = kw.length; bestHasRange = true; return; }
+      if(hasRange === bestHasRange && kw.length > bestKwLen){ bestKwCat = c.id; bestKwLen = kw.length; }
+      if(!hasRange && !bestHasRange && kw.length > bestKwLen){ bestKwCat = c.id; bestKwLen = kw.length; }
     });
   });
   if(bestKwCat) return bestKwCat;
@@ -5740,12 +5824,16 @@ function suggestCategoryFromRulesOnly(desc, type, amount){
     return adv[0].category;
   }
 
-  let bestKwCat = null, bestKwLen = 0;
+  let bestKwCat = null, bestKwLen = -1, bestHasRange = false;
   state.categories.forEach(c=>{
     if(c.kind !== kind || !Array.isArray(c.keywords)) return;
     c.keywords.forEach(k=>{
-      const kk = normalizeDesc(k);
-      if(kk && norm.includes(kk) && kk.length > bestKwLen){ bestKwCat = c.id; bestKwLen = kk.length; }
+      if(!keywordMatches(k, norm, amt)) return;
+      const kw = typeof k === 'object' ? (k.keyword||'') : String(k||'');
+      const hasRange = typeof k === 'object' && (k.minAmount != null || k.maxAmount != null);
+      if(hasRange && !bestHasRange){ bestKwCat = c.id; bestKwLen = kw.length; bestHasRange = true; return; }
+      if(hasRange === bestHasRange && kw.length > bestKwLen){ bestKwCat = c.id; bestKwLen = kw.length; bestHasRange = hasRange; }
+      if(!hasRange && !bestHasRange && kw.length > bestKwLen){ bestKwCat = c.id; bestKwLen = kw.length; }
     });
   });
   if(bestKwCat) return bestKwCat;
