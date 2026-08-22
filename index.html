@@ -1240,7 +1240,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-22-04 (cérebro visível no editar)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-22-05 (aprender na troca rápida de categoria)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -4567,7 +4567,7 @@ function rowHTML(t, selectable){
     ${selectable ? `<input type="checkbox" class="row-select-chk" data-select="${t.id}">` : ''}
     <span class="ledger-date">${fmtDate(t.date)}</span>
     <span class="ledger-desc">${escapeHTML(t.desc)}${t.photo ? ' 📎' : ''}${t.transferId ? ` <span style="color:#5C8FD6;font-size:11px;">↔ ${t.transferLeg==='in'?'entrada':'saída'}</span>` : ''}${t.installment ? ` <span style="color:var(--gold);font-size:11px;">📅${t.installment.current}/${t.installment.total}</span>` : ''}${isTxLocked(t) ? ` <span style="color:var(--ink-faint);font-size:11px;" title="Período conferido">🔒</span>` : ''}${t.account ? `<span class="ledger-desc-sub">💳 ${escapeHTML(t.account)}</span>` : ''}${t.notes ? `<span class="ledger-desc-sub">${escapeHTML(t.notes)}</span>`:''}</span>
-    <span class="cat-tag cat-quick-wrap" data-cat-edit="${t.id}" title="Clique para mudar a categoria"><span class="stamp" style="background:${c.color}">${initials(c.name)}</span>${c.name}</span>
+    <span class="cat-tag cat-quick-wrap" data-cat-edit="${t.id}" title="Clique para mudar a categoria (também aprende a correção)"><span class="stamp" style="background:${c.color}">${initials(c.name)}</span>${c.name}</span>
     <span class="ledger-amt" style="color:${tType.color};">${tType.flowSign===0 ? '↔' : (isInflow ? '+' : '−')} ${fmtBRL(t.amount)}</span>
     <button class="row-del" data-del="${t.id}" title="Excluir">✕</button>
   </div>`;
@@ -4643,12 +4643,22 @@ function attachRowHandlers(container){
       menu.querySelectorAll('[data-set-cat]').forEach(btn=>{
         btn.addEventListener('click', (ev)=>{
           ev.stopPropagation();
-          t.category = btn.dataset.setCat;
+          const newCat = btn.dataset.setCat;
+          const prev = t.category;
+          t.category = newCat;
+          let learned = null;
+          // troca rápida também aprende (correção manual na lista)
+          if(newCat && t.desc && newCat !== prev){
+            try{
+              learned = learnCategory(t.desc, newCat, { asManual: true, force: true });
+            }catch(e){ console.warn(e); }
+          }
           saveState();
           menu.remove();
           renderDashboard();
           renderTransactions();
-          showToast('Categoria atualizada.');
+          if(learned) showToast('Categoria atualizada · aprendeu “'+learned+'”.');
+          else showToast('Categoria atualizada.');
         });
       });
       const close = (ev)=>{
