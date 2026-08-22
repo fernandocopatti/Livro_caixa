@@ -4946,6 +4946,17 @@ document.getElementById('m-save').addEventListener('click', ()=>{
   if(accountVal) t.account = accountVal; else delete t.account;
   t.type = getActiveType(document.getElementById('m-type-toggle'));
 
+  const doLearn = !!(document.getElementById('m-learn')||{}).checked;
+  const doLearnAmt = !!(document.getElementById('m-learn-amount')||{}).checked;
+  let learnedKw = null;
+  if(doLearn && t.desc && t.category){
+    learnedKw = learnCategory(t.desc, t.category, {
+      asManual: true,
+      force: true,
+      maxAmount: doLearnAmt ? t.amount : null
+    });
+  }
+
   // split de despesa
   const parts = readSplitParts();
   if(parts.length >= 2){
@@ -4977,7 +4988,8 @@ document.getElementById('m-save').addEventListener('click', ()=>{
     showToast('Despesa dividida em '+parts.length+' partes.');
   } else {
     delete t.splits;
-    showToast('Lançamento atualizado.');
+    if(learnedKw) showToast('Lançamento atualizado · aprendeu “'+learnedKw+'”'+(doLearnAmt?' até R$ '+Number(t.amount).toFixed(2):'')+'.');
+    else showToast('Lançamento atualizado.');
   }
 
   saveState();
@@ -5724,20 +5736,55 @@ function runHarvestApply(){
 }
 
 
-function learnCategory(desc, categoryId){
+function learnCategory(desc, categoryId, opts){
+  opts = opts || {};
   const keyword = extractKeyword(desc);
-  if(!keyword) return;
-  const existing = state.categoryRules.find(r=> normalizeDesc(r.keyword)===normalizeDesc(keyword));
+  if(!keyword) return null;
+  const maxAmount = opts.maxAmount != null && opts.maxAmount !== '' ? Number(opts.maxAmount) : null;
+  const asManual = !!opts.asManual;
+  const existing = state.categoryRules.find(r=>{
+    if(normalizeDesc(r.keyword) !== normalizeDesc(keyword)) return false;
+    // mesma faixa de valor (ou ambas sem faixa)
+    const rMax = r.maxAmount != null && r.maxAmount !== '' ? Number(r.maxAmount) : null;
+    const rMin = r.minAmount != null && r.minAmount !== '' ? Number(r.minAmount) : null;
+    if(maxAmount != null) return rMax === maxAmount && (rMin == null || isNaN(rMin));
+    return rMax == null && rMin == null;
+  });
   if(existing){
-    // não sobrescreve regra cadastrada manualmente
-    if(existing.source === 'manual') return;
+    if(existing.source === 'manual' && !asManual){
+      // atualiza categoria se o usuário pediu aprender na edição
+      if(opts.force) existing.category = categoryId;
+      else return existing;
+    }
     existing.category = categoryId;
-    existing.source = existing.source || 'app';
+    existing.source = asManual ? 'manual' : (existing.source || 'app');
+    if(maxAmount != null) existing.maxAmount = maxAmount;
   } else {
-    state.categoryRules.push({ keyword, category: categoryId, source: 'app' });
+    const rule = { keyword, category: categoryId, source: asManual ? 'manual' : 'app' };
+    if(maxAmount != null && !isNaN(maxAmount)) rule.maxAmount = maxAmount;
+    state.categoryRules.push(rule);
   }
+  // também acrescenta palavra-chave na categoria (com teto se houver)
+  try{
+    const cat = state.categories.find(c=> c.id === categoryId);
+    if(cat){
+      if(!Array.isArray(cat.keywords)) cat.keywords = [];
+      const entry = maxAmount != null && !isNaN(maxAmount)
+        ? { keyword: normalizeDesc(keyword), maxAmount }
+        : normalizeDesc(keyword);
+      const exists = cat.keywords.some(k=>{
+        if(typeof entry === 'object')
+          return typeof k === 'object' && normalizeDesc(k.keyword)===entry.keyword && Number(k.maxAmount)===Number(entry.maxAmount);
+        return (typeof k === 'string' ? normalizeDesc(k) : normalizeDesc(k.keyword||'')) === normalizeDesc(keyword)
+          && !(k && typeof k === 'object' && k.maxAmount != null);
+      });
+      if(!exists) cat.keywords.push(entry);
+    }
+  }catch(e){}
   saveState();
+  return keyword;
 }
+
 
 function ruleSourceOf(r){
   if(!r) return 'app';
