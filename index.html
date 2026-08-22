@@ -1240,7 +1240,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-22-05 (aprender na troca rápida de categoria)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-22-06 (aplicar categoria em descrições iguais)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -4644,21 +4644,26 @@ function attachRowHandlers(container){
         btn.addEventListener('click', (ev)=>{
           ev.stopPropagation();
           const newCat = btn.dataset.setCat;
-          const prev = t.category;
-          t.category = newCat;
-          let learned = null;
-          // troca rápida também aprende (correção manual na lista)
-          if(newCat && t.desc && newCat !== prev){
-            try{
-              learned = learnCategory(t.desc, newCat, { asManual: true, force: true });
-            }catch(e){ console.warn(e); }
-          }
-          saveState();
           menu.remove();
-          renderDashboard();
-          renderTransactions();
-          if(learned) showToast('Categoria atualizada · aprendeu “'+learned+'”.');
-          else showToast('Categoria atualizada.');
+          applyCategoryChange(t, newCat, {
+            learn: true,
+            onDone: (count, learned, meta)=>{
+              renderDashboard();
+              renderTransactions();
+              meta = meta || {};
+              if(meta.pendingOthers){
+                let msg = 'Categoria atualizada';
+                if(learned) msg += ' · aprendeu “'+learned+'”';
+                showToast(msg+'.');
+                return;
+              }
+              let msg = meta.appliedAll
+                ? ('Categoria aplicada em '+count+' lançamentos')
+                : (count > 1 ? ('Categoria em '+count+' lançamentos') : 'Categoria atualizada');
+              if(learned) msg += ' · aprendeu “'+learned+'”';
+              showToast(msg+'.');
+            }
+          });
         });
       });
       const close = (ev)=>{
@@ -4962,10 +4967,12 @@ document.querySelectorAll('#modal-bg .modal input, #modal-bg .modal select').for
 document.getElementById('m-save').addEventListener('click', ()=>{
   const t = state.transactions.find(x=>x.id===editingId);
   if(!t) return;
+  const prevCategory = t.category;
   t.date = document.getElementById('m-date').value || t.date;
   t.amount = parseFloat(document.getElementById('m-amount').value) || t.amount;
   t.desc = document.getElementById('m-desc').value || t.desc;
-  t.category = document.getElementById('m-category').value || t.category;
+  const newCategory = document.getElementById('m-category').value || t.category;
+  t.category = newCategory;
   const accountVal = document.getElementById('m-account').value.trim();
   if(accountVal) t.account = accountVal; else delete t.account;
   t.type = getActiveType(document.getElementById('m-type-toggle'));
@@ -4980,6 +4987,10 @@ document.getElementById('m-save').addEventListener('click', ()=>{
       maxAmount: doLearnAmt ? t.amount : null
     });
   }
+
+  const sameDescOthers = (newCategory && newCategory !== prevCategory)
+    ? findSameDescriptionTx(t, { sameType: true, onlyDifferentCategory: true, newCategory })
+    : [];
 
   // split de despesa
   const parts = readSplitParts();
@@ -5022,6 +5033,20 @@ document.getElementById('m-save').addEventListener('click', ()=>{
   fillAccountSuggestions();
   renderDashboard();
   renderTransactions();
+
+  if(sameDescOthers && sameDescOthers.length){
+    askConfirm(
+      'Mesma descrição',
+      'Há '+sameDescOthers.length+' outro(s) com a mesma descrição. Aplicar a categoria neles também?',
+      ()=>{
+        sameDescOthers.forEach(x=>{ x.category = newCategory; });
+        saveState();
+        renderDashboard();
+        renderTransactions();
+        showToast('Categoria aplicada em '+(sameDescOthers.length+1)+' lançamentos.');
+      }
+    );
+  }
 });
 
 /* ============================================================
@@ -5759,6 +5784,71 @@ function runHarvestApply(){
   );
 }
 
+
+
+/** Outros lançamentos com a mesma descrição (normalizada), opcionalmente mesmo tipo. */
+function findSameDescriptionTx(tx, opts){
+  opts = opts || {};
+  if(!tx || !tx.desc) return [];
+  const norm = normalizeDesc(tx.desc);
+  if(!norm) return [];
+  return state.transactions.filter(x=>{
+    if(x.id === tx.id) return false;
+    if(normalizeDesc(x.desc) !== norm) return false;
+    if(opts.sameType !== false && (x.type||'despesa') !== (tx.type||'despesa')) return false;
+    if(opts.onlyDifferentCategory && x.category === (opts.newCategory || tx.category)) return false;
+    if(typeof isTxLocked === 'function' && isTxLocked(x)) return false;
+    return true;
+  });
+}
+
+/**
+ * Aplica categoria ao lançamento e pergunta se deve repetir nos de mesma descrição.
+ * onDone(count) chamado ao final.
+ */
+function applyCategoryChange(tx, newCategory, opts){
+  opts = opts || {};
+  const prev = tx.category;
+  if(!tx || !newCategory || newCategory === prev){
+    if(opts.onDone) opts.onDone(0);
+    return;
+  }
+  const learn = opts.learn !== false;
+  const others = findSameDescriptionTx(tx, { sameType: true, onlyDifferentCategory: true, newCategory });
+  const doOne = ()=>{
+    tx.category = newCategory;
+    let learned = null;
+    if(learn && tx.desc){
+      try{ learned = learnCategory(tx.desc, newCategory, { asManual: true, force: true, maxAmount: opts.maxAmount }); }catch(e){}
+    }
+    saveState();
+    if(opts.onDone) opts.onDone(1, learned);
+  };
+  if(!others.length){
+    doOne();
+    return;
+  }
+  askConfirm(
+    'Mesma descrição',
+    'Há '+others.length+' outro(s) lançamento(s) com a mesma descrição'+
+      (opts.sameType!==false?' e tipo':'')+
+      '. Aplicar a categoria em todos ('+(others.length+1)+' no total)?',
+    ()=>{
+      tx.category = newCategory;
+      others.forEach(x=>{ x.category = newCategory; });
+      let learned = null;
+      if(learn && tx.desc){
+        try{ learned = learnCategory(tx.desc, newCategory, { asManual: true, force: true, maxAmount: opts.maxAmount }); }catch(e){}
+      }
+      saveState();
+      if(opts.onDone) opts.onDone(others.length + 1, learned);
+    },
+    ()=>{
+      // se askConfirm não tem onNo, só aplica no atual — verificar askConfirm
+      doOne();
+    }
+  );
+}
 
 function learnCategory(desc, categoryId, opts){
   opts = opts || {};
