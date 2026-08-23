@@ -7340,11 +7340,50 @@ function setupGistSyncOnExit(){
 }
 
 
+const GIST_DEVICE_ID_KEY = 'lc-device-id';
+const GIST_DEVICE_NAME_KEY = 'lc-device-name';
+const GIST_LAST_LOCAL_EXPORT_KEY = 'lc-last-local-export-at';
+
+function getOrCreateDeviceId(){
+  try{
+    let id = localStorage.getItem(GIST_DEVICE_ID_KEY);
+    if(!id){
+      id = 'dev_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,9);
+      localStorage.setItem(GIST_DEVICE_ID_KEY, id);
+    }
+    return id;
+  }catch(e){ return 'dev_unknown'; }
+}
+function getDeviceName(){
+  try{ return localStorage.getItem(GIST_DEVICE_NAME_KEY) || ''; }catch(e){ return ''; }
+}
+function setDeviceName(n){
+  try{ localStorage.setItem(GIST_DEVICE_NAME_KEY, (n||'').trim()); }catch(e){}
+}
+function getLastLocalExportAt(){
+  try{ return localStorage.getItem(GIST_LAST_LOCAL_EXPORT_KEY) || ''; }catch(e){ return ''; }
+}
+function setLastLocalExportAt(iso){
+  try{ if(iso) localStorage.setItem(GIST_LAST_LOCAL_EXPORT_KEY, iso); }catch(e){}
+}
+function fmtGistWhen(iso){
+  if(!iso) return '—';
+  try{
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return String(iso);
+    return d.toLocaleString('pt-BR');
+  }catch(e){ return String(iso); }
+}
+
 function buildBackupObject(){
+  const exportedAt = new Date().toISOString();
+  setLastLocalExportAt(exportedAt);
   return {
-    exportedAt: new Date().toISOString(),
+    exportedAt,
     app: 'livro-caixa',
     version: 2,
+    deviceId: getOrCreateDeviceId(),
+    deviceName: getDeviceName() || 'Aparelho',
     profileName: (currentUser && currentUser.name) || '',
     profileId: (currentUser && currentUser.profileId) || '',
     transactions: state.transactions,
@@ -7374,15 +7413,18 @@ function refreshGistUI(){
   const tok = document.getElementById('gist-token');
   const gid = document.getElementById('gist-id');
   const chk = document.getElementById('gist-sync-on-exit');
+  const dname = document.getElementById('gist-device-name');
   if(tok && !tok.value) tok.value = getGistToken();
   if(gid && !gid.value) gid.value = getGistId();
   if(chk) chk.checked = getGistSyncOnExit();
+  if(dname && !dname.value) dname.value = getDeviceName();
   const hasTok = !!getGistToken();
   const hasId = !!getGistId();
   const auto = getGistSyncOnExit();
+  const dn = getDeviceName() || 'sem nome';
   if(!hasTok) updateGistStatus('GitHub Gist não configurado — cole o token e salve.');
   else if(!hasId) updateGistStatus('Token salvo. Envie o backup uma vez para criar o Gist.'+(auto?' · enviar ao sair aguarda Gist ID.':''));
-  else updateGistStatus('Pronto · Gist '+getGistId().slice(0,12)+'… · token ok'+(auto?' · enviar ao sair ATIVO':''));
+  else updateGistStatus('Pronto · Gist '+getGistId().slice(0,12)+'… · aparelho “'+dn+'”'+(auto?' · enviar ao sair ATIVO':''));
 }
 
 async function gistApi(path, opts){
@@ -7465,6 +7507,105 @@ async function downloadBackupFromGist(){
   const parsed = JSON.parse(content);
   if(!parsed || !Array.isArray(parsed.transactions)) throw new Error('JSON do Gist não é um backup válido');
   return parsed;
+}
+
+function localBackupMeta(){
+  return {
+    exportedAt: getLastLocalExportAt() || null,
+    deviceId: getOrCreateDeviceId(),
+    deviceName: getDeviceName() || 'Este aparelho',
+    txCount: (state.transactions||[]).length
+  };
+}
+
+function compareBackupMeta(local, remote){
+  const lt = local && local.exportedAt ? Date.parse(local.exportedAt) : 0;
+  const rt = remote && remote.exportedAt ? Date.parse(remote.exportedAt) : 0;
+  if(!rt && !lt) return 'unknown';
+  if(!rt) return 'local_newer';
+  if(!lt) return 'remote_newer';
+  if(rt > lt + 2000) return 'remote_newer';
+  if(lt > rt + 2000) return 'local_newer';
+  return 'same';
+}
+
+function showGistCompareBox(html){
+  const box = document.getElementById('gist-compare-box');
+  if(!box) return;
+  box.style.display = 'block';
+  box.innerHTML = html;
+}
+
+async function gistSyncSmart(){
+  if(!getGistToken()){ showToast('Salve o token GitHub.'); return; }
+  if(!getGistId()){ showToast('Informe o Gist ID (ou envie o 1º backup).'); return; }
+  updateGistStatus('Comparando com o GitHub…');
+  try{
+    const remote = await downloadBackupFromGist();
+    const local = localBackupMeta();
+    const remoteMeta = {
+      exportedAt: remote.exportedAt || null,
+      deviceId: remote.deviceId || '',
+      deviceName: remote.deviceName || 'Outro aparelho',
+      txCount: Array.isArray(remote.transactions) ? remote.transactions.length : 0
+    };
+    const cmp = compareBackupMeta(local, remoteMeta);
+    const sameDevice = remoteMeta.deviceId && remoteMeta.deviceId === local.deviceId;
+
+    let verdict = '';
+    if(cmp === 'remote_newer') verdict = 'O backup no <strong>GitHub é mais recente</strong>.';
+    else if(cmp === 'local_newer') verdict = 'Os dados <strong>neste aparelho são mais recentes</strong>.';
+    else if(cmp === 'same') verdict = 'As datas estão <strong>equivalentes</strong> (diferença &lt; 2s).';
+    else verdict = 'Não foi possível comparar as datas com segurança.';
+
+    showGistCompareBox(`
+      <div style="margin-bottom:8px;">${verdict}</div>
+      <div style="display:grid;gap:6px;font-family:var(--font-mono);font-size:12px;">
+        <div>📱 <strong>Este aparelho</strong> (${escapeHTML(local.deviceName)}) · ${local.txCount} lanç. · ${escapeHTML(fmtGistWhen(local.exportedAt))}</div>
+        <div>☁️ <strong>GitHub</strong> (${escapeHTML(remoteMeta.deviceName)}${sameDevice?' · mesmo aparelho':''}) · ${remoteMeta.txCount} lanç. · ${escapeHTML(fmtGistWhen(remoteMeta.exportedAt))}</div>
+      </div>
+      <div class="btn-row" style="margin-top:12px;flex-wrap:wrap;gap:8px;">
+        <button type="button" class="btn secondary" id="gist-cmp-push" style="padding:8px 12px;">Enviar deste aparelho → GitHub</button>
+        <button type="button" class="btn" id="gist-cmp-pull" style="padding:8px 12px;">Trazer GitHub → este aparelho</button>
+      </div>
+      <p style="font-size:11px;color:var(--ink-faint);margin:10px 0 0;line-height:1.4;">
+        Trazer do GitHub <strong>substitui</strong> os dados do perfil atual. Enviar sobrescreve o Gist com o que está aqui.
+      </p>
+    `);
+
+    document.getElementById('gist-cmp-push') && document.getElementById('gist-cmp-push').addEventListener('click', async ()=>{
+      try{
+        await uploadBackupToGist();
+        showGistCompareBox('');
+        document.getElementById('gist-compare-box').style.display = 'none';
+        refreshGistUI();
+      }catch(err){
+        showToast('Falha ao enviar: '+(err.message||err));
+      }
+    });
+    document.getElementById('gist-cmp-pull') && document.getElementById('gist-cmp-pull').addEventListener('click', ()=>{
+      askConfirm(
+        'Trazer do GitHub',
+        'Substituir os dados deste aparelho pelo backup do Gist ('+remoteMeta.txCount+' lançamentos, de '+ (remoteMeta.deviceName||'?') +')?',
+        ()=>{
+          applyImportedBackup(remote);
+          setLastLocalExportAt(remote.exportedAt || new Date().toISOString());
+          updateGistStatus('Restaurado do GitHub · '+remoteMeta.txCount+' lanç. · '+fmtGistWhen(remote.exportedAt));
+          showGistCompareBox('');
+          const box = document.getElementById('gist-compare-box');
+          if(box) box.style.display = 'none';
+          showToast('Dados do GitHub aplicados.');
+          refreshGistUI();
+        }
+      );
+    });
+
+    updateGistStatus('Comparação pronta · '+verdict.replace(/<[^>]+>/g,''));
+  }catch(err){
+    console.error(err);
+    updateGistStatus('Erro ao comparar: '+(err.message||err));
+    showToast('Falha: '+(err.message||err));
+  }
 }
 
 function applyImportedBackup(parsed){
@@ -7550,10 +7691,23 @@ try{ setupGistSyncOnExit(); }catch(e){ console.warn(e); }
 document.getElementById('gist-save-creds') && document.getElementById('gist-save-creds').addEventListener('click', ()=>{
   const t = (document.getElementById('gist-token')?.value || '').trim();
   const id = (document.getElementById('gist-id')?.value || '').trim();
+  const dn = (document.getElementById('gist-device-name')?.value || '').trim();
   setGistToken(t);
   setGistId(id);
+  setDeviceName(dn);
+  getOrCreateDeviceId();
   refreshGistUI();
   showToast(t ? 'Credenciais Gist salvas neste aparelho.' : 'Token removido.');
+});
+
+document.getElementById('gist-sync-smart') && document.getElementById('gist-sync-smart').addEventListener('click', ()=>{
+  const t = (document.getElementById('gist-token')?.value || '').trim();
+  const id = (document.getElementById('gist-id')?.value || '').trim();
+  const dn = (document.getElementById('gist-device-name')?.value || '').trim();
+  if(t) setGistToken(t);
+  if(id) setGistId(id);
+  if(dn) setDeviceName(dn);
+  gistSyncSmart();
 });
 
 document.getElementById('gist-upload') && document.getElementById('gist-upload').addEventListener('click', async ()=>{
