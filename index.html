@@ -1256,7 +1256,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Backup local e na nuvem (GitHub Gist), limites de cartão, recorrências, fechamento do período e preferências. Exporte backup com frequência.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-23-16 (IRRF por % da folha)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-23-17 (OCR cupom farmácia/NFC-e)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -5724,7 +5724,7 @@ function parseReceiptText(text){
     if(!m) return;
     const val = toNum(m[1]);
     if(val===null) return;
-    if(/total a pagar|valor a pagar|valor pago|total pago|valor total|total geral|total da compra|total r\$/.test(lower)) priorityMatches.push(val);
+    if(/total a pagar|valor a pagar|valor pago|vlr\s*pago|total pago|valor total|total geral|total da compra|total r\$|forma\s*de\s*pagamento/.test(lower)) priorityMatches.push(val);
     else if(/\btotal\b/.test(lower)) genericMatches.push(val);
   });
   let value = null;
@@ -5761,16 +5761,29 @@ function parseReceiptText(text){
     return null;
   };
   let dateISO = null;
-  const labelLines = lines0.filter(l=> /emiss[aã]o|emitid[oa]|autoriza|dt\.?\s*aut|prot\.?\s*aut/i.test(l));
+  // prioriza linhas típicas de NFC-e / DANFE
+  const datePriorityRe = /emiss[aã]o|emitid|autoriza|via\s*consumidor|n[uú]mero\s*:|s[eé]rie\s*:|nfc-?e|cupom\s*fiscal|prot\.?\s*aut/i;
+  const labelLines = lines0.filter(l=> datePriorityRe.test(l));
   for(const line of labelLines){
     dateISO = findValidDate(line);
     if(dateISO) break;
   }
+  // data+hora colada: 08/08/2026 10:21:41
   if(!dateISO){
-    // NFC-e costuma imprimir "NFC-e No. ... Serie ..." e, logo abaixo, a data/hora sem rótulo nenhum
-    const nfceIdx = lines0.findIndex(l=> /nfc-?e|cupom fiscal/i.test(l));
+    const m = text.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})\s+\d{1,2}:\d{2}/);
+    if(m){
+      let [, d, mo, y] = m;
+      if(y.length===2) y = '20'+y;
+      d = d.padStart(2,'0'); mo = mo.padStart(2,'0');
+      const candidate = y+'-'+mo+'-'+d;
+      const dt = new Date(candidate+'T12:00:00');
+      if(!isNaN(dt.getTime()) && dt.getFullYear()>=2015 && dt.getFullYear()<=2035) dateISO = candidate;
+    }
+  }
+  if(!dateISO){
+    const nfceIdx = lines0.findIndex(l=> /nfc-?e|cupom fiscal|danfe|via\s*consumidor/i.test(l));
     if(nfceIdx>=0){
-      for(let k=nfceIdx; k<=nfceIdx+2 && k<lines0.length; k++){
+      for(let k=Math.max(0,nfceIdx-2); k<=nfceIdx+6 && k<lines0.length; k++){
         dateISO = findValidDate(lines0[k]);
         if(dateISO) break;
       }
@@ -5779,12 +5792,24 @@ function parseReceiptText(text){
   if(!dateISO) dateISO = findValidDate(text);
   if(!dateISO) dateISO = todayISO();
 
-  // descrição: preferir nome do estabelecimento no topo
+  // estabelecimento: prioriza farmácia, mercado, etc. (mesmo com OCR ruim no topo)
+  const merchantRe = /farm[\w\s]{0,12}confian|farm[\w\s]|farmac|drogaria|super\s*merc|mercado|padaria|restaurante|posto\s|loja\s|atacad|hiper|magazine|renner|americanas|carrefour|condor|bourbon/i;
   let descLine = null;
-  for(let i=0;i<Math.min(lines0.length, 8);i++){
-    const l = lines0[i];
-    if(/[A-Za-zÀ-ÿ]{3,}/.test(l) && !/total|subtotal|cnpj|cpf|qr\s*code|chave|protocolo|nfc-?e|serie|documento/i.test(l)){
+  for(const l of lines0.slice(0, 20)){
+    if(merchantRe.test(l) && l.length >= 4){
+      // limpa ruído extremo
+      let clean = l.replace(/[^\wÀ-ÿ\s\d\-\/\.]/g,' ').replace(/\s+/g,' ').trim();
+      if(clean.length >= 4){ descLine = clean; break; }
+    }
+  }
+  if(!descLine){
+    for(let i=0;i<Math.min(lines0.length, 12);i++){
+      const l = lines0[i];
+      if(!/[A-Za-zÀ-ÿ]{3,}/.test(l)) continue;
+      if(/total|subtotal|cnpj|cpf|qr\s*code|chave|protocolo|nfc-?e|serie|documento|danfe|auxiliar|icms|quant|descri/i.test(l)) continue;
       if(/\d+[.,]\d{2}\s*$/.test(l) && l.length > 40) continue;
+      // evita linhas só de lixo OCR muito curtas sem sentido
+      if(l.length < 5) continue;
       descLine = l;
       break;
     }
@@ -5792,8 +5817,21 @@ function parseReceiptText(text){
   if(!descLine){
     descLine = lines0.find(l=> /[A-Za-zÀ-ÿ]{3,}/.test(l) && !/total|subtotal|cnpj|cpf/i.test(l));
   }
+  // se OCR misturou "FARM" em linha feia, tenta montar a partir de pedaços
+  if(descLine && (/j\s*ens|aa\s*ã|^\W+$/i.test(descLine) || descLine.length < 8)){
+    const farm = lines0.find(l=> /farm|confian|drogaria/i.test(l));
+    if(farm) descLine = farm.replace(/[^\wÀ-ÿ\s\d\-\/\.]/g,' ').replace(/\s+/g,' ').trim();
+  }
 
   const products = extractReceiptProducts(lines0, value);
+
+  // se não achou produto mas tem SORO / medicamento típico
+  if((!products || !products.length) && value){
+    const med = lines0.find(l=> /soro|medic|comprim|capsul|ml\b|mg\b/i.test(l) && /\d/.test(l));
+    if(med){
+      products.push({ name: med.replace(/\s+/g,' ').trim().slice(0,80), amount: value });
+    }
+  }
 
   return {
     dateISO,
