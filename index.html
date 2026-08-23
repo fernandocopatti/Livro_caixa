@@ -1240,7 +1240,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-23-06 (diagnóstico Failed to fetch Gist)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-23-10 (lista clara multi-aparelho)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1497,6 +1497,7 @@
           <span><strong>Enviar ao sair</strong> — ao fechar a aba, trocar de app ou bloquear a tela, tenta enviar o backup ao Gist (precisa de token + Gist ID).</span>
         </label>
         <p id="gist-status" style="font-size:12px;color:var(--ink-faint);margin:12px 0 0;line-height:1.45;">GitHub Gist não configurado.</p>
+        <p id="gist-app-version" style="font-size:11px;color:var(--ink-faint);margin:6px 0 0;font-family:var(--font-mono);"></p>
         <p id="gist-device-info" style="font-size:12px;color:var(--ink-dim);margin:8px 0 0;line-height:1.45;"></p>
       </div>
 
@@ -7699,6 +7700,8 @@ function refreshGistUI(){
   if(!hasTok) updateGistStatus('GitHub Gist não configurado — cole o token e salve.');
   else if(!hasId) updateGistStatus('Token salvo. Envie o backup uma vez para criar o Gist.'+(auto?' · enviar ao sair aguarda Gist ID.':''));
   else updateGistStatus('Pronto · Gist '+getGistId().slice(0,12)+'… · aparelho “'+dn+'”'+(auto?' · enviar ao sair ATIVO':''));
+  const verEl = document.getElementById('gist-app-version');
+  if(verEl) verEl.textContent = 'App Gist multi-aparelho · 2026-08-23-10';
   const info = document.getElementById('gist-device-info');
   if(info){
     info.innerHTML =
@@ -7864,212 +7867,56 @@ async function listDeviceBackupsFromGist(){
   if(!gistId) throw new Error('Informe o Gist ID');
   const gist = await gistApi('/gists/'+encodeURIComponent(gistId), { method: 'GET' });
   const files = gist.files || {};
+  const fileNames = Object.keys(files);
   const list = [];
 
-  // prefer manifest
-  const mf = files[GIST_MANIFEST];
-  if(mf){
-    try{
-      const raw = await readGistFileContent(mf, gistId);
-      const parsed = JSON.parse(raw);
-      if(parsed && parsed.devices){
-        Object.values(parsed.devices).forEach(d=>{
-          if(d && d.file) list.push({ ...d, fromManifest: true });
-        });
-      }
-    }catch(e){ console.warn('manifest', e); }
-  }
-
-  // always include device-*.json files
-  for(const name of Object.keys(files)){
+  // 1) todos os device-*.json (um por aparelho)
+  for(const name of fileNames){
     if(!/^device-.*\.json$/i.test(name)) continue;
-    if(list.some(x=> x.file === name)) continue;
-    list.push({
+    const item = {
       deviceId: name,
-      deviceName: name.replace(/^device-/,'').replace(/\.json$/,''),
+      deviceName: name.replace(/^device-/i,'').replace(/\.json$/i,''),
       exportedAt: null,
       txCount: null,
-      file: name
-    });
-  }
-
-  // enrich from each device file header (exportedAt/deviceName) when missing
-  for(const item of list){
-    if(item.exportedAt && item.txCount != null) continue;
-    const f = files[item.file];
-    if(!f) continue;
+      file: name,
+      isLatest: false
+    };
     try{
-      const raw = await readGistFileContent(f, gistId);
+      const raw = await readGistFileContent(files[name], gistId);
       const p = JSON.parse(raw);
-      item.exportedAt = p.exportedAt || item.exportedAt;
+      item.exportedAt = p.exportedAt || null;
       item.deviceName = p.deviceName || item.deviceName;
       item.deviceId = p.deviceId || item.deviceId;
-      item.txCount = Array.isArray(p.transactions) ? p.transactions.length : item.txCount;
+      item.txCount = Array.isArray(p.transactions) ? p.transactions.length : null;
       item._parsed = p;
-    }catch(e){}
+    }catch(e){ console.warn('device file', name, e); }
+    list.push(item);
   }
 
-  // latest canonical
+  // 2) arquivo principal (último envio global)
   if(files[GIST_FILENAME]){
     try{
       const raw = await readGistFileContent(files[GIST_FILENAME], gistId);
       const p = JSON.parse(raw);
-      list.unshift({
-        deviceId: p.deviceId || 'latest',
-        deviceName: (p.deviceName || 'Último envio') + ' (principal)',
-        exportedAt: p.exportedAt,
-        txCount: Array.isArray(p.transactions) ? p.transactions.length : 0,
+      list.push({
+        deviceId: (p.deviceId || 'latest') + '::principal',
+        deviceName: (p.deviceName || 'Último envio') + ' (arquivo principal)',
+        exportedAt: p.exportedAt || null,
+        txCount: Array.isArray(p.transactions) ? p.transactions.length : null,
         file: GIST_FILENAME,
         isLatest: true,
         _parsed: p
       });
-    }catch(e){}
+    }catch(e){ console.warn('principal', e); }
   }
 
-  // dedupe by deviceId keeping newest
-  const byId = {};
-  list.forEach(item=>{
-    const k = item.deviceId || item.file;
-    const prev = byId[k];
-    if(!prev){ byId[k] = item; return; }
-    const pt = prev.exportedAt ? Date.parse(prev.exportedAt) : 0;
-    const it = item.exportedAt ? Date.parse(item.exportedAt) : 0;
-    if(it >= pt) byId[k] = item;
-  });
-  return Object.values(byId).sort((a,b)=> (Date.parse(b.exportedAt||0)||0) - (Date.parse(a.exportedAt||0)||0));
+  // ordena do mais recente para o mais antigo
+  list.sort((a,b)=> (Date.parse(b.exportedAt||0)||0) - (Date.parse(a.exportedAt||0)||0));
+  list._gistFileNames = fileNames;
+  list._deviceFileCount = fileNames.filter(n=> /^device-.*\.json$/i.test(n)).length;
+  return list;
 }
 
-async function uploadBackupToGist(){
-  const backup = buildBackupObject();
-  const payload = buildGistFilesPayload(backup);
-  const gistId = getGistId();
-  updateGistStatus('Enviando…');
-  if(gistId){
-    const manifest = await mergeManifestOnGist(gistId, payload.entry);
-    payload.files[GIST_MANIFEST] = { content: JSON.stringify(manifest, null, 2) };
-    await gistApi('/gists/'+encodeURIComponent(gistId), {
-      method: 'PATCH',
-      body: JSON.stringify({
-        description: 'Livro-Caixa multi-aparelho · '+ (backup.deviceName||'') +' · '+new Date().toISOString().slice(0,10),
-        files: payload.files
-      })
-    });
-    updateGistStatus('Backup atualizado · '+ (backup.deviceName||'aparelho') +' · '+backup.transactions.length+' lanç. · Gist '+gistId.slice(0,12)+'…');
-    gistDirty = false; lastGistSyncAt = Date.now();
-    showToast('Backup enviado ('+(backup.deviceName||'aparelho')+').');
-    return gistId;
-  }
-  const created = await gistApi('/gists', {
-    method: 'POST',
-    body: JSON.stringify({
-      description: 'Livro-Caixa multi-aparelho (secreto)',
-      public: false,
-      files: payload.files
-    })
-  });
-  if(created && created.id){
-    setGistId(created.id);
-    const gidInput = document.getElementById('gist-id');
-    if(gidInput) gidInput.value = created.id;
-    updateGistStatus('Gist criado '+created.id.slice(0,12)+'… · '+backup.transactions.length+' lançamentos');
-    gistDirty = false; lastGistSyncAt = Date.now();
-    showToast('Gist criado e backup enviado.');
-    return created.id;
-  }
-  throw new Error('Resposta sem id de Gist');
-}
-
-async function downloadBackupFromGist(){
-  const gistId = getGistId() || (document.getElementById('gist-id')||{}).value;
-  if(!gistId) throw new Error('Informe o Gist ID');
-  updateGistStatus('Baixando…');
-  const gist = await gistApi('/gists/'+encodeURIComponent(gistId), { method: 'GET' });
-  const files = gist.files || {};
-  let file = files[GIST_FILENAME] || files[Object.keys(files)[0]];
-  if(!file) throw new Error('Gist sem arquivos');
-  let content = file.content;
-
-  // Arquivo grande: a API manda truncated=true e o conteúdo completo está no raw_url.
-  // NÃO enviar Authorization no raw — o header quebra CORS no gist.githubusercontent.com
-  // (é isso que gerava "Failed to fetch" no Sincronizar/Baixar, enquanto Testar conexão passava).
-  const needsRaw = !!(file.truncated || (file.raw_url && (content == null || content === '')));
-  if(needsRaw && file.raw_url){
-    updateGistStatus('Baixando arquivo completo do Gist…');
-    let contentGot = null;
-    // 1) raw_url sem headers extras (funciona com CORS)
-    try{
-      const raw = await fetch(file.raw_url, { method: 'GET', mode: 'cors', cache: 'no-store' });
-      if(raw.ok) contentGot = await raw.text();
-      else throw new Error('HTTP '+raw.status);
-    }catch(e1){
-      // 2) tenta via API com Accept raw (mesmo host api.github.com — CORS ok)
-      try{
-        const apiRaw = await fetch('https://api.github.com/gists/'+encodeURIComponent(gistId), {
-          method: 'GET',
-          mode: 'cors',
-          cache: 'no-store',
-          headers: {
-            'Accept': 'application/vnd.github.raw',
-            'Authorization': 'Bearer '+getGistToken(),
-            'X-GitHub-Api-Version': '2022-11-28'
-          }
-        });
-        // esse Accept na verdade não devolve o arquivo único; fallback 3
-      }catch(e2){}
-      // 3) raw_url com token na query (alguns casos)
-      try{
-        const sep = file.raw_url.includes('?') ? '&' : '?';
-        const raw2 = await fetch(file.raw_url + sep + 't=' + Date.now(), {
-          method: 'GET', mode: 'cors', cache: 'no-store'
-        });
-        if(raw2.ok) contentGot = await raw2.text();
-      }catch(e3){}
-      if(contentGot == null){
-        throw new Error(explainGistFetchError(e1) + ' (arquivo do Gist grande/truncado; tente Enviar de novo um backup menor ou use o mesmo Wi‑Fi/rede.)');
-      }
-    }
-    content = contentGot;
-  }
-
-  if(!content) throw new Error('Conteúdo do Gist vazio');
-  let parsed;
-  try{
-    parsed = JSON.parse(content);
-  }catch(e){
-    throw new Error('JSON do Gist inválido (arquivo corrompido ou incompleto)');
-  }
-  if(!parsed || !Array.isArray(parsed.transactions)) throw new Error('JSON do Gist não é um backup válido');
-  return parsed;
-}
-
-
-function localBackupMeta(){
-  return {
-    exportedAt: getLastLocalExportAt() || null,
-    deviceId: getOrCreateDeviceId(),
-    deviceName: getDeviceName() || 'Este aparelho',
-    txCount: (state.transactions||[]).length
-  };
-}
-
-function compareBackupMeta(local, remote){
-  const lt = local && local.exportedAt ? Date.parse(local.exportedAt) : 0;
-  const rt = remote && remote.exportedAt ? Date.parse(remote.exportedAt) : 0;
-  if(!rt && !lt) return 'unknown';
-  if(!rt) return 'local_newer';
-  if(!lt) return 'remote_newer';
-  if(rt > lt + 2000) return 'remote_newer';
-  if(lt > rt + 2000) return 'local_newer';
-  return 'same';
-}
-
-function showGistCompareBox(html){
-  const box = document.getElementById('gist-compare-box');
-  if(!box) return;
-  if(!html){ box.style.display = 'none'; box.innerHTML = ''; return; }
-  box.style.display = 'block';
-  box.innerHTML = html;
-}
 
 async function gistSyncSmart(){
   if(!getGistToken()){ showToast('Salve o token GitHub.'); return; }
@@ -8079,25 +7926,42 @@ async function gistSyncSmart(){
     const local = localBackupMeta();
     const devices = await listDeviceBackupsFromGist();
     const myId = local.deviceId;
+    const deviceOnly = devices.filter(d=> !d.isLatest);
+    const nDevices = deviceOnly.length;
+    const fileHint = (devices._gistFileNames||[]).filter(n=> /device-|livro-caixa|manifest/i.test(n)).join(', ') || '(nenhum)';
+
+    let alertHtml = '';
+    if(nDevices < 2){
+      alertHtml = `<div style="margin:0 0 12px;padding:10px 12px;border-radius:8px;border:1px solid var(--warn);background:rgba(217,124,87,.1);font-size:12.5px;line-height:1.45;color:var(--ink-dim);">
+        <strong style="color:var(--warn);">Só há ${nDevices} aparelho com arquivo próprio no Gist.</strong><br>
+        Para ver os dois e escolher qual restaurar:<br>
+        1) No <strong>outro</strong> aparelho, abra esta mesma versão do app<br>
+        2) Mesmo token + mesmo Gist ID + nome diferente (ex.: iPhone)<br>
+        3) Toque em <strong>Enviar backup ao GitHub</strong><br>
+        4) Volte aqui e toque de novo em <strong>Sincronizar (comparar)</strong><br>
+        <span style="color:var(--ink-faint);font-size:11px;">Arquivos no Gist: ${escapeHTML(fileHint)}</span>
+      </div>`;
+    }
 
     const rows = devices.map((d, idx)=>{
-      const isMe = d.deviceId && d.deviceId === myId;
+      const isMe = d.deviceId && String(d.deviceId).replace(/::principal$/,'') === myId;
       const when = fmtGistWhen(d.exportedAt);
       const txs = d.txCount != null ? d.txCount : '?';
       const label = escapeHTML(d.deviceName || d.file || 'Aparelho');
-      const tag = isMe ? ' <span style="color:var(--accent);">(este)</span>' : '';
-      const latest = d.isLatest ? ' · arquivo principal' : '';
+      const tag = isMe && !d.isLatest ? ' <span style="color:var(--accent);">(este)</span>' : '';
+      const badge = d.isLatest ? ' <span style="color:var(--ink-faint);font-size:11px;">último envio global</span>' : '';
       return `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);">
         <div style="font-size:12.5px;line-height:1.4;">
-          📱 <strong>${label}</strong>${tag}${latest}<br>
+          📱 <strong>${label}</strong>${tag}${badge}<br>
           <span style="color:var(--ink-faint);font-family:var(--font-mono);">${txs} lanç. · ${escapeHTML(when)}</span>
         </div>
         <button type="button" class="btn secondary gist-restore-device" data-idx="${idx}" style="padding:6px 12px;font-size:12px;">Trazer este</button>
       </div>`;
-    }).join('') || '<p style="color:var(--ink-faint);">Nenhum backup de aparelho no Gist ainda. Envie um backup de cada dispositivo.</p>';
+    }).join('') || '<p style="color:var(--ink-faint);">Nenhum backup no Gist. Use “Enviar este aparelho → GitHub”.</p>';
 
     showGistCompareBox(`
-      <div style="margin-bottom:10px;"><strong>Backups no GitHub</strong> — cada aparelho guarda o próprio arquivo. O “principal” é o último envio.</div>
+      <div style="margin-bottom:10px;"><strong>Backups no GitHub</strong> — cada aparelho tem um arquivo. Escolha qual restaurar neste dispositivo.</div>
+      ${alertHtml}
       <div style="margin-bottom:8px;font-size:12px;color:var(--ink-faint);">
         📱 <strong>Agora neste aparelho:</strong> ${escapeHTML(local.deviceName)} · ${local.txCount} lanç. · ${escapeHTML(fmtGistWhen(local.exportedAt))}
       </div>
@@ -8105,9 +7969,6 @@ async function gistSyncSmart(){
       <div class="btn-row" style="margin-top:12px;flex-wrap:wrap;gap:8px;">
         <button type="button" class="btn" id="gist-cmp-push" style="padding:8px 12px;">Enviar este aparelho → GitHub</button>
       </div>
-      <p style="font-size:11px;color:var(--ink-faint);margin:10px 0 0;line-height:1.4;">
-        “Trazer este” substitui os dados do perfil atual pelo backup daquele aparelho. Envie de <strong>cada</strong> aparelho pelo menos uma vez para aparecerem todos.
-      </p>
     `);
 
     document.querySelectorAll('.gist-restore-device').forEach(btn=>{
@@ -8150,14 +8011,13 @@ async function gistSyncSmart(){
         await uploadBackupToGist();
         showGistCompareBox('');
         refreshGistUI();
-        // reabre lista
-        setTimeout(()=> gistSyncSmart(), 400);
+        setTimeout(()=> gistSyncSmart(), 500);
       }catch(err){
         showToast('Falha ao enviar: '+explainGistFetchError(err));
       }
     });
 
-    updateGistStatus('Comparação pronta · '+devices.length+' backup(s) de aparelho no Gist');
+    updateGistStatus('Comparação pronta · '+nDevices+' arquivo(s) de aparelho no Gist');
   }catch(err){
     console.error(err);
     const em = explainGistFetchError(err);
