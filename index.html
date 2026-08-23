@@ -7826,17 +7826,60 @@ async function downloadBackupFromGist(){
   let file = files[GIST_FILENAME] || files[Object.keys(files)[0]];
   if(!file) throw new Error('Gist sem arquivos');
   let content = file.content;
-  if(file.truncated && file.raw_url){
-    const raw = await fetch(file.raw_url, {
-      headers: { 'Authorization': 'Bearer '+getGistToken(), 'Accept': 'application/vnd.github.raw' }
-    });
-    if(!raw.ok) throw new Error('Falha ao baixar raw');
-    content = await raw.text();
+
+  // Arquivo grande: a API manda truncated=true e o conteúdo completo está no raw_url.
+  // NÃO enviar Authorization no raw — o header quebra CORS no gist.githubusercontent.com
+  // (é isso que gerava "Failed to fetch" no Sincronizar/Baixar, enquanto Testar conexão passava).
+  const needsRaw = !!(file.truncated || (file.raw_url && (content == null || content === '')));
+  if(needsRaw && file.raw_url){
+    updateGistStatus('Baixando arquivo completo do Gist…');
+    let contentGot = null;
+    // 1) raw_url sem headers extras (funciona com CORS)
+    try{
+      const raw = await fetch(file.raw_url, { method: 'GET', mode: 'cors', cache: 'no-store' });
+      if(raw.ok) contentGot = await raw.text();
+      else throw new Error('HTTP '+raw.status);
+    }catch(e1){
+      // 2) tenta via API com Accept raw (mesmo host api.github.com — CORS ok)
+      try{
+        const apiRaw = await fetch('https://api.github.com/gists/'+encodeURIComponent(gistId), {
+          method: 'GET',
+          mode: 'cors',
+          cache: 'no-store',
+          headers: {
+            'Accept': 'application/vnd.github.raw',
+            'Authorization': 'Bearer '+getGistToken(),
+            'X-GitHub-Api-Version': '2022-11-28'
+          }
+        });
+        // esse Accept na verdade não devolve o arquivo único; fallback 3
+      }catch(e2){}
+      // 3) raw_url com token na query (alguns casos)
+      try{
+        const sep = file.raw_url.includes('?') ? '&' : '?';
+        const raw2 = await fetch(file.raw_url + sep + 't=' + Date.now(), {
+          method: 'GET', mode: 'cors', cache: 'no-store'
+        });
+        if(raw2.ok) contentGot = await raw2.text();
+      }catch(e3){}
+      if(contentGot == null){
+        throw new Error(explainGistFetchError(e1) + ' (arquivo do Gist grande/truncado; tente Enviar de novo um backup menor ou use o mesmo Wi‑Fi/rede.)');
+      }
+    }
+    content = contentGot;
   }
-  const parsed = JSON.parse(content);
+
+  if(!content) throw new Error('Conteúdo do Gist vazio');
+  let parsed;
+  try{
+    parsed = JSON.parse(content);
+  }catch(e){
+    throw new Error('JSON do Gist inválido (arquivo corrompido ou incompleto)');
+  }
   if(!parsed || !Array.isArray(parsed.transactions)) throw new Error('JSON do Gist não é um backup válido');
   return parsed;
 }
+
 
 function localBackupMeta(){
   return {
@@ -7861,6 +7904,7 @@ function compareBackupMeta(local, remote){
 function showGistCompareBox(html){
   const box = document.getElementById('gist-compare-box');
   if(!box) return;
+  if(!html){ box.style.display = 'none'; box.innerHTML = ''; return; }
   box.style.display = 'block';
   box.innerHTML = html;
 }
@@ -7906,10 +7950,9 @@ async function gistSyncSmart(){
       try{
         await uploadBackupToGist();
         showGistCompareBox('');
-        document.getElementById('gist-compare-box').style.display = 'none';
         refreshGistUI();
       }catch(err){
-        showToast('Falha ao enviar: '+(err.message||err));
+        showToast('Falha ao enviar: '+explainGistFetchError(err));
       }
     });
     document.getElementById('gist-cmp-pull') && document.getElementById('gist-cmp-pull').addEventListener('click', ()=>{
@@ -7921,8 +7964,6 @@ async function gistSyncSmart(){
           setLastLocalExportAt(remote.exportedAt || new Date().toISOString());
           updateGistStatus('Restaurado do GitHub · '+remoteMeta.txCount+' lanç. · '+fmtGistWhen(remote.exportedAt));
           showGistCompareBox('');
-          const box = document.getElementById('gist-compare-box');
-          if(box) box.style.display = 'none';
           showToast('Dados do GitHub aplicados.');
           refreshGistUI();
         }
@@ -7932,8 +7973,9 @@ async function gistSyncSmart(){
     updateGistStatus('Comparação pronta · '+verdict.replace(/<[^>]+>/g,''));
   }catch(err){
     console.error(err);
-    updateGistStatus('Erro ao comparar: '+(err.message||err));
-    showToast('Falha: '+(err.message||err));
+    const em = explainGistFetchError(err);
+    updateGistStatus('Erro ao comparar: '+em);
+    showToast('Falha: '+em);
   }
 }
 
