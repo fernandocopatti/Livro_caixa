@@ -618,7 +618,7 @@
 </head>
 <body>
 
-<button type="button" id="privacy-toggle" title="Ocultar ou exibir valores">👁 Ocultar valores</button>
+<button type="button" id="privacy-toggle" title="Ocultar valores na tela (útil em público)">👁 Ocultar valores</button>
 <div id="auth-gate">
   <div class="auth-card">
     <h1>Livro-Caixa</h1>
@@ -686,7 +686,7 @@
     <section class="view active" id="view-dashboard">
       <div class="view-head">
         <h1 class="view-title">Visão geral</h1>
-        <p class="view-desc">Resumo dos seus gastos do mês atual e dos últimos 6 meses. Para ver tudo, de qualquer data, use <a href="#" id="link-view-all" style="color:var(--accent);">Lançamentos → Todo período</a>.</p>
+        <p class="view-desc">Visão geral do mês: quanto saiu, ritmo de gasto, cartões e alertas. Para achar um lançamento antigo: <a href="#" id="link-view-all" style="color:var(--accent);">Lançamentos → Todo período</a>.</p>
       </div>
 
       <div class="dash-toolbar">
@@ -763,8 +763,24 @@
       </div>
 
       <div class="card" style="margin-bottom:18px;" id="yoy-card">
-        <div class="panel-title">Comparando com o mesmo mês do ano passado</div>
+        <div class="panel-title" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;">
+          <span id="yoy-card-title">Comparativo de despesas</span>
+          <div class="type-toggle" id="yoy-mode-toggle" style="margin:0;font-size:12px;">
+            <button type="button" class="active" data-yoy-mode="yoy">Ano passado</button>
+            <button type="button" data-yoy-mode="mom">Mês anterior</button>
+          </div>
+        </div>
+        <p id="yoy-card-hint" style="font-size:12px;color:var(--ink-faint);margin:0 0 10px;line-height:1.4;">Esquerda = período base · direita = mês atual (despesas).</p>
         <div id="yoy-content"></div>
+      </div>
+
+      <div class="card" style="margin-bottom:18px;" id="ir-pf-card">
+        <div class="panel-title">IR e resultado no ano (PF)</div>
+        <p style="font-size:12px;color:var(--ink-faint);margin:0 0 12px;line-height:1.45;">
+          Visão simplificada para quem tem carteira assinada: receitas × despesas no ano e gastos em categorias típicas de dedução (saúde, educação…).
+          <strong>Não substitui contador nem a declaração oficial.</strong>
+        </p>
+        <div id="ir-pf-content"></div>
       </div>
 
       <div class="dash-cols">
@@ -897,7 +913,7 @@
     <section class="view" id="view-transactions">
       <div class="view-head">
         <h1 class="view-title">Lançamentos</h1>
-        <p class="view-desc">Todos os seus gastos, de qualquer origem, num só lugar. <a href="#" id="link-scan-dups" style="color:var(--accent);">Verificar duplicatas na base</a></p>
+        <p class="view-desc">Lista com filtros (mês, conta, valor, categoria). Selecione vários para reclassificar juntos. <a href="#" id="link-scan-dups" style="color:var(--accent);">Verificar duplicatas</a></p>
       </div>
       <div class="card" id="dup-scan-card" style="display:none;margin-bottom:18px;">
         <div class="panel-title">Duplicatas encontradas <button type="button" class="btn ghost" id="dup-scan-close" style="padding:4px 10px;font-size:12px;">Fechar</button></div>
@@ -967,7 +983,7 @@
     <section class="view" id="view-new">
       <div class="view-head">
         <h1 class="view-title">Novo lançamento</h1>
-        <p class="view-desc">Anote uma despesa ou receita na mão, ou tire uma foto do comprovante para preencher automaticamente.</p>
+        <p class="view-desc">Digite na mão ou leia o cupom pela foto (OCR). Dica: foto primeiro guarda os itens da nota; o extrato depois pode ser mesclado sem duplicar o gasto.</p>
       </div>
 
       <div class="dash-cols" style="grid-template-columns:1fr 1.4fr;">
@@ -1081,7 +1097,7 @@
     <section class="view" id="view-import">
       <div class="view-head">
         <h1 class="view-title">Importar</h1>
-        <p class="view-desc">Traga extratos e faturas do banco ou cartão: OFX (recomendado), PDF ou planilha. O app detecta conta, evita duplicatas e lembra o mapeamento.</p>
+        <p class="view-desc">Prefira OFX; PDF e planilha também funcionam. O app evita duplicata e, se já existir cupom OCR da mesma compra, oferece <strong>mesclar</strong> (mantém os itens da nota).</p>
       </div>
 
       <div class="card" style="margin-bottom:16px;" id="bank-integration-tips">
@@ -1154,7 +1170,7 @@
     <section class="view" id="view-categories">
       <div class="view-head">
         <h1 class="view-title">Categorias</h1>
-        <p class="view-desc">Crie, edite ou remova as categorias usadas nos seus lançamentos. Para criar novos tipos de lançamento além de despesa/receita (ex.: Investimento), vá em <a href="#" id="link-view-types" style="color:var(--accent);">Config → Tipos de lançamento</a>.</p>
+        <p class="view-desc">Organize despesas e receitas. Use palavras-chave (ex.: <code>coasa:50</code> = até R$ 50) para classificar sozinho. Tipos especiais (Investimento etc.): <a href="#" id="link-view-types" style="color:var(--accent);">Config → Tipos</a>.</p>
       </div>
 
       <div class="dash-cols" id="cat-groups-container" style="align-items:start;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));"></div>
@@ -1239,8 +1255,8 @@
     <section class="view" id="view-config">
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
-        <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-23-11 (restaurar upload/download Gist)</p>
+        <p class="view-desc">Backup local e na nuvem (GitHub Gist), limites de cartão, recorrências, fechamento do período e preferências. Exporte backup com frequência.</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-23-16 (IRRF por % da folha)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1460,12 +1476,68 @@
         </div>
       </div>
 
+      <div class="card" style="margin-top:18px;" id="ir-config-card">
+        <div class="panel-title">Parâmetros de IR (PF · básico)</div>
+        <p style="color:var(--ink-dim);font-size:13px;line-height:1.5;margin:0 0 14px;">
+          Valores de referência para o painel do Dashboard. Pensado para carteira assinada.
+          <strong>Não é cálculo oficial da Receita.</strong>
+        </p>
+        <div class="form-grid" style="max-width:720px;">
+          <div class="field">
+            <label>Regime preferido</label>
+            <select id="ir-regime">
+              <option value="auto">Comparar os dois (recomendado)</option>
+              <option value="simplificada">Desconto simplificado (20%)</option>
+              <option value="completa">Declaração completa (deduções)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Dependentes</label>
+            <input type="number" id="ir-dependents" min="0" step="1" placeholder="0">
+          </div>
+          <div class="field">
+            <label>Renda bruta mensal estimada (R$)</label>
+            <input type="number" id="ir-renda-mensal" min="0" step="0.01" placeholder="Ex.: 8000">
+          </div>
+          <div class="field">
+            <label>IRRF retido no ano (R$)</label>
+            <input type="number" id="ir-irrf-ano" min="0" step="0.01" placeholder="Soma dos holerites (se souber)">
+          </div>
+          <div class="field">
+            <label>ou % de IRRF na folha</label>
+            <input type="number" id="ir-irrf-pct" min="0" max="100" step="0.01" placeholder="Ex.: 7,5 — se vazio, usa o R$ acima">
+          </div>
+          <div class="field">
+            <label>Limite anual educação (R$)</label>
+            <input type="number" id="ir-limite-educacao" min="0" step="0.01" placeholder="3561.50">
+          </div>
+          <div class="field">
+            <label>Dedução por dependente / ano (R$)</label>
+            <input type="number" id="ir-ded-dependente" min="0" step="0.01" placeholder="2275.08">
+          </div>
+          <div class="field">
+            <label>Meta saúde no ano (R$)</label>
+            <input type="number" id="ir-meta-saude" min="0" step="0.01" placeholder="Opcional">
+          </div>
+          <div class="field">
+            <label>Meta educação no ano (R$)</label>
+            <input type="number" id="ir-meta-educacao" min="0" step="0.01" placeholder="Opcional">
+          </div>
+        </div>
+        <div class="btn-row" style="margin-top:10px;">
+          <button type="button" class="btn secondary" id="ir-save-params" style="padding:8px 14px;">Salvar parâmetros de IR</button>
+        </div>
+        <p style="font-size:11px;color:var(--ink-faint);margin:10px 0 0;line-height:1.4;">
+          Saúde e educação no painel continuam vindo das <strong>categorias</strong> cujo nome contém essas ideias (Saúde, Farmácia, Escola…).
+        </p>
+      </div>
+
       <div class="card" style="margin-top:18px;" id="github-gist-card">
         <div class="panel-title">Nuvem GitHub (Gist)</div>
         <p style="color:var(--ink-dim);font-size:13px;line-height:1.5;margin:0 0 14px;">
-          Guarda o backup num <strong>Gist secreto</strong> da sua conta GitHub.
-          Token: GitHub → Settings → Developer settings → Personal access tokens
-          (clássico: permissão <code>gist</code>). Fica só neste aparelho.
+          Backup na nuvem num <strong>Gist secreto</strong>. Use o <strong>mesmo token e Gist ID</strong> nos aparelhos;
+          cada um com um nome (ex.: iPhone, Notebook). Token: GitHub → Settings → Developer settings → Personal access tokens
+          (permissão <code>gist</code>).
         </p>
         <div class="form-grid" style="max-width:640px;">
           <div class="field">
@@ -1647,19 +1719,19 @@
 <div class="modal-bg" id="onboard-modal-bg">
   <div class="modal" style="max-width:460px;">
     <h3>Bem-vindo ao Livro-Caixa</h3>
-    <p style="color:var(--ink-dim);font-size:13.5px;line-height:1.5;margin:0;">Em menos de um minuto você deixa o básico pronto. Escolha um passo ou pule e explore.</p>
+    <p style="color:var(--ink-dim);font-size:13.5px;line-height:1.5;margin:0;">Três passos rápidos para começar a controlar o mês — ou pule e explore com calma.</p>
     <div class="onboard-steps">
       <div class="onboard-step" data-onboard="import">
         <span class="num">1</span>
-        <div><strong>Importe um extrato</strong><span>OFX ou planilha do banco — o caminho mais rápido para ver seus gastos.</span></div>
+        <div><strong>Importe um extrato</strong><span>OFX do banco ou cartão — em minutos o mês já aparece no dashboard.</span></div>
       </div>
       <div class="onboard-step" data-onboard="goal">
         <span class="num">2</span>
-        <div><strong>Defina uma meta mensal</strong><span>Um teto de despesas para acompanhar no dashboard.</span></div>
+        <div><strong>Defina uma meta mensal</strong><span>Um teto de gastos; o app mostra se você está no ritmo ou acima.</span></div>
       </div>
       <div class="onboard-step" data-onboard="limit">
         <span class="num">3</span>
-        <div><strong>Cadastre o limite do cartão</strong><span>Com dia de fechamento, o app mostra quanto da fatura já está ocupado.</span></div>
+        <div><strong>Cadastre o limite do cartão</strong><span>Com dia de fechamento, vê quanto da fatura já está comprometido.</span></div>
       </div>
     </div>
     <div class="btn-row">
@@ -2017,7 +2089,90 @@ function isTxLocked(t){
   if(!until || !t || !t.date) return false;
   return String(t.date) <= String(until);
 }
+
 function getClosedUntil(){ return (state.settings && state.settings.closedUntil) || ''; }
+
+function defaultIrParams(){
+  return {
+    regime: 'auto',
+    dependents: 0,
+    rendaMensal: null,
+    irrfAno: null,
+    irrfPct: null,
+    limiteEducacao: 3561.50,
+    dedDependente: 2275.08,
+    metaSaude: null,
+    metaEducacao: null
+  };
+}
+function getIrParams(){
+  const d = defaultIrParams();
+  const s = (state.settings && state.settings.ir) || {};
+  return Object.assign({}, d, s);
+}
+function setIrParams(p){
+  if(!state.settings) state.settings = {};
+  state.settings.ir = Object.assign({}, defaultIrParams(), p||{});
+  saveState();
+}
+function fillIrParamsForm(){
+  const p = getIrParams();
+  const set = (id, val)=>{ const el = document.getElementById(id); if(el) el.value = (val!=null && val!=='') ? val : ''; };
+  const sel = document.getElementById('ir-regime');
+  if(sel) sel.value = p.regime || 'auto';
+  set('ir-dependents', p.dependents||0);
+  set('ir-renda-mensal', p.rendaMensal);
+  set('ir-irrf-ano', p.irrfAno);
+  set('ir-irrf-pct', p.irrfPct);
+  set('ir-limite-educacao', p.limiteEducacao);
+  set('ir-ded-dependente', p.dedDependente);
+  set('ir-meta-saude', p.metaSaude);
+  set('ir-meta-educacao', p.metaEducacao);
+}
+function readIrParamsForm(){
+  const num = (id)=>{
+    const el = document.getElementById(id);
+    if(!el || el.value==='' || el.value==null) return null;
+    const n = parseFloat(el.value);
+    return isNaN(n) ? null : n;
+  };
+  const int = (id)=>{
+    const n = num(id);
+    return n==null ? 0 : Math.max(0, Math.round(n));
+  };
+  return {
+    regime: (document.getElementById('ir-regime')||{}).value || 'auto',
+    dependents: int('ir-dependents'),
+    rendaMensal: num('ir-renda-mensal'),
+    irrfAno: num('ir-irrf-ano'),
+    irrfPct: num('ir-irrf-pct'),
+    limiteEducacao: num('ir-limite-educacao') != null ? num('ir-limite-educacao') : 3561.50,
+    dedDependente: num('ir-ded-dependente') != null ? num('ir-ded-dependente') : 2275.08,
+    metaSaude: num('ir-meta-saude'),
+    metaEducacao: num('ir-meta-educacao')
+  };
+}
+/** Faixas mensais IR RF aproximadas (para estimativa grossa anual = média mensal × meses). */
+function estimateIrDueAnnual(baseAnual){
+  if(baseAnual <= 0) return 0;
+  // Usa tabela mensal × 12 de forma simplificada (não é a regra completa da DIRPF)
+  const mensal = baseAnual / 12;
+  const brackets = [
+    { up: 2259.20, rate: 0, ded: 0 },
+    { up: 2826.65, rate: 0.075, ded: 169.44 },
+    { up: 3751.05, rate: 0.15, ded: 381.44 },
+    { up: 4664.68, rate: 0.225, ded: 662.77 },
+    { up: Infinity, rate: 0.275, ded: 896.00 }
+  ];
+  let taxM = 0;
+  for(const b of brackets){
+    if(mensal <= b.up){ taxM = mensal * b.rate - b.ded; break; }
+  }
+  taxM = Math.max(0, taxM);
+  return taxM * 12;
+}
+
+
 function setClosedUntil(iso){
   if(!state.settings) state.settings = {};
   state.settings.closedUntil = iso || null;
@@ -2982,7 +3137,7 @@ function renderAccountLimitsConfig(){
     ...Object.keys(state.accountLimits || {})
   ])).sort((a,b)=> a.localeCompare(b,'pt-BR'));
   if(!accounts.length){
-    el.innerHTML = '<div class="empty-state" style="padding:16px 0;">Nenhuma conta/cartão nos lançamentos ainda. Importe uma fatura ou digite o nome abaixo.</div>';
+    el.innerHTML = '<div class="empty-state" style="padding:16px 0;">Nenhuma conta ainda. Importe um OFX/fatura ou digite o nome da conta abaixo.</div>';
     return;
   }
   el.innerHTML = accounts.map(name=>{
@@ -3266,7 +3421,7 @@ function renderAdvancedRules(){
   // limpa índices inválidos
   selectedRuleIndexes = new Set([...selectedRuleIndexes].filter(i=> i>=0 && i < state.categoryRules.length));
   if(!(state.categoryRules||[]).length){
-    list.innerHTML = '<div class="empty-state" style="padding:10px 0;">Nenhuma regra ainda. As que você cadastrar ficam como Manual; as da importação como App.</div>';
+    list.innerHTML = '<div class="empty-state" style="padding:10px 0;">Nenhuma regra ainda. Ao corrigir uma categoria, marque “aprender” — vira regra Manual. As da importação ficam como App.</div>';
     updateRulesBulkBar();
     return;
   }
@@ -3845,42 +4000,222 @@ function renderDashboard(){
     }).join('');
   }
 
-  // comparação com o mesmo mês do ano passado
+  // comparativo: ano passado (YoY) ou mês anterior (MoM)
   {
-    const [cy, cm] = curKey.split('-').map(Number);
-    const lastYearKey = `${cy-1}-${String(cm).padStart(2,'0')}`;
-    const lastYearTx = scopedTx.filter(t=>monthKey(t.date)===lastYearKey);
-    const lastYearDespesas = lastYearTx.filter(isExpense).reduce((s,t)=>s+t.amount,0);
     const yoyEl = document.getElementById('yoy-content');
-    if(!lastYearTx.length){
-      document.getElementById('yoy-card').style.display = 'none';
+    const yoyCard = document.getElementById('yoy-card');
+    const mode = (function(){
+      try{ return localStorage.getItem('lc-yoy-mode') || 'yoy'; }catch(e){ return 'yoy'; }
+    })();
+    // sync toggle UI
+    try{
+      document.querySelectorAll('#yoy-mode-toggle [data-yoy-mode]').forEach(btn=>{
+        btn.classList.toggle('active', btn.dataset.yoyMode === mode);
+      });
+    }catch(e){}
+
+    const [cy, cm] = curKey.split('-').map(Number);
+    let baseKey, baseTitle, curTitle, hint, cardTitle;
+    if(mode === 'mom'){
+      const d = new Date(cy, cm-2, 1); // mês anterior
+      baseKey = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+      baseTitle = monthLabel(baseKey);
+      curTitle = monthLabel(curKey);
+      cardTitle = 'Mês anterior × mês atual';
+      hint = 'Esquerda = mês anterior · direita = mês atual (despesas do ano corrente).';
     } else {
-      document.getElementById('yoy-card').style.display = '';
-      const delta = lastYearDespesas>0 ? ((curTotal-lastYearDespesas)/lastYearDespesas*100) : null;
-      const deltaHTML = delta===null ? '' :
+      baseKey = `${cy-1}-${String(cm).padStart(2,'0')}`;
+      baseTitle = monthLabel(baseKey);
+      curTitle = monthLabel(curKey);
+      cardTitle = 'Mesmo mês · ano passado × atual';
+      hint = 'Esquerda = mesmo mês do ano passado · direita = mês atual (despesas).';
+    }
+    const titleEl = document.getElementById('yoy-card-title');
+    const hintEl = document.getElementById('yoy-card-hint');
+    if(titleEl) titleEl.textContent = cardTitle;
+    if(hintEl) hintEl.textContent = hint;
+
+    const baseTx = scopedTx.filter(t=> monthKey(t.date)===baseKey);
+    const baseDespesas = baseTx.filter(isExpense).reduce((s,t)=>s+t.amount,0);
+    const hasBase = baseTx.length > 0;
+    const hasCur = curDespesas.length > 0;
+
+    if(!hasBase && !hasCur){
+      if(yoyCard) yoyCard.style.display = 'none';
+    } else {
+      if(yoyCard) yoyCard.style.display = '';
+      const delta = baseDespesas>0 ? ((curTotal-baseDespesas)/baseDespesas*100) : null;
+      const deltaHTML = delta===null ? '<span style="color:var(--ink-faint);">—</span>' :
         `<span style="color:${delta>0?'var(--warn)':'var(--accent)'};font-weight:600;">${delta>=0?'+':''}${delta.toFixed(0)}%</span>`;
 
-      // top categorias em cada um dos dois períodos, pra dar contexto do que mudou
       const byCatCur = {}; curDespesas.forEach(t=>{ byCatCur[t.category]=(byCatCur[t.category]||0)+t.amount; });
-      const byCatLastYear = {}; lastYearTx.filter(isExpense).forEach(t=>{ byCatLastYear[t.category]=(byCatLastYear[t.category]||0)+t.amount; });
-      const allCatIds = new Set([...Object.keys(byCatCur), ...Object.keys(byCatLastYear)]);
+      const byCatBase = {}; baseTx.filter(isExpense).forEach(t=>{ byCatBase[t.category]=(byCatBase[t.category]||0)+t.amount; });
+      const allCatIds = new Set([...Object.keys(byCatCur), ...Object.keys(byCatBase)]);
       const catRows = Array.from(allCatIds).map(id=>({
-        id, cur: byCatCur[id]||0, prev: byCatLastYear[id]||0,
-      })).sort((a,b)=> Math.abs(b.cur-b.prev) - Math.abs(a.cur-a.prev)).slice(0,5);
+        id, cur: byCatCur[id]||0, prev: byCatBase[id]||0,
+      })).sort((a,b)=> Math.abs(b.cur-b.prev) - Math.abs(a.cur-a.prev)).slice(0,6);
 
-      yoyEl.innerHTML = `
-        <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:baseline;margin-bottom:16px;">
-          <div><span style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;">${monthLabel(curKey)}</span><br><span style="font-family:var(--font-mono);font-size:20px;font-weight:700;">${fmtBRL(curTotal)}</span></div>
-          <div><span style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;">${monthLabel(lastYearKey)}</span><br><span style="font-family:var(--font-mono);font-size:20px;color:var(--ink-dim);">${fmtBRL(lastYearDespesas)}</span></div>
-          <div><span style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;">Variação</span><br>${deltaHTML || '<span style="color:var(--ink-faint);">—</span>'}</div>
+      if(yoyEl) yoyEl.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+          <div style="padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);">
+            <div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em;">${mode==='mom'?'Mês anterior':'Ano anterior'} · ${escapeHTML(baseTitle)}</div>
+            <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;color:var(--ink-dim);margin-top:4px;">${fmtBRL(baseDespesas)}</div>
+            ${!hasBase?'<div style="font-size:11px;color:var(--ink-faint);margin-top:4px;">Sem lançamentos neste período</div>':''}
+          </div>
+          <div style="padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);">
+            <div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.04em;">Mês atual · ${escapeHTML(curTitle)}</div>
+            <div style="font-family:var(--font-mono);font-size:20px;font-weight:700;margin-top:4px;">${fmtBRL(curTotal)}</div>
+            <div style="font-size:11px;color:var(--ink-faint);margin-top:2px;">Variação ${deltaHTML}</div>
+          </div>
         </div>
-        ${catRows.length ? `<div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;margin-bottom:8px;">Categorias que mais mudaram</div>
+        ${catRows.length ? `
+        <div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;margin-bottom:8px;">Categorias que mais mudaram</div>
+        <div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) auto;gap:8px 10px;align-items:center;font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.03em;padding:0 2px 6px;border-bottom:1px solid var(--line);">
+          <span>Categoria</span>
+          <span style="text-align:right;">${escapeHTML(baseTitle)}</span>
+          <span style="text-align:right;">${escapeHTML(curTitle)}</span>
+          <span style="text-align:right;">Δ</span>
+        </div>
         ${catRows.map(r=>{
-          const c = catById(r.id);
+          const c = catById(r.id) || { name: r.id||'?' };
           const rd = r.prev>0 ? ((r.cur-r.prev)/r.prev*100) : (r.cur>0 ? null : 0);
           const rdLabel = rd===null ? 'novo' : `${rd>=0?'+':''}${rd.toFixed(0)}%`;
-          return `<div class="account-row"><span class="account-row-name" title="${escapeAttr(c.name)}">${escapeHTML(c.name)}</span><span style="flex:1;font-size:12px;color:var(--ink-faint);font-family:var(--font-mono);">${fmtBRL(r.prev)} → ${fmtBRL(r.cur)}</span><span class="account-row-val" style="color:${(rd===null||rd>0)?'var(--warn)':'var(--accent)'};">${rdLabel}</span></div>`;
-        }).join('')}` : ''}
+          const col = (rd===null||rd>0) ? 'var(--warn)' : 'var(--accent)';
+          return `<div style="display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr) minmax(0,1fr) auto;gap:8px 10px;align-items:center;padding:8px 2px;border-bottom:1px solid var(--line);">
+            <span style="font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeAttr(c.name)}">${escapeHTML(c.name)}</span>
+            <span style="font-family:var(--font-mono);font-size:12.5px;color:var(--ink-dim);text-align:right;">${fmtBRL(r.prev)}</span>
+            <span style="font-family:var(--font-mono);font-size:12.5px;color:var(--ink);text-align:right;font-weight:600;">${fmtBRL(r.cur)}</span>
+            <span style="font-family:var(--font-mono);font-size:12px;text-align:right;min-width:3.2em;color:${col};">${rdLabel}</span>
+          </div>`;
+        }).join('')}` : '<div class="empty-state" style="padding:12px;">Sem categorias para comparar.</div>'}
+      `;
+    }
+  }
+
+  // IR PF + mini DRE do ano (usa parâmetros de Config)
+  {
+    const irEl = document.getElementById('ir-pf-content');
+    const irCard = document.getElementById('ir-pf-card');
+    if(irEl && irCard){
+      const year = curKey.slice(0,4);
+      const monthsElapsed = Math.max(1, parseInt(curKey.slice(5,7),10) || 1);
+      const yearTx = scopedTx.filter(t=> String(t.date||'').startsWith(year));
+      const receitasApp = yearTx.filter(t=> t.type==='receita').reduce((s,t)=>s+Number(t.amount||0),0);
+      const despesas = yearTx.filter(isExpense).reduce((s,t)=>s+Number(t.amount||0),0);
+      const ir = getIrParams();
+      const rendaAnualEst = ir.rendaMensal != null ? ir.rendaMensal * 12 : receitasApp;
+      const rendaYtdEst = ir.rendaMensal != null ? ir.rendaMensal * monthsElapsed : receitasApp;
+      const resultado = (ir.rendaMensal != null ? rendaYtdEst : receitasApp) - despesas;
+
+      const catName = (id)=>{
+        const c = catById(id);
+        return normalizeDesc(c ? c.name : String(id||''));
+      };
+      const matchBucket = (name)=>{
+        if(/saude|saúde|medic|hospital|farmac|farmácia|odonto|plano\s*de\s*saude|plano\s*saúde|clinica|clínica/.test(name)) return 'saude';
+        if(/educa|escola|faculd|univers|curso|mensalidade\s*escol|colegio|colégio/.test(name)) return 'educacao';
+        if(/previd|pgbl|vgbl/.test(name)) return 'previdencia';
+        if(/pensao|pensão\s*aliment/.test(name)) return 'pensao';
+        return null;
+      };
+      const buckets = { saude:0, educacao:0, previdencia:0, pensao:0 };
+      yearTx.filter(isExpense).forEach(t=>{
+        const b = matchBucket(catName(t.category));
+        if(b) buckets[b] += Number(t.amount||0);
+      });
+
+      const EDU_LIMIT = Number(ir.limiteEducacao)||3561.50;
+      const dedDep = (Number(ir.dependents)||0) * (Number(ir.dedDependente)||2275.08);
+      const educDed = Math.min(buckets.educacao, EDU_LIMIT);
+      const deducoesCompleta = buckets.saude + educDed + buckets.previdencia + buckets.pensao + dedDep;
+      const descontoSimplificadoYtd = Math.min(rendaYtdEst * 0.20, rendaYtdEst); // simplificado 20%
+      const baseCompleta = Math.max(0, rendaYtdEst - deducoesCompleta);
+      const baseSimplificada = Math.max(0, rendaYtdEst - descontoSimplificadoYtd);
+      const melhorCompleta = deducoesCompleta > descontoSimplificadoYtd;
+      const regimeUsado = ir.regime === 'completa' ? 'completa' : (ir.regime === 'simplificada' ? 'simplificada' : (melhorCompleta ? 'completa' : 'simplificada'));
+      const baseEscolhida = regimeUsado === 'completa' ? baseCompleta : baseSimplificada;
+      // projeta base anual linear
+      const baseAnualProj = (baseEscolhida / monthsElapsed) * 12;
+      const irEstimadoAno = estimateIrDueAnnual(baseAnualProj);
+      // IRRF: valor informado no ano OU % da renda mensal × meses decorridos
+      let irrf = Number(ir.irrfAno)||0;
+      let irrfFonte = 'informado (R$)';
+      if((!ir.irrfAno || ir.irrfAno===0) && ir.irrfPct != null && ir.rendaMensal != null){
+        irrf = ir.rendaMensal * (Number(ir.irrfPct)/100) * monthsElapsed;
+        irrfFonte = ir.irrfPct+'% da renda × '+monthsElapsed+' meses';
+      } else if(ir.irrfPct != null && ir.rendaMensal != null && (!ir.irrfAno || ir.irrfAno===0)){
+        irrf = ir.rendaMensal * (Number(ir.irrfPct)/100) * monthsElapsed;
+        irrfFonte = ir.irrfPct+'% da renda × '+monthsElapsed+' meses';
+      } else if(ir.irrfAno){
+        irrfFonte = 'total informado no ano';
+      }
+      const saldoIr = irEstimadoAno - irrf; // >0 a pagar, <0 a restituir (estimativa)
+
+      const eduPct = EDU_LIMIT>0 ? Math.min(100, (buckets.educacao / EDU_LIMIT) * 100) : 0;
+      const metaS = ir.metaSaude;
+      const metaE = ir.metaEducacao;
+      const tips = [];
+      if(melhorCompleta && ir.regime !== 'simplificada'){
+        tips.push('No acumulado do ano, as deduções da completa ('+fmtBRL(deducoesCompleta)+') superam o desconto simplificado ('+fmtBRL(descontoSimplificadoYtd)+').');
+      } else {
+        tips.push('No acumulado, o desconto simplificado (20%) ainda parece maior que as deduções lançadas na completa.');
+      }
+      if(metaS != null && buckets.saude < metaS){
+        tips.push('Saúde: '+fmtBRL(buckets.saude)+' no ano · meta '+fmtBRL(metaS)+' (faltam '+fmtBRL(metaS-buckets.saude)+').');
+      }
+      if(metaE != null && buckets.educacao < metaE){
+        tips.push('Educação: '+fmtBRL(buckets.educacao)+' · meta '+fmtBRL(metaE)+'.');
+      }
+      if(buckets.educacao >= EDU_LIMIT * 0.9){
+        tips.push('Educação perto do limite de dedução ('+fmtBRL(EDU_LIMIT)+'/ano).');
+      }
+      if(irrf > 0 && Math.abs(saldoIr) > 50){
+        tips.push(saldoIr > 0
+          ? 'Estimativa: IR no ano ~'+fmtBRL(irEstimadoAno)+' · já retido '+fmtBRL(irrf)+' · diferença ~'+fmtBRL(saldoIr)+' (pode faltar reter / pagar).'
+          : 'Estimativa: IR no ano ~'+fmtBRL(irEstimadoAno)+' · já retido '+fmtBRL(irrf)+' · possível restituição ~'+fmtBRL(Math.abs(saldoIr))+'.');
+      }
+
+      irEl.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
+          <div style="padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);">
+            <div style="font-size:10px;color:var(--ink-faint);text-transform:uppercase;">Renda ${escapeHTML(year)} (est.)</div>
+            <div style="font-family:var(--font-mono);font-size:16px;font-weight:700;color:var(--accent);margin-top:4px;">${fmtBRL(rendaYtdEst)}</div>
+            <div style="font-size:10px;color:var(--ink-faint);">${ir.rendaMensal!=null?'holerite × '+monthsElapsed+' meses':'soma receitas no app'}</div>
+          </div>
+          <div style="padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);">
+            <div style="font-size:10px;color:var(--ink-faint);text-transform:uppercase;">Despesas no app</div>
+            <div style="font-family:var(--font-mono);font-size:16px;font-weight:700;color:var(--warn);margin-top:4px;">${fmtBRL(despesas)}</div>
+          </div>
+          <div style="padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);">
+            <div style="font-size:10px;color:var(--ink-faint);text-transform:uppercase;">Resultado (caixa)</div>
+            <div style="font-family:var(--font-mono);font-size:16px;font-weight:700;color:${resultado>=0?'var(--accent)':'var(--warn)'};margin-top:4px;">${fmtBRL(resultado)}</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+          <div style="padding:10px 12px;border-radius:10px;border:1px solid var(--line);">
+            <div style="font-size:11px;color:var(--ink-faint);">Deduções completa (YTD)</div>
+            <div style="font-family:var(--font-mono);font-weight:700;margin-top:4px;">${fmtBRL(deducoesCompleta)}</div>
+            <div style="font-size:10px;color:var(--ink-faint);margin-top:2px;">saúde+educação†+prev+pensão+dependentes</div>
+          </div>
+          <div style="padding:10px 12px;border-radius:10px;border:1px solid var(--line);">
+            <div style="font-size:11px;color:var(--ink-faint);">Desconto simplificado 20% (YTD)</div>
+            <div style="font-family:var(--font-mono);font-weight:700;margin-top:4px;">${fmtBRL(descontoSimplificadoYtd)}</div>
+            <div style="font-size:10px;color:var(--ink-faint);margin-top:2px;">Modelo usado agora: <strong>${regimeUsado}</strong></div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;margin-bottom:8px;">Gastos por tipo (categorias) · ${escapeHTML(year)}</div>
+        <div class="account-row"><span class="account-row-name">Saúde ${metaS!=null?'· meta '+fmtBRL(metaS):''}</span><span class="account-row-val">${fmtBRL(buckets.saude)}</span></div>
+        <div class="account-row"><span class="account-row-name">Educação †limite ${fmtBRL(EDU_LIMIT)} ${metaE!=null?'· meta '+fmtBRL(metaE):''}</span><span class="account-row-val">${fmtBRL(buckets.educacao)}</span></div>
+        <div style="height:6px;background:var(--surface-2);border-radius:4px;margin:4px 0 10px;overflow:hidden;"><div style="height:100%;width:${eduPct}%;background:${eduPct>=100?'var(--warn)':'var(--accent)'};"></div></div>
+        <div class="account-row"><span class="account-row-name">Previdência</span><span class="account-row-val">${fmtBRL(buckets.previdencia)}</span></div>
+        <div class="account-row"><span class="account-row-name">Pensão</span><span class="account-row-val">${fmtBRL(buckets.pensao)}</span></div>
+        <div class="account-row"><span class="account-row-name">Dependentes (${ir.dependents||0})</span><span class="account-row-val">${fmtBRL(dedDep)}</span></div>
+        <div class="account-row"><span class="account-row-name">IRRF estimado/retido <span style="color:var(--ink-faint);font-size:11px;">(${escapeHTML(irrfFonte)})</span></span><span class="account-row-val">${fmtBRL(irrf)}</span></div>
+        <div class="account-row"><span class="account-row-name">IR estimado no ano (grossa)</span><span class="account-row-val">${fmtBRL(irEstimadoAno)}</span></div>
+        ${tips.length?`<div style="margin-top:12px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-size:12.5px;color:var(--ink-dim);line-height:1.45;">${tips.map(t=> '• '+escapeHTML(t)).join('<br>')}</div>`:''}
+        <p style="font-size:11px;color:var(--ink-faint);margin:12px 0 0;line-height:1.4;">
+          Estimativa educativa. Ajuste os parâmetros em <strong>Config → Parâmetros de IR</strong>. Nomeie categorias (Saúde, Escola…) para alimentar as deduções.
+        </p>
       `;
     }
   }
@@ -3924,7 +4259,7 @@ function renderDashboard(){
   const legendEl = document.getElementById('cat-legend');
   if(chartCats){ chartCats.destroy(); chartCats = null; }
   if(catEntries.length===0){
-    legendEl.innerHTML = '<div class="empty-state">Nenhuma despesa neste mês ainda.</div>';
+    legendEl.innerHTML = '<div class="empty-state">Sem despesas neste mês. Importe o extrato ou lance a primeira compra.</div>';
     if(typeof Chart === 'undefined'){
       document.getElementById('cats-chart-wrap').innerHTML = '';
     }
@@ -4084,7 +4419,7 @@ function renderDashboard(){
     const limEl = document.getElementById('card-limits-list');
     if(!limitNames.length){
       limCard.style.display = Object.keys(state.accountLimits||{}).length ? '' : 'none';
-      limEl.innerHTML = '<div class="empty-state" style="padding:12px 0;">Nenhum limite configurado. Vá em Config → Limites por conta/cartão.</div>';
+      limEl.innerHTML = '<div class="empty-state" style="padding:12px 0;">Nenhum limite de cartão. Em Config → Limites, informe o teto e o dia de fechamento.</div>';
     } else {
       limCard.style.display = '';
       limEl.innerHTML = limitNames.map(name=>{
@@ -4563,7 +4898,7 @@ function renderDashboard(){
   // recent transactions
   const recent = scopedTx.slice().sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt)).slice(0,6);
   document.getElementById('dash-recent').innerHTML = recent.length ? recent.map(t=>rowHTML(t)).join('') :
-    '<div class="empty-state">Nenhum lançamento ainda. Adicione o primeiro em "Novo lançamento".</div>';
+    '<div class="empty-state">Nenhum lançamento ainda. Comece em Novo lançamento ou importe um extrato (OFX).</div>';
   attachRowHandlers(document.getElementById('dash-recent'));
  }catch(err){
    console.error('Erro ao desenhar o dashboard:', err);
@@ -4780,7 +5115,7 @@ function renderTransactions(){
 
   const container = document.getElementById('transactions-list');
   container.innerHTML = list.length ? list.map(t=>rowHTML(t, true)).join('') :
-    '<div class="empty-state">Nenhum lançamento encontrado com esses filtros.</div>';
+    '<div class="empty-state">Nada neste filtro. Limpe o período ou a conta, ou amplie as datas.</div>';
   attachRowHandlers(container);
   container.querySelectorAll('.row-select-chk').forEach(chk=>{
     chk.addEventListener('click', e=> e.stopPropagation());
@@ -6446,7 +6781,7 @@ function renderDupScanResults(){
   const groups = scanDatabaseDuplicates();
   card.style.display = '';
   if(!groups.length){
-    box.innerHTML = '<div class="empty-state" style="padding:20px 0;">Nenhuma duplicata encontrada na base.</div>';
+    box.innerHTML = '<div class="empty-state" style="padding:20px 0;">Nenhuma duplicata encontrada. OCR e extrato da mesma compra só batem se valor e data forem próximos.</div>';
     delBtn.style.display = 'none';
     return;
   }
@@ -8185,7 +8520,24 @@ document.getElementById('gist-sync-on-exit') && document.getElementById('gist-sy
     showToast('Enviar ao sair desativado.');
   }
 });
-try{ setupGistSyncOnExit(); }catch(e){ console.warn(e); }
+try{ 
+document.getElementById('yoy-mode-toggle') && document.getElementById('yoy-mode-toggle').addEventListener('click', (e)=>{
+  const btn = e.target.closest('[data-yoy-mode]');
+  if(!btn) return;
+  try{ localStorage.setItem('lc-yoy-mode', btn.dataset.yoyMode); }catch(err){}
+  document.querySelectorAll('#yoy-mode-toggle [data-yoy-mode]').forEach(b=> b.classList.toggle('active', b===btn));
+  try{ renderDashboard(); }catch(err){}
+});
+
+
+document.getElementById('ir-save-params') && document.getElementById('ir-save-params').addEventListener('click', ()=>{
+  setIrParams(readIrParamsForm());
+  showToast('Parâmetros de IR salvos.');
+  try{ renderDashboard(); }catch(e){}
+});
+try{ fillIrParamsForm(); }catch(e){}
+
+setupGistSyncOnExit(); }catch(e){ console.warn(e); }
 
 document.getElementById('gist-save-creds') && document.getElementById('gist-save-creds').addEventListener('click', ()=>{
   const t = (document.getElementById('gist-token')?.value || '').trim();
@@ -8334,7 +8686,7 @@ function renderRecurringList(){
   const container = document.getElementById('recurring-list');
   if(!container) return;
   if(!state.recurringTemplates.length){
-    container.innerHTML = '<div class="empty-state">Nenhum lançamento recorrente configurado.</div>';
+    container.innerHTML = '<div class="empty-state">Nenhuma recorrência. Cadastre aluguel, streaming etc. para o simulador de fatura e o mês já prever o gasto.</div>';
     return;
   }
   container.innerHTML = state.recurringTemplates.map(tpl=>{
