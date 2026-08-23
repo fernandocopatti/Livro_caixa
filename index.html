@@ -1240,7 +1240,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-23-05 (nome do aparelho no Gist)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-23-06 (diagnóstico Failed to fetch Gist)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1487,6 +1487,7 @@
         <div class="btn-row" style="margin-top:8px;flex-wrap:wrap;gap:8px;">
           <button type="button" class="btn secondary" id="gist-save-creds" style="padding:8px 14px;">Salvar token / ID / aparelho</button>
           <button type="button" class="btn" id="gist-sync-smart" style="padding:8px 14px;">Sincronizar (comparar)</button>
+          <button type="button" class="btn ghost" id="gist-test-conn" style="padding:8px 14px;">Testar conexão</button>
           <button type="button" class="btn secondary" id="gist-upload" style="padding:8px 14px;">Enviar backup ao GitHub</button>
           <button type="button" class="btn secondary" id="gist-download" style="padding:8px 14px;">Baixar do GitHub e restaurar</button>
         </div>
@@ -7700,28 +7701,83 @@ function refreshGistUI(){
   }
 }
 
+function explainGistFetchError(err){
+  const msg = String((err && err.message) || err || '');
+  const origin = (typeof location !== 'undefined' && location.protocol) ? location.protocol : '';
+  if(/Failed to fetch|NetworkError|Load failed|network/i.test(msg)){
+    let hint = 'Sem resposta da API do GitHub (rede ou bloqueio do navegador).';
+    if(origin === 'file:'){
+      hint += ' Você abriu o app como arquivo local (file://) — muitos navegadores bloqueiam a chamada. Use HTTPS (GitHub Pages) ou um servidor local.';
+    } else {
+      hint += ' Confira internet, VPN, bloqueador de anúncios e se o token ainda é válido. Tente de novo em instantes.';
+    }
+    return hint;
+  }
+  if(/401|Bad credentials|Requires authentication/i.test(msg)){
+    return 'Token inválido ou expirado. Gere outro Personal Access Token com permissão gist.';
+  }
+  if(/403|rate limit|Forbidden/i.test(msg)){
+    return 'GitHub recusou (403). Token sem permissão gist, ou limite de uso da API.';
+  }
+  if(/404|Not Found/i.test(msg)){
+    return 'Gist não encontrado (404). Confira o Gist ID ou se o token é da mesma conta que criou o Gist.';
+  }
+  return msg;
+}
+
 async function gistApi(path, opts){
   const token = getGistToken();
   if(!token) throw new Error('Token GitHub ausente');
-  const res = await fetch('https://api.github.com'+path, {
-    ...opts,
-    headers: {
-      'Accept': 'application/vnd.github+json',
-      'Authorization': 'Bearer '+token,
-      'X-GitHub-Api-Version': '2022-11-28',
-      'Content-Type': 'application/json',
-      ...(opts && opts.headers || {})
-    }
-  });
+  let res;
+  try{
+    res = await fetch('https://api.github.com'+path, {
+      ...opts,
+      mode: 'cors',
+      cache: 'no-store',
+      headers: {
+        'Accept': 'application/vnd.github+json',
+        'Authorization': 'Bearer '+token,
+        'X-GitHub-Api-Version': '2022-11-28',
+        ...(opts && opts.method && opts.method !== 'GET' ? { 'Content-Type': 'application/json' } : {}),
+        ...(opts && opts.headers || {})
+      }
+    });
+  }catch(err){
+    throw new Error(explainGistFetchError(err));
+  }
   const textBody = await res.text();
   let data = null;
   try{ data = textBody ? JSON.parse(textBody) : null; }catch(e){ data = { raw: textBody }; }
   if(!res.ok){
     const msg = (data && (data.message || data.error)) || ('HTTP '+res.status);
-    throw new Error(msg);
+    throw new Error(explainGistFetchError(new Error(msg)));
   }
   return data;
 }
+
+async function testGistConnection(){
+  updateGistStatus('Testando conexão com GitHub…');
+  try{
+    if(!getGistToken()){ showToast('Salve o token antes.'); return; }
+    const me = await gistApi('/user', { method: 'GET' });
+    const login = me && me.login ? me.login : '?';
+    let gistOk = '';
+    if(getGistId()){
+      try{
+        const g = await gistApi('/gists/'+encodeURIComponent(getGistId()), { method: 'GET' });
+        gistOk = ' · Gist OK ('+((g.files && Object.keys(g.files)[0]) || 'arquivo')+')';
+      }catch(e){
+        gistOk = ' · Gist: '+(e.message||e);
+      }
+    }
+    updateGistStatus('Conexão OK · usuário GitHub: '+login+gistOk);
+    showToast('GitHub respondeu: '+login);
+  }catch(err){
+    updateGistStatus('Erro: '+(err.message||err));
+    showToast('Falha: '+(err.message||err));
+  }
+}
+
 
 async function uploadBackupToGist(){
   const backup = buildBackupObject();
@@ -7973,6 +8029,15 @@ document.getElementById('gist-save-creds') && document.getElementById('gist-save
   showToast(t ? 'Credenciais Gist salvas neste aparelho.' : 'Token removido.');
 });
 
+document.getElementById('gist-test-conn') && document.getElementById('gist-test-conn').addEventListener('click', ()=>{
+  const t = (document.getElementById('gist-token')?.value || '').trim();
+  const id = (document.getElementById('gist-id')?.value || '').trim();
+  const dn = (document.getElementById('gist-device-name')?.value || '').trim();
+  if(t) setGistToken(t);
+  if(id) setGistId(id);
+  if(dn) setDeviceName(dn);
+  testGistConnection();
+});
 document.getElementById('gist-sync-smart') && document.getElementById('gist-sync-smart').addEventListener('click', ()=>{
   const t = (document.getElementById('gist-token')?.value || '').trim();
   const id = (document.getElementById('gist-id')?.value || '').trim();
