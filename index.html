@@ -1240,7 +1240,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-23-10 (lista clara multi-aparelho)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-23-11 (restaurar upload/download Gist)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -7701,7 +7701,7 @@ function refreshGistUI(){
   else if(!hasId) updateGistStatus('Token salvo. Envie o backup uma vez para criar o Gist.'+(auto?' · enviar ao sair aguarda Gist ID.':''));
   else updateGistStatus('Pronto · Gist '+getGistId().slice(0,12)+'… · aparelho “'+dn+'”'+(auto?' · enviar ao sair ATIVO':''));
   const verEl = document.getElementById('gist-app-version');
-  if(verEl) verEl.textContent = 'App Gist multi-aparelho · 2026-08-23-10';
+  if(verEl) verEl.textContent = 'App Gist multi-aparelho · 2026-08-23-11';
   const info = document.getElementById('gist-device-info');
   if(info){
     info.innerHTML =
@@ -7917,6 +7917,86 @@ async function listDeviceBackupsFromGist(){
   return list;
 }
 
+
+
+function localBackupMeta(){
+  return {
+    exportedAt: getLastLocalExportAt() || null,
+    deviceId: getOrCreateDeviceId(),
+    deviceName: getDeviceName() || 'Este aparelho',
+    txCount: (state.transactions||[]).length
+  };
+}
+
+function showGistCompareBox(html){
+  const box = document.getElementById('gist-compare-box');
+  if(!box) return;
+  if(!html){ box.style.display = 'none'; box.innerHTML = ''; return; }
+  box.style.display = 'block';
+  box.innerHTML = html;
+}
+
+async function uploadBackupToGist(){
+  const backup = buildBackupObject();
+  const payload = buildGistFilesPayload(backup);
+  const gistId = getGistId();
+  updateGistStatus('Enviando…');
+  if(gistId){
+    let files = payload.files;
+    try{
+      const manifest = await mergeManifestOnGist(gistId, payload.entry);
+      files = Object.assign({}, payload.files, {
+        [GIST_MANIFEST]: { content: JSON.stringify(manifest, null, 2) }
+      });
+    }catch(e){ console.warn('manifest merge', e); }
+    await gistApi('/gists/'+encodeURIComponent(gistId), {
+      method: 'PATCH',
+      body: JSON.stringify({
+        description: 'Livro-Caixa multi-aparelho · '+ (backup.deviceName||'') +' · '+new Date().toISOString().slice(0,10),
+        files
+      })
+    });
+    updateGistStatus('Backup atualizado · '+ (backup.deviceName||'aparelho') +' · '+backup.transactions.length+' lanç. · Gist '+gistId.slice(0,12)+'…');
+    gistDirty = false; lastGistSyncAt = Date.now();
+    showToast('Backup enviado ('+(backup.deviceName||'aparelho')+').');
+    return gistId;
+  }
+  const created = await gistApi('/gists', {
+    method: 'POST',
+    body: JSON.stringify({
+      description: 'Livro-Caixa multi-aparelho (secreto)',
+      public: false,
+      files: payload.files
+    })
+  });
+  if(created && created.id){
+    setGistId(created.id);
+    const gidInput = document.getElementById('gist-id');
+    if(gidInput) gidInput.value = created.id;
+    updateGistStatus('Gist criado '+created.id.slice(0,12)+'… · '+backup.transactions.length+' lançamentos');
+    gistDirty = false; lastGistSyncAt = Date.now();
+    showToast('Gist criado e backup enviado.');
+    return created.id;
+  }
+  throw new Error('Não foi possível criar o Gist');
+}
+
+async function downloadBackupFromGist(){
+  const gistId = getGistId() || (document.getElementById('gist-id')||{}).value;
+  if(!gistId) throw new Error('Informe o Gist ID');
+  updateGistStatus('Baixando…');
+  const gist = await gistApi('/gists/'+encodeURIComponent(gistId), { method: 'GET' });
+  const files = gist.files || {};
+  let file = files[GIST_FILENAME] || files[Object.keys(files).find(n=>/^device-/i.test(n))] || files[Object.keys(files)[0]];
+  if(!file) throw new Error('Gist sem arquivos');
+  const content = await readGistFileContent(file, gistId);
+  if(!content) throw new Error('Conteúdo do Gist vazio');
+  let parsed;
+  try{ parsed = JSON.parse(content); }
+  catch(e){ throw new Error('JSON do Gist inválido'); }
+  if(!parsed || !Array.isArray(parsed.transactions)) throw new Error('JSON do Gist não é um backup válido');
+  return parsed;
+}
 
 async function gistSyncSmart(){
   if(!getGistToken()){ showToast('Salve o token GitHub.'); return; }
@@ -8148,8 +8228,9 @@ document.getElementById('gist-upload') && document.getElementById('gist-upload')
     await uploadBackupToGist();
   }catch(err){
     console.error(err);
-    updateGistStatus('Erro: '+(err.message||err));
-    showToast('Falha ao enviar: '+(err.message||'erro'));
+    const em = explainGistFetchError(err);
+    updateGistStatus('Erro: '+em);
+    showToast('Falha ao enviar: '+em);
   }
 });
 
@@ -8173,8 +8254,9 @@ document.getElementById('gist-download') && document.getElementById('gist-downlo
     );
   }catch(err){
     console.error(err);
-    updateGistStatus('Erro: '+(err.message||err));
-    showToast('Falha ao baixar: '+(err.message||'erro'));
+    const em = explainGistFetchError(err);
+    updateGistStatus('Erro: '+em);
+    showToast('Falha ao baixar: '+em);
   }
 });
 
