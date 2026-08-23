@@ -1240,7 +1240,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-23-04 (mesclar OCR + extrato)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-23-05 (nome do aparelho no Gist)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1476,17 +1476,27 @@
             <label>Gist ID (após o 1º envio)</label>
             <input type="text" id="gist-id" placeholder="opcional se já tiver" autocomplete="off">
           </div>
+          <div class="field">
+            <label>Nome deste aparelho</label>
+            <input type="text" id="gist-device-name" placeholder="Ex.: iPhone, Notebook, iPad" autocomplete="off">
+          </div>
         </div>
+        <p style="font-size:12px;color:var(--ink-faint);margin:0 0 10px;line-height:1.45;">
+          Nos dois aparelhos: <strong>mesmo token</strong> + <strong>mesmo Gist ID</strong>. O nome aparece no backup para saber de qual dispositivo veio.
+        </p>
         <div class="btn-row" style="margin-top:8px;flex-wrap:wrap;gap:8px;">
-          <button type="button" class="btn secondary" id="gist-save-creds" style="padding:8px 14px;">Salvar token / ID</button>
-          <button type="button" class="btn" id="gist-upload" style="padding:8px 14px;">Enviar backup ao GitHub</button>
+          <button type="button" class="btn secondary" id="gist-save-creds" style="padding:8px 14px;">Salvar token / ID / aparelho</button>
+          <button type="button" class="btn" id="gist-sync-smart" style="padding:8px 14px;">Sincronizar (comparar)</button>
+          <button type="button" class="btn secondary" id="gist-upload" style="padding:8px 14px;">Enviar backup ao GitHub</button>
           <button type="button" class="btn secondary" id="gist-download" style="padding:8px 14px;">Baixar do GitHub e restaurar</button>
         </div>
+        <div id="gist-compare-box" style="display:none;margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);font-size:13px;color:var(--ink-dim);line-height:1.5;"></div>
         <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;margin-top:14px;">
           <input type="checkbox" id="gist-sync-on-exit" style="margin-top:3px;">
           <span><strong>Enviar ao sair</strong> — ao fechar a aba, trocar de app ou bloquear a tela, tenta enviar o backup ao Gist (precisa de token + Gist ID).</span>
         </label>
         <p id="gist-status" style="font-size:12px;color:var(--ink-faint);margin:12px 0 0;line-height:1.45;">GitHub Gist não configurado.</p>
+        <p id="gist-device-info" style="font-size:12px;color:var(--ink-dim);margin:8px 0 0;line-height:1.45;"></p>
       </div>
 
       <div class="card" style="margin-top:18px;" id="types-section">
@@ -7589,8 +7599,24 @@ function getOrCreateDeviceId(){
     return id;
   }catch(e){ return 'dev_unknown'; }
 }
+function guessDeviceName(){
+  try{
+    const ua = navigator.userAgent || '';
+    if(/iPhone/i.test(ua)) return 'iPhone';
+    if(/iPad/i.test(ua)) return 'iPad';
+    if(/Android/i.test(ua)) return 'Android';
+    if(/Mac OS|Macintosh/i.test(ua)) return 'Mac';
+    if(/Windows/i.test(ua)) return 'Windows';
+    if(/Linux/i.test(ua)) return 'Linux';
+  }catch(e){}
+  return 'Aparelho';
+}
 function getDeviceName(){
-  try{ return localStorage.getItem(GIST_DEVICE_NAME_KEY) || ''; }catch(e){ return ''; }
+  try{
+    const saved = (localStorage.getItem(GIST_DEVICE_NAME_KEY) || '').trim();
+    if(saved) return saved;
+    return guessDeviceName();
+  }catch(e){ return guessDeviceName(); }
 }
 function setDeviceName(n){
   try{ localStorage.setItem(GIST_DEVICE_NAME_KEY, (n||'').trim()); }catch(e){}
@@ -7652,14 +7678,26 @@ function refreshGistUI(){
   if(tok && !tok.value) tok.value = getGistToken();
   if(gid && !gid.value) gid.value = getGistId();
   if(chk) chk.checked = getGistSyncOnExit();
-  if(dname && !dname.value) dname.value = getDeviceName();
+  if(dname){
+    // sempre mostra nome salvo ou sugestão
+    if(!dname.value) dname.value = getDeviceName();
+  }
   const hasTok = !!getGistToken();
   const hasId = !!getGistId();
   const auto = getGistSyncOnExit();
-  const dn = getDeviceName() || 'sem nome';
+  const dn = (dname && dname.value.trim()) || getDeviceName() || 'sem nome';
+  const did = getOrCreateDeviceId();
+  const last = getLastLocalExportAt();
   if(!hasTok) updateGistStatus('GitHub Gist não configurado — cole o token e salve.');
   else if(!hasId) updateGistStatus('Token salvo. Envie o backup uma vez para criar o Gist.'+(auto?' · enviar ao sair aguarda Gist ID.':''));
   else updateGistStatus('Pronto · Gist '+getGistId().slice(0,12)+'… · aparelho “'+dn+'”'+(auto?' · enviar ao sair ATIVO':''));
+  const info = document.getElementById('gist-device-info');
+  if(info){
+    info.innerHTML =
+      '📱 <strong>Este aparelho:</strong> '+escapeHTML(dn)+
+      ' <span style="color:var(--ink-faint);">· id '+escapeHTML(did.slice(0,14))+'…</span>'+
+      (last ? '<br>Último backup local: '+escapeHTML(fmtGistWhen(last)) : '<br>Ainda não enviou backup deste aparelho nesta sessão.');
+  }
 }
 
 async function gistApi(path, opts){
