@@ -1240,7 +1240,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Planilha conectada, backup dos seus dados e lançamentos recorrentes.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-22-06 (aplicar categoria em descrições iguais)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-23-04 (mesclar OCR + extrato)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -5432,10 +5432,104 @@ function parseReceiptText(text){
   if(!dateISO) dateISO = findValidDate(text);
   if(!dateISO) dateISO = todayISO();
 
-  // descrição: primeira linha "significativa" (letras, não só números/símbolos)
-  const descLine = lines0.find(l=> /[A-Za-zÀ-ÿ]{3,}/.test(l) && !/total|subtotal|cnpj|cpf/i.test(l));
+  // descrição: preferir nome do estabelecimento no topo
+  let descLine = null;
+  for(let i=0;i<Math.min(lines0.length, 8);i++){
+    const l = lines0[i];
+    if(/[A-Za-zÀ-ÿ]{3,}/.test(l) && !/total|subtotal|cnpj|cpf|qr\s*code|chave|protocolo|nfc-?e|serie|documento/i.test(l)){
+      if(/\d+[.,]\d{2}\s*$/.test(l) && l.length > 40) continue;
+      descLine = l;
+      break;
+    }
+  }
+  if(!descLine){
+    descLine = lines0.find(l=> /[A-Za-zÀ-ÿ]{3,}/.test(l) && !/total|subtotal|cnpj|cpf/i.test(l));
+  }
 
-  return { dateISO, desc: descLine ? descLine.slice(0,80) : '', value };
+  const products = extractReceiptProducts(lines0, value);
+
+  return {
+    dateISO,
+    desc: descLine ? descLine.slice(0,80) : '',
+    value,
+    products
+  };
+}
+
+function extractReceiptProducts(lines, totalValue){
+  const skip = /total|subtotal|troco|desconto|cnpj|cpf|chave|protocolo|autoriz|emiss|nfc-?e|serie|qtd\.?\s*itens|cart[aã]o|debito|credito|pix|pagamento|forma de|operador|caixa|cupom|documento|consumer|www\.|http/i;
+  const moneyRe = /(\d{1,3}(?:\.\d{3})*,\d{2}|\d+[.,]\d{2})\s*$/;
+  const items = [];
+  const seen = new Set();
+  (lines||[]).forEach(line=>{
+    const raw = String(line||'').trim();
+    if(raw.length < 4 || raw.length > 120) return;
+    if(skip.test(raw)) return;
+    const m = raw.match(moneyRe);
+    if(!m) return;
+    const val = parseFloat(String(m[1]).replace(/\./g,'').replace(',','.'));
+    if(isNaN(val) || val <= 0) return;
+    if(totalValue != null && Math.abs(val - Number(totalValue)) < 0.009) return;
+    if(val > 50000) return;
+    let name = raw.slice(0, m.index).trim().replace(/^\d{4,}\s+/, '').replace(/\s{2,}/g,' ').trim();
+    if(name.length < 2) return;
+    if(!/[A-Za-zÀ-ÿ]{2,}/.test(name)) return;
+    const key = normalizeDesc(name)+'|'+val.toFixed(2);
+    if(seen.has(key)) return;
+    seen.add(key);
+    items.push({ name: name.slice(0,80), amount: val });
+  });
+  return items.length > 40 ? items.slice(0,40) : items;
+}
+
+function formatProductsNotes(products){
+  if(!products || !products.length) return '';
+  return 'Produtos (OCR):\n'+products.map(p=> '• '+p.name+' — '+fmtBRL(p.amount)).join('\n');
+}
+
+function findBankDupCandidates({ date, amount, excludeId }){
+  if(amount == null || isNaN(Number(amount))) return [];
+  const amt = Math.round(Number(amount)*100)/100;
+  const dayMs = 86400000;
+  const base = date ? new Date(date+'T12:00:00') : null;
+  const bankSources = { ofx:1, planilha:1, pdf:1, csv:1 };
+  return state.transactions.filter(t=>{
+    if(excludeId && t.id === excludeId) return false;
+    if(t.source === 'ocr') return false;
+    if(Math.round(Number(t.amount)*100)/100 !== amt) return false;
+    const isBank = bankSources[t.source] || t.externalId;
+    if(!isBank && t.source && t.source !== 'manual') return false;
+    if(base && t.date){
+      const diff = Math.abs(new Date(t.date+'T12:00:00') - base) / dayMs;
+      if(diff > 2) return false;
+    }
+    return true;
+  }).slice(0, 8);
+}
+
+function showOcrDupHint(candidates){
+  let el = document.getElementById('ocr-dup-hint');
+  if(!el){
+    const preview = document.getElementById('ocr-preview');
+    if(!preview) return;
+    el = document.createElement('div');
+    el.id = 'ocr-dup-hint';
+    el.style.cssText = 'margin-top:12px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-size:12.5px;color:var(--ink-dim);line-height:1.45;';
+    preview.parentNode.insertBefore(el, preview.nextSibling);
+  }
+  if(!candidates || !candidates.length){
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  el.style.display = 'block';
+  const rows = candidates.map(t=>{
+    const src = t.source || '?';
+    return '• '+escapeHTML(fmtDate(t.date))+' · '+escapeHTML((t.desc||'').slice(0,42))+' · '+fmtBRL(t.amount)+
+      ' <span style="color:var(--ink-faint)">('+escapeHTML(src)+(t.account?' · '+escapeHTML(t.account):'')+')</span>';
+  }).join('<br>');
+  el.innerHTML = '<strong style="color:var(--warn);">Possível duplicata com extrato</strong> (mesmo valor e data próxima):<br>'+rows+
+    '<br><span style="font-size:11.5px;color:var(--ink-faint);">Se for a mesma compra, não lance de novo — anexe a foto no lançamento do banco ou ignore este OCR.</span>';
 }
 
 async function runOCR(file){
@@ -5480,10 +5574,34 @@ async function runOCR(file){
     if(parsed.desc) document.getElementById('f-desc').value = parsed.desc;
     document.getElementById('f-source').value = 'ocr';
     const type = document.getElementById('f-type').value;
-    if(parsed.desc) document.getElementById('f-category').value = suggestCategory(parsed.desc, type);
-    showToast(lowConfidence
-      ? 'Foto difícil de ler — confira todos os campos antes de salvar.'
-      : 'Dados preenchidos a partir da foto — confira antes de salvar.');
+    if(parsed.desc) document.getElementById('f-category').value = suggestCategory(parsed.desc, type, parsed.value);
+    // produtos → observações
+    const notesEl = document.getElementById('f-notes');
+    if(notesEl && parsed.products && parsed.products.length){
+      const block = formatProductsNotes(parsed.products);
+      const prev = (notesEl.value || '').trim();
+      if(!prev) notesEl.value = block;
+      else if(!/Produtos \(OCR\)/.test(prev)) notesEl.value = prev + '\n\n' + block;
+      statusEl.textContent = (lowConfidence
+        ? 'Leitura de baixa confiança — confira os dados. '
+        : 'Pronto — confira os dados. ') + parsed.products.length + ' item(ns) sugerido(s) nas observações.';
+    }
+    // aviso de possível duplicata com OFX/CSV
+    try{
+      const dups = findBankDupCandidates({ date: parsed.dateISO, amount: parsed.value });
+      showOcrDupHint(dups);
+      if(dups.length){
+        showToast('Atenção: '+dups.length+' lançamento(s) do extrato com valor/data parecidos.');
+      } else {
+        showToast(lowConfidence
+          ? 'Foto difícil de ler — confira todos os campos antes de salvar.'
+          : 'Dados preenchidos a partir da foto — confira antes de salvar.');
+      }
+    }catch(e){
+      showToast(lowConfidence
+        ? 'Foto difícil de ler — confira todos os campos antes de salvar.'
+        : 'Dados preenchidos a partir da foto — confira antes de salvar.');
+    }
   });
 }
 
@@ -5503,14 +5621,15 @@ async function runBatchOCR(files){
     const processedUrl = await preprocessImageForOCR(files[i]);
     const { text, confidence } = await ocrImageToText(processedUrl);
     if(typeof confidence === 'number' && confidence < 55) anyLowConfidence = true;
-    const parsed = text ? parseReceiptText(text) : { dateISO: todayISO(), desc:'', value:null };
+    const parsed = text ? parseReceiptText(text) : { dateISO: todayISO(), desc:'', value:null, products:[] };
     const desc = parsed.desc || `Comprovante ${i+1}`;
     results.push({
       date: parsed.dateISO,
       desc,
       amount: parsed.value !== null ? parsed.value : 0,
       type: 'despesa',
-      category: suggestCategory(desc, 'despesa'),
+      category: suggestCategory(desc, 'despesa', parsed.value),
+      notes: formatProductsNotes(parsed.products||[]),
       thumb: thumbUrl,
       photo: compressedPhoto,
     });
@@ -6158,6 +6277,36 @@ function findDuplicateMatch(candidate, { batchSeenSigs, batchSeenExt } = {}){
   });
   if(near) reasons.push({ level:'near', reason:'mesmo dia/valor e descrição parecida (possível duplicata)', matchId: near.id });
 
+  // OCR ↔ extrato (OFX/CSV/PDF): mesma compra com textos diferentes
+  // Fluxo comum: cupom OCR primeiro (com itens) e extrato depois
+  if(!reasons.length || !reasons.some(r=> r.level === 'exact')){
+    const dayMs = 86400000;
+    const candDate = candidate.date ? new Date(candidate.date+'T12:00:00') : null;
+    const candOcr = (candidate.source === 'ocr');
+    const cross = state.transactions.find(t=>{
+      if(Math.abs(Number(t.amount) - Number(candidate.amount)) > 0.009) return false;
+      if(isDistinctInstallments(candidate, t)) return false;
+      if(!t.date || !candDate) return false;
+      const diff = Math.abs(new Date(t.date+'T12:00:00') - candDate) / dayMs;
+      if(diff > 2) return false;
+      const baseOcr = (t.source === 'ocr');
+      const candBank = !candidate.source || ['ofx','planilha','pdf','csv','manual'].includes(candidate.source);
+      const baseBank = !t.source || ['ofx','planilha','pdf','csv','manual'].includes(t.source);
+      // um lado OCR e o outro extrato/manual
+      if(candOcr && baseBank && !baseOcr) return true;
+      if(baseOcr && candBank && !candOcr) return true;
+      return false;
+    });
+    if(cross){
+      const who = cross.source === 'ocr' ? 'cupom OCR' : ('extrato/'+(cross.source||'base'));
+      reasons.push({
+        level: 'near',
+        reason: 'mesmo valor e data próxima de '+who+' (OCR e extrato costumam ter textos diferentes — possível mesma compra)',
+        matchId: cross.id
+      });
+    }
+  }
+
   return reasons;
 }
 
@@ -6171,12 +6320,36 @@ function flagDuplicates(items){
     it.duplicate = exact || near;
     it.dupLevel = exact ? 'exact' : (near ? 'near' : null);
     it.dupReasons = reasons.map(r=> r.reason);
+    const withMatch = reasons.find(r=> r.matchId);
+    it.matchId = withMatch ? withMatch.matchId : null;
+    it.matchTx = it.matchId ? state.transactions.find(t=> t.id === it.matchId) : null;
+    it.matchIsOcr = !!(it.matchTx && it.matchTx.source === 'ocr');
     const sig = txSignature(it.date, it.desc, it.amount, it.installment, null);
     batchSeenSigs.add(sig);
     if(it.externalId) batchSeenExt.add(String(it.externalId));
   });
   return items;
 }
+
+/** Anexa dados do extrato no lançamento OCR (mantém itens/foto/descrição do cupom). */
+function mergeBankIntoOcr(ocrTx, bankItem){
+  if(!ocrTx || !bankItem) return false;
+  if(bankItem.externalId) ocrTx.externalId = bankItem.externalId;
+  if(bankItem.account) ocrTx.account = bankItem.account;
+  // data do banco costuma ser a liquidação — opcionalmente alinha se OCR estiver ±2 dias
+  if(bankItem.date) ocrTx.date = bankItem.date;
+  if(bankItem.installment) ocrTx.installment = bankItem.installment;
+  const linkLine = 'Extrato ('+(bankItem.source||'banco')+'): '+(bankItem.desc||'')+(bankItem.externalId?' · ID '+bankItem.externalId:'');
+  const notes = (ocrTx.notes || '').trim();
+  if(!notes.includes(linkLine.slice(0,40))){
+    ocrTx.notes = notes ? (notes+'\n'+linkLine) : linkLine;
+  }
+  ocrTx.mergedFromBank = true;
+  ocrTx.bankDesc = bankItem.desc || ocrTx.bankDesc;
+  ocrTx.mergedAt = new Date().toISOString();
+  return true;
+}
+
 
 /** Agrupa lançamentos já salvos que são duplicatas entre si. */
 function scanDatabaseDuplicates(){
@@ -6227,6 +6400,28 @@ function scanDatabaseDuplicates(){
     });
     if(filtered.length < 2) return;
     groups.push({ reason: 'mesmo dia/valor e descrição parecida', level:'near', items: filtered.slice().sort((a,b)=> (a.date+a.createdAt).localeCompare(b.date+b.createdAt)) });
+  });
+
+  // OCR ↔ extrato já salvos (mesmo valor, data ±2 dias, fontes diferentes)
+  const ocrList = state.transactions.filter(t=> t.source === 'ocr' && !used.has(t.id));
+  const bankList = state.transactions.filter(t=> t.source !== 'ocr' && !used.has(t.id) && (['ofx','planilha','pdf','csv','manual'].includes(t.source||'manual') || t.externalId));
+  ocrList.forEach(o=>{
+    if(used.has(o.id)) return;
+    const mates = bankList.filter(b=>{
+      if(used.has(b.id)) return false;
+      if(Math.abs(Number(o.amount)-Number(b.amount)) > 0.009) return false;
+      if(!o.date || !b.date) return false;
+      const diff = Math.abs(new Date(o.date+'T12:00:00') - new Date(b.date+'T12:00:00')) / 86400000;
+      return diff <= 2;
+    });
+    if(!mates.length) return;
+    const items = [o, ...mates];
+    items.forEach(t=> used.add(t.id));
+    groups.push({
+      reason: 'OCR + extrato: mesmo valor e data próxima (textos diferentes — possível mesma compra)',
+      level: 'near',
+      items: items.sort((a,b)=> (a.date+String(a.createdAt)).localeCompare(b.date+String(b.createdAt)))
+    });
   });
 
   return groups;
@@ -6340,7 +6535,9 @@ function renderReviewTable(containerId, items, sourceType){
       <td>
         <input type="text" class="rv-desc" value="${escapeAttr(it.desc)}">
         ${it.duplicate ? `<span class="dup-badge" title="${escapeAttr((it.dupReasons||[]).join(' · ') || 'possível duplicata')}">${it.dupLevel==='near'?'parecido':'duplicata'}</span>` : ''}
+        ${it.matchIsOcr ? `<span class="dup-badge" style="color:var(--accent);background:rgba(94,184,163,.12);" title="Já existe cupom OCR com itens">OCR</span>` : ''}
         ${it.installment ? `<span class="dup-badge" style="color:var(--gold);background:rgba(203,161,53,.12);" title="Parcela ${it.installment.current} de ${it.installment.total}">📅 ${it.installment.current}/${it.installment.total}</span>` : ''}
+        ${it.matchIsOcr ? `<label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11.5px;color:var(--ink-dim);cursor:pointer;"><input type="checkbox" class="rv-merge-ocr" checked> Mesclar no OCR (manter itens)</label>` : ''}
       </td>
       <td><input type="number" step="0.01" class="rv-amount" value="${it.amount}"></td>
       <td><select class="rv-type">${typeOpt(it.type)}</select></td>
@@ -6357,9 +6554,10 @@ function renderReviewTable(containerId, items, sourceType){
       <tbody>${rowsHTML}</tbody>
     </table>
     </div>
-    <div class="import-summary">${items.length} lançamentos encontrados.${dupCount ? ` ${dupCount} parece${dupCount===1?'':'m'} já existir na sua base e ${dupCount===1?'foi desmarcado':'foram desmarcados'} automaticamente — confira e marque de volta se não for duplicata de verdade.` : ''} O 🧠 marcado memoriza a categoria escolhida para descrições parecidas nas próximas importações.</div>
+    <div class="import-summary">${items.length} lançamentos encontrados.${dupCount ? ` ${dupCount} parece${dupCount===1?'':'m'} já existir na sua base e ${dupCount===1?'foi desmarcado':'foram desmarcados'} automaticamente.` : ''}${items.filter(it=>it.matchIsOcr).length ? ` <strong style="color:var(--accent);">${items.filter(it=>it.matchIsOcr).length} com cupom OCR</strong> — use “Mesclar no OCR” para manter os itens e anexar conta/ID do extrato.` : ''} O 🧠 memoriza categoria.</div>
     <div class="btn-row">
       <button class="btn" id="confirm-import-${sourceType}">Confirmar importação</button>
+      ${items.some(it=>it.matchIsOcr) ? `<button class="btn secondary" id="merge-all-ocr-${sourceType}" type="button">Mesclar todos os OCR</button>` : ''}
       <button class="btn ghost" id="cancel-import-${sourceType}">Cancelar</button>
     </div>`;
 
@@ -6382,15 +6580,39 @@ function renderReviewTable(containerId, items, sourceType){
     });
   });
 
-  document.getElementById('confirm-import-'+sourceType).addEventListener('click', ()=>{
+  const runImportRows = (forceMergeAllOcr)=>{
     const rows = container.querySelectorAll('tbody tr');
     let count = 0;
+    let merged = 0;
     let skippedDup = 0;
     let skippedManual = 0;
     const skippedDupLines = [];
     rows.forEach(row=>{
       const idx = parseInt(row.dataset.idx, 10);
       const it = items[idx];
+      const mergeChk = row.querySelector('.rv-merge-ocr');
+      const wantMerge = forceMergeAllOcr ? !!(it && it.matchIsOcr) : !!(mergeChk && mergeChk.checked && it && it.matchIsOcr);
+
+      if(wantMerge && it && it.matchId){
+        const ocrTx = state.transactions.find(t=> t.id === it.matchId && t.source === 'ocr');
+        if(ocrTx){
+          const date = row.querySelector('.rv-date').value || it.date;
+          const amount = parseFloat(row.querySelector('.rv-amount').value);
+          const bankItem = {
+            date,
+            desc: row.querySelector('.rv-desc').value.trim() || it.desc,
+            amount: isNaN(amount) ? it.amount : amount,
+            account: it.account,
+            externalId: it.externalId,
+            installment: it.installment,
+            source: sourceType
+          };
+          mergeBankIntoOcr(ocrTx, bankItem);
+          merged++;
+          return;
+        }
+      }
+
       if(!row.querySelector('.rv-chk').checked){
         if(it && it.duplicate){ skippedDup++; skippedDupLines.push(`${it.date} · ${it.desc} · ${fmtBRL(it.amount)}`); }
         else skippedManual++;
@@ -6406,20 +6628,25 @@ function renderReviewTable(containerId, items, sourceType){
       const account = it ? it.account : undefined;
       const installment = it ? it.installment : undefined;
       addTransaction({date, amount, desc, category, source: sourceType, type, photo, account, installment, externalId: it && it.externalId});
-      if(row.querySelector('.rv-remember').checked){
+      if(row.querySelector('.rv-remember') && row.querySelector('.rv-remember').checked){
         learnCategory(desc, category);
       }
       count++;
     });
-    const logLines = [`${count} lançamento${count===1?'':'s'} importado${count===1?'':'s'}.`];
+    if(merged) saveState();
+    const logLines = [];
+    if(count) logLines.push(`${count} lançamento${count===1?'':'s'} importado${count===1?'':'s'}.`);
+    if(merged) logLines.push(`${merged} mesclado${merged===1?'':'s'} no cupom OCR (itens mantidos).`);
+    if(!logLines.length) logLines.push('Nada importado.');
     if(skippedDup) logLines.push(`${skippedDup} pulado${skippedDup===1?'':'s'} por parecer${skippedDup===1?'':'em'} duplicado${skippedDup===1?'':'s'}.`);
-    if(skippedManual) logLines.push(`${skippedManual} deixado${skippedManual===1?'':'s'} de fora (desmarcado manualmente).`);
+    if(skippedManual) logLines.push(`${skippedManual} deixado${skippedManual===1?'':'s'} de fora (desmarcado).`);
     container.innerHTML = `
       <div class="import-summary">${logLines.join(' ')}</div>
       ${skippedDupLines.length ? `<details style="margin-top:8px;"><summary style="cursor:pointer;color:var(--ink-faint);font-size:11.5px;">Ver o que foi pulado por duplicidade</summary><pre style="white-space:pre-wrap;font-size:11px;color:var(--ink-faint);background:var(--surface-2);border:1px solid var(--line);border-radius:6px;padding:8px;margin-top:6px;font-family:var(--font-mono);">${skippedDupLines.map(escapeAttr).join('\n')}</pre></details>` : ''}
     `;
     renderDashboard();
     fillAccountSuggestions();
+    try{ renderTransactions(); }catch(e){}
     try{
       const accField = sourceType==='ofx' ? 'import-account-ofx' : (sourceType==='pdf' ? 'import-account-pdf' : (sourceType==='planilha' ? 'import-account-planilha' : null));
       if(accField){
@@ -6434,7 +6661,15 @@ function renderReviewTable(containerId, items, sourceType){
       }
     }catch(e){}
     showToast(logLines[0]);
-  });
+  };
+
+  document.getElementById('confirm-import-'+sourceType).addEventListener('click', ()=> runImportRows(false));
+  const mergeAllBtn = document.getElementById('merge-all-ocr-'+sourceType);
+  if(mergeAllBtn){
+    mergeAllBtn.addEventListener('click', ()=>{
+      askConfirm('Mesclar todos os OCR', 'Anexa conta/ID do extrato em todos os cupons OCR correspondentes e não cria lançamento duplicado. Continuar?', ()=> runImportRows(true));
+    });
+  }
 }
 
 function escapeAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
