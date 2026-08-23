@@ -7522,6 +7522,13 @@ document.getElementById('cfg-btn-import-sheet').addEventListener('click', ()=>{
 const GIST_TOKEN_KEY = 'lc-gist-token';
 const GIST_ID_KEY = 'lc-gist-id';
 const GIST_FILENAME = 'livro-caixa-backup.json';
+const GIST_MANIFEST = 'devices-manifest.json';
+function gistDeviceFileName(deviceId, deviceName){
+  const id = String(deviceId||'unknown').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,40);
+  const nm = String(deviceName||'aparelho').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,24) || 'aparelho';
+  return 'device-'+nm+'-'+id+'.json';
+}
+
 
 const GIST_SYNC_ON_EXIT_KEY = 'lc-gist-sync-on-exit';
 let gistDirty = true;
@@ -7546,11 +7553,11 @@ async function tryGistSyncOnExit(reason){
   gistSyncInFlight = true;
   try{
     const backup = buildBackupObject();
-    const content = JSON.stringify(backup, null, 2);
+    const payload = buildGistFilesPayload(backup);
     const gistId = getGistId();
     const body = JSON.stringify({
-      description: 'Livro-Caixa backup '+new Date().toISOString().slice(0,19),
-      files: { [GIST_FILENAME]: { content } }
+      description: 'Livro-Caixa · '+(backup.deviceName||'')+' · '+new Date().toISOString().slice(0,19),
+      files: payload.files
     });
     const res = await fetch('https://api.github.com/gists/'+encodeURIComponent(gistId), {
       method: 'PATCH',
@@ -7779,30 +7786,185 @@ async function testGistConnection(){
 }
 
 
+
+function buildGistFilesPayload(backup){
+  const content = JSON.stringify(backup, null, 2);
+  const deviceId = backup.deviceId || getOrCreateDeviceId();
+  const deviceName = backup.deviceName || getDeviceName() || 'Aparelho';
+  const deviceFile = gistDeviceFileName(deviceId, deviceName);
+  const entry = {
+    deviceId,
+    deviceName,
+    exportedAt: backup.exportedAt,
+    txCount: Array.isArray(backup.transactions) ? backup.transactions.length : 0,
+    file: deviceFile
+  };
+  // manifest mínimo deste envio (no PATCH vamos mesclar lendo o gist se possível; se não, só este)
+  const manifest = {
+    updatedAt: backup.exportedAt,
+    devices: { [deviceId]: entry }
+  };
+  return {
+    content,
+    deviceFile,
+    entry,
+    files: {
+      [GIST_FILENAME]: { content },
+      [deviceFile]: { content },
+      [GIST_MANIFEST]: { content: JSON.stringify(manifest, null, 2) }
+    }
+  };
+}
+
+async function mergeManifestOnGist(gistId, entry){
+  try{
+    const gist = await gistApi('/gists/'+encodeURIComponent(gistId), { method: 'GET' });
+    const mf = (gist.files||{})[GIST_MANIFEST];
+    let devices = {};
+    if(mf && mf.content){
+      try{
+        const parsed = JSON.parse(mf.content);
+        if(parsed && parsed.devices) devices = parsed.devices;
+      }catch(e){}
+    }
+    // também descobre device-*.json existentes
+    Object.keys(gist.files||{}).forEach(name=>{
+      if(/^device-.*\.json$/i.test(name) && name !== entry.file){
+        // mantém se já no manifest; senão cria stub
+        const found = Object.values(devices).find(d=> d.file === name);
+        if(!found){
+          devices['file:'+name] = { deviceId: 'file:'+name, deviceName: name.replace(/^device-/,'').replace(/\.json$/,''), exportedAt: null, txCount: null, file: name };
+        }
+      }
+    });
+    devices[entry.deviceId] = entry;
+    return {
+      updatedAt: entry.exportedAt,
+      devices
+    };
+  }catch(e){
+    return { updatedAt: entry.exportedAt, devices: { [entry.deviceId]: entry } };
+  }
+}
+
+async function readGistFileContent(file, gistId){
+  if(!file) return null;
+  let content = file.content;
+  const needsRaw = !!(file.truncated || (file.raw_url && (content == null || content === '')));
+  if(needsRaw && file.raw_url){
+    const raw = await fetch(file.raw_url, { method: 'GET', mode: 'cors', cache: 'no-store' });
+    if(!raw.ok) throw new Error('Falha ao baixar arquivo do Gist (HTTP '+raw.status+')');
+    content = await raw.text();
+  }
+  return content;
+}
+
+async function listDeviceBackupsFromGist(){
+  const gistId = getGistId();
+  if(!gistId) throw new Error('Informe o Gist ID');
+  const gist = await gistApi('/gists/'+encodeURIComponent(gistId), { method: 'GET' });
+  const files = gist.files || {};
+  const list = [];
+
+  // prefer manifest
+  const mf = files[GIST_MANIFEST];
+  if(mf){
+    try{
+      const raw = await readGistFileContent(mf, gistId);
+      const parsed = JSON.parse(raw);
+      if(parsed && parsed.devices){
+        Object.values(parsed.devices).forEach(d=>{
+          if(d && d.file) list.push({ ...d, fromManifest: true });
+        });
+      }
+    }catch(e){ console.warn('manifest', e); }
+  }
+
+  // always include device-*.json files
+  for(const name of Object.keys(files)){
+    if(!/^device-.*\.json$/i.test(name)) continue;
+    if(list.some(x=> x.file === name)) continue;
+    list.push({
+      deviceId: name,
+      deviceName: name.replace(/^device-/,'').replace(/\.json$/,''),
+      exportedAt: null,
+      txCount: null,
+      file: name
+    });
+  }
+
+  // enrich from each device file header (exportedAt/deviceName) when missing
+  for(const item of list){
+    if(item.exportedAt && item.txCount != null) continue;
+    const f = files[item.file];
+    if(!f) continue;
+    try{
+      const raw = await readGistFileContent(f, gistId);
+      const p = JSON.parse(raw);
+      item.exportedAt = p.exportedAt || item.exportedAt;
+      item.deviceName = p.deviceName || item.deviceName;
+      item.deviceId = p.deviceId || item.deviceId;
+      item.txCount = Array.isArray(p.transactions) ? p.transactions.length : item.txCount;
+      item._parsed = p;
+    }catch(e){}
+  }
+
+  // latest canonical
+  if(files[GIST_FILENAME]){
+    try{
+      const raw = await readGistFileContent(files[GIST_FILENAME], gistId);
+      const p = JSON.parse(raw);
+      list.unshift({
+        deviceId: p.deviceId || 'latest',
+        deviceName: (p.deviceName || 'Último envio') + ' (principal)',
+        exportedAt: p.exportedAt,
+        txCount: Array.isArray(p.transactions) ? p.transactions.length : 0,
+        file: GIST_FILENAME,
+        isLatest: true,
+        _parsed: p
+      });
+    }catch(e){}
+  }
+
+  // dedupe by deviceId keeping newest
+  const byId = {};
+  list.forEach(item=>{
+    const k = item.deviceId || item.file;
+    const prev = byId[k];
+    if(!prev){ byId[k] = item; return; }
+    const pt = prev.exportedAt ? Date.parse(prev.exportedAt) : 0;
+    const it = item.exportedAt ? Date.parse(item.exportedAt) : 0;
+    if(it >= pt) byId[k] = item;
+  });
+  return Object.values(byId).sort((a,b)=> (Date.parse(b.exportedAt||0)||0) - (Date.parse(a.exportedAt||0)||0));
+}
+
 async function uploadBackupToGist(){
   const backup = buildBackupObject();
-  const content = JSON.stringify(backup, null, 2);
+  const payload = buildGistFilesPayload(backup);
   const gistId = getGistId();
   updateGistStatus('Enviando…');
   if(gistId){
+    const manifest = await mergeManifestOnGist(gistId, payload.entry);
+    payload.files[GIST_MANIFEST] = { content: JSON.stringify(manifest, null, 2) };
     await gistApi('/gists/'+encodeURIComponent(gistId), {
       method: 'PATCH',
       body: JSON.stringify({
-        description: 'Livro-Caixa backup '+new Date().toISOString().slice(0,10),
-        files: { [GIST_FILENAME]: { content } }
+        description: 'Livro-Caixa multi-aparelho · '+ (backup.deviceName||'') +' · '+new Date().toISOString().slice(0,10),
+        files: payload.files
       })
     });
-    updateGistStatus('Backup atualizado no Gist '+gistId.slice(0,12)+'… · '+backup.transactions.length+' lançamentos');
+    updateGistStatus('Backup atualizado · '+ (backup.deviceName||'aparelho') +' · '+backup.transactions.length+' lanç. · Gist '+gistId.slice(0,12)+'…');
     gistDirty = false; lastGistSyncAt = Date.now();
-    showToast('Backup enviado ao GitHub.');
+    showToast('Backup enviado ('+(backup.deviceName||'aparelho')+').');
     return gistId;
   }
   const created = await gistApi('/gists', {
     method: 'POST',
     body: JSON.stringify({
-      description: 'Livro-Caixa backup (secreto)',
+      description: 'Livro-Caixa multi-aparelho (secreto)',
       public: false,
-      files: { [GIST_FILENAME]: { content } }
+      files: payload.files
     })
   });
   if(created && created.id){
@@ -7912,65 +8074,90 @@ function showGistCompareBox(html){
 async function gistSyncSmart(){
   if(!getGistToken()){ showToast('Salve o token GitHub.'); return; }
   if(!getGistId()){ showToast('Informe o Gist ID (ou envie o 1º backup).'); return; }
-  updateGistStatus('Comparando com o GitHub…');
+  updateGistStatus('Comparando aparelhos no GitHub…');
   try{
-    const remote = await downloadBackupFromGist();
     const local = localBackupMeta();
-    const remoteMeta = {
-      exportedAt: remote.exportedAt || null,
-      deviceId: remote.deviceId || '',
-      deviceName: remote.deviceName || 'Outro aparelho',
-      txCount: Array.isArray(remote.transactions) ? remote.transactions.length : 0
-    };
-    const cmp = compareBackupMeta(local, remoteMeta);
-    const sameDevice = remoteMeta.deviceId && remoteMeta.deviceId === local.deviceId;
+    const devices = await listDeviceBackupsFromGist();
+    const myId = local.deviceId;
 
-    let verdict = '';
-    if(cmp === 'remote_newer') verdict = 'O backup no <strong>GitHub é mais recente</strong>.';
-    else if(cmp === 'local_newer') verdict = 'Os dados <strong>neste aparelho são mais recentes</strong>.';
-    else if(cmp === 'same') verdict = 'As datas estão <strong>equivalentes</strong> (diferença &lt; 2s).';
-    else verdict = 'Não foi possível comparar as datas com segurança.';
+    const rows = devices.map((d, idx)=>{
+      const isMe = d.deviceId && d.deviceId === myId;
+      const when = fmtGistWhen(d.exportedAt);
+      const txs = d.txCount != null ? d.txCount : '?';
+      const label = escapeHTML(d.deviceName || d.file || 'Aparelho');
+      const tag = isMe ? ' <span style="color:var(--accent);">(este)</span>' : '';
+      const latest = d.isLatest ? ' · arquivo principal' : '';
+      return `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line);">
+        <div style="font-size:12.5px;line-height:1.4;">
+          📱 <strong>${label}</strong>${tag}${latest}<br>
+          <span style="color:var(--ink-faint);font-family:var(--font-mono);">${txs} lanç. · ${escapeHTML(when)}</span>
+        </div>
+        <button type="button" class="btn secondary gist-restore-device" data-idx="${idx}" style="padding:6px 12px;font-size:12px;">Trazer este</button>
+      </div>`;
+    }).join('') || '<p style="color:var(--ink-faint);">Nenhum backup de aparelho no Gist ainda. Envie um backup de cada dispositivo.</p>';
 
     showGistCompareBox(`
-      <div style="margin-bottom:8px;">${verdict}</div>
-      <div style="display:grid;gap:6px;font-family:var(--font-mono);font-size:12px;">
-        <div>📱 <strong>Este aparelho</strong> (${escapeHTML(local.deviceName)}) · ${local.txCount} lanç. · ${escapeHTML(fmtGistWhen(local.exportedAt))}</div>
-        <div>☁️ <strong>GitHub</strong> (${escapeHTML(remoteMeta.deviceName)}${sameDevice?' · mesmo aparelho':''}) · ${remoteMeta.txCount} lanç. · ${escapeHTML(fmtGistWhen(remoteMeta.exportedAt))}</div>
+      <div style="margin-bottom:10px;"><strong>Backups no GitHub</strong> — cada aparelho guarda o próprio arquivo. O “principal” é o último envio.</div>
+      <div style="margin-bottom:8px;font-size:12px;color:var(--ink-faint);">
+        📱 <strong>Agora neste aparelho:</strong> ${escapeHTML(local.deviceName)} · ${local.txCount} lanç. · ${escapeHTML(fmtGistWhen(local.exportedAt))}
       </div>
+      ${rows}
       <div class="btn-row" style="margin-top:12px;flex-wrap:wrap;gap:8px;">
-        <button type="button" class="btn secondary" id="gist-cmp-push" style="padding:8px 12px;">Enviar deste aparelho → GitHub</button>
-        <button type="button" class="btn" id="gist-cmp-pull" style="padding:8px 12px;">Trazer GitHub → este aparelho</button>
+        <button type="button" class="btn" id="gist-cmp-push" style="padding:8px 12px;">Enviar este aparelho → GitHub</button>
       </div>
       <p style="font-size:11px;color:var(--ink-faint);margin:10px 0 0;line-height:1.4;">
-        Trazer do GitHub <strong>substitui</strong> os dados do perfil atual. Enviar sobrescreve o Gist com o que está aqui.
+        “Trazer este” substitui os dados do perfil atual pelo backup daquele aparelho. Envie de <strong>cada</strong> aparelho pelo menos uma vez para aparecerem todos.
       </p>
     `);
+
+    document.querySelectorAll('.gist-restore-device').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const d = devices[parseInt(btn.dataset.idx,10)];
+        if(!d) return;
+        try{
+          updateGistStatus('Baixando backup de '+ (d.deviceName||'') +'…');
+          let parsed = d._parsed;
+          if(!parsed){
+            const gist = await gistApi('/gists/'+encodeURIComponent(getGistId()), { method: 'GET' });
+            const f = (gist.files||{})[d.file];
+            const raw = await readGistFileContent(f, getGistId());
+            parsed = JSON.parse(raw);
+          }
+          if(!parsed || !Array.isArray(parsed.transactions)){
+            showToast('Backup inválido');
+            return;
+          }
+          askConfirm(
+            'Trazer backup',
+            'Substituir os dados deste aparelho pelo backup de “'+(d.deviceName||'?')+'” ('+(d.txCount!=null?d.txCount:parsed.transactions.length)+' lançamentos)?',
+            ()=>{
+              applyImportedBackup(parsed);
+              setLastLocalExportAt(parsed.exportedAt || new Date().toISOString());
+              updateGistStatus('Restaurado de '+ (d.deviceName||'') +' · '+parsed.transactions.length+' lanç.');
+              showGistCompareBox('');
+              showToast('Backup de '+(d.deviceName||'aparelho')+' aplicado.');
+              refreshGistUI();
+            }
+          );
+        }catch(err){
+          showToast('Falha: '+explainGistFetchError(err));
+        }
+      });
+    });
 
     document.getElementById('gist-cmp-push') && document.getElementById('gist-cmp-push').addEventListener('click', async ()=>{
       try{
         await uploadBackupToGist();
         showGistCompareBox('');
         refreshGistUI();
+        // reabre lista
+        setTimeout(()=> gistSyncSmart(), 400);
       }catch(err){
         showToast('Falha ao enviar: '+explainGistFetchError(err));
       }
     });
-    document.getElementById('gist-cmp-pull') && document.getElementById('gist-cmp-pull').addEventListener('click', ()=>{
-      askConfirm(
-        'Trazer do GitHub',
-        'Substituir os dados deste aparelho pelo backup do Gist ('+remoteMeta.txCount+' lançamentos, de '+ (remoteMeta.deviceName||'?') +')?',
-        ()=>{
-          applyImportedBackup(remote);
-          setLastLocalExportAt(remote.exportedAt || new Date().toISOString());
-          updateGistStatus('Restaurado do GitHub · '+remoteMeta.txCount+' lanç. · '+fmtGistWhen(remote.exportedAt));
-          showGistCompareBox('');
-          showToast('Dados do GitHub aplicados.');
-          refreshGistUI();
-        }
-      );
-    });
 
-    updateGistStatus('Comparação pronta · '+verdict.replace(/<[^>]+>/g,''));
+    updateGistStatus('Comparação pronta · '+devices.length+' backup(s) de aparelho no Gist');
   }catch(err){
     console.error(err);
     const em = explainGistFetchError(err);
@@ -7978,6 +8165,7 @@ async function gistSyncSmart(){
     showToast('Falha: '+em);
   }
 }
+
 
 function applyImportedBackup(parsed){
   normalizeLoadedState(parsed);
