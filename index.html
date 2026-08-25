@@ -934,6 +934,7 @@
         </div>
         <select id="filter-type"><option value="">Todo tipo</option></select>
         <select id="filter-category"></select>
+        <select id="filter-subcategory"><option value="">Toda subcategoria</option></select>
         <select id="filter-source">
           <option value="">Toda origem</option>
           <option value="manual">Manual</option>
@@ -1256,7 +1257,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Backup local e na nuvem (GitHub Gist), limites de cartão, recorrências, fechamento do período e preferências. Exporte backup com frequência.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-23-19 (data OCR cupom reforçada)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-25-02 (itens e subcategorias; sem NF Gaúcha)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1769,7 +1770,8 @@ const DEFAULT_CATEGORIES = [
   { id:'internet', name:'Internet/Telefone', color:'#8E7FD6', kind:'despesa' },
   { id:'carro',    name:'Carro/Combustível', color:'#B85C7A', kind:'despesa' },
   { id:'mercado',  name:'Mercado',           color:'#6FAF52', kind:'despesa' },
-  { id:'saude',    name:'Saúde',             color:'#4FAE9E', kind:'despesa' },
+  { id:'saude',    name:'Saúde',             color:'#4FAE9E', kind:'despesa', subcategories:[{id:'medicamento',name:'Medicamento'},{id:'higiene',name:'Higiene'},{id:'consulta',name:'Consulta/Exame'}] },
+  { id:'farmacia', name:'Farmácia',          color:'#3D9B8F', kind:'despesa', subcategories:[{id:'medicamento',name:'Medicamento'},{id:'higiene',name:'Higiene'},{id:'outros-farma',name:'Outros farmácia'}] },
   { id:'educacao', name:'Educação',          color:'#5C8FD6', kind:'despesa' },
   { id:'lazer',    name:'Lazer',             color:'#D6A45C', kind:'despesa' },
   { id:'cartao',   name:'Cartão de crédito', color:'#C4574A', kind:'despesa' },
@@ -1791,6 +1793,40 @@ const DEFAULT_TRANSACTION_TYPES = [
   { id:'receita', name:'Receita', arrow:'↑', flowSign:1,  countsAsExpense:false, color:'#59B3A3', protected:true },
   { id:'transferencia', name:'Transferência', arrow:'↔', flowSign:0, countsAsExpense:false, color:'#5C8FD6', protected:true },
   { id:'pagamento_fatura', name:'Pagamento fatura', arrow:'⇄', flowSign:0, countsAsExpense:false, color:'#9B8EC4', protected:true },
+];
+
+
+// regras de produto → categoria + subcategoria (itens de cupom / OCR)
+const DEFAULT_PRODUCT_RULES = [
+  { keyword:'fralda', category:'farmacia', subcategory:'higiene' },
+  { keyword:'sabonete', category:'farmacia', subcategory:'higiene' },
+  { keyword:'shampoo', category:'farmacia', subcategory:'higiene' },
+  { keyword:'condicionador', category:'farmacia', subcategory:'higiene' },
+  { keyword:'creme dental', category:'farmacia', subcategory:'higiene' },
+  { keyword:'pasta dental', category:'farmacia', subcategory:'higiene' },
+  { keyword:'absorvente', category:'farmacia', subcategory:'higiene' },
+  { keyword:'lenço', category:'farmacia', subcategory:'higiene' },
+  { keyword:'lenco', category:'farmacia', subcategory:'higiene' },
+  { keyword:'papel higien', category:'farmacia', subcategory:'higiene' },
+  { keyword:'desodorante', category:'farmacia', subcategory:'higiene' },
+  { keyword:'soro', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'comprimido', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'capsula', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'cápsula', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'mg', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'ml lb', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'antibiot', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'dipirona', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'paracetamol', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'ibuprofeno', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'assert', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'dorflex', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'buscopan', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'omeprazol', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'vitamina', category:'farmacia', subcategory:'medicamento' },
+  { keyword:'gasolina', category:'carro', subcategory:null },
+  { keyword:'etanol', category:'carro', subcategory:null },
+  { keyword:'diesel', category:'carro', subcategory:null },
 ];
 
 let state = {
@@ -1933,10 +1969,23 @@ function normalizeLoadedState(parsed){
   state.transactions = (parsed.transactions || []).map(t => ({...t, type: t.type || 'despesa'}));
   let cats = parsed.categories && parsed.categories.length ? parsed.categories.slice() : DEFAULT_CATEGORIES.slice();
   // categorias salvas antes do suporte a receitas não tinham "kind" — assume despesa
-  cats = cats.map(c => ({...c, kind: c.kind || 'despesa'}));
+  cats = cats.map(c => ({
+    ...c,
+    kind: c.kind || 'despesa',
+    subcategories: Array.isArray(c.subcategories) ? c.subcategories : []
+  }));
   // garante que quem já usava o app antes ganhe as novas categorias de receita
   DEFAULT_CATEGORIES.filter(dc => dc.kind === 'receita' && !cats.some(c => c.id === dc.id))
     .forEach(dc => cats.push(dc));
+  // Farmácia + subcategorias padrão (medicamento / higiene)
+  DEFAULT_CATEGORIES.filter(dc => (dc.id === 'farmacia' || dc.id === 'saude') && !cats.some(c => c.id === dc.id))
+    .forEach(dc => cats.push(JSON.parse(JSON.stringify(dc))));
+  cats.forEach(c=>{
+    const def = DEFAULT_CATEGORIES.find(d=>d.id===c.id);
+    if(def && def.subcategories && def.subcategories.length && (!c.subcategories || !c.subcategories.length)){
+      c.subcategories = def.subcategories.map(s=>({...s}));
+    }
+  });
   state.categories = cats;
   state.categoryRules = parsed.categoryRules || [];
   state.categoryRules.forEach(r=>{ if(r && !r.source) r.source = ruleSourceOf(r); });
@@ -1948,7 +1997,14 @@ function normalizeLoadedState(parsed){
   state.debts = Array.isArray(parsed.debts) ? parsed.debts : [];
   state.importPrefs = { lastAccountOfx:'', lastAccountPdf:'', lastAccountSheet:'', sheetMaps:{}, ...(parsed.importPrefs||{}) };
   // tags em lançamentos antigos
-  state.transactions = state.transactions.map(t => ({ ...t, tags: Array.isArray(t.tags) ? t.tags : [] }));
+  state.transactions = state.transactions.map(t => ({
+    ...t,
+    tags: Array.isArray(t.tags) ? t.tags : [],
+    items: Array.isArray(t.items) ? t.items : []
+  }));
+  if(!state.settings.productRules || !Array.isArray(state.settings.productRules)){
+    state.settings.productRules = DEFAULT_PRODUCT_RULES.map(r=>({...r}));
+  }
   let types = parsed.transactionTypes && parsed.transactionTypes.length ? parsed.transactionTypes.slice() : DEFAULT_TRANSACTION_TYPES.slice();
   // garante que despesa/receita sempre existam, mesmo em backups antigos ou editados na mão
   DEFAULT_TRANSACTION_TYPES.filter(dt => !types.some(t=>t.id===dt.id)).forEach(dt=> types.push(dt));
@@ -2006,8 +2062,71 @@ function saveState(){
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 
 function catById(id){
-  return state.categories.find(c=>c.id===id) || {id:'outros', name:'Outros', color:'#8A8F89'};
+  return state.categories.find(c=>c.id===id) || {id:'outros', name:'Outros', color:'#8A8F89', subcategories:[]};
 }
+
+function subcatById(catId, subId){
+  const c = catById(catId);
+  const list = c.subcategories || [];
+  return list.find(s=>s.id===subId) || null;
+}
+
+function getProductRules(){
+  const custom = (state.settings && Array.isArray(state.settings.productRules)) ? state.settings.productRules : [];
+  if(custom.length) return custom;
+  return DEFAULT_PRODUCT_RULES;
+}
+
+/** Classifica nome de produto → {category, subcategory} */
+function classifyProductName(name){
+  const n = normalizeDesc(String(name||''));
+  if(!n) return { category:'farmacia', subcategory:null };
+  let best = null, bestLen = 0;
+  getProductRules().forEach(r=>{
+    const kw = normalizeDesc(r.keyword||'');
+    if(!kw) return;
+    if(n.includes(kw) && kw.length >= bestLen){
+      bestLen = kw.length;
+      best = r;
+    }
+  });
+  if(best){
+    const catId = best.category && catById(best.category).id === best.category ? best.category
+      : (state.categories.find(c=> normalizeDesc(c.name).includes('farmac') || c.id==='saude')||{}).id || 'outros';
+    return { category: catId || best.category || 'outros', subcategory: best.subcategory || null };
+  }
+  // loja farmácia no nome do item? fallback farmácia
+  if(/farm|medic|droga|saude|saúde/.test(n)) return { category: catById('farmacia').id==='farmacia'?'farmacia':'saude', subcategory:null };
+  return { category:null, subcategory:null };
+}
+
+function productsToItems(products, fallbackCategory){
+  if(!products || !products.length) return [];
+  return products.map(p=>{
+    const cls = classifyProductName(p.name);
+    return {
+      name: String(p.name||'').slice(0,80),
+      amount: Number(p.amount)||0,
+      category: cls.category || fallbackCategory || 'outros',
+      subcategory: cls.subcategory || null
+    };
+  });
+}
+
+function sumItemsBySubcategory(transactions, categoryId){
+  const map = {};
+  (transactions||[]).forEach(t=>{
+    (t.items||[]).forEach(it=>{
+      if(categoryId && it.category !== categoryId && t.category !== categoryId) return;
+      const cat = it.category || t.category;
+      if(categoryId && cat !== categoryId) return;
+      const sub = it.subcategory || 'sem-sub';
+      map[sub] = (map[sub]||0) + (Number(it.amount)||0);
+    });
+  });
+  return map;
+}
+
 
 function typeById(id){
   return state.transactionTypes.find(t=>t.id===id)
@@ -2316,7 +2435,24 @@ function fillCategorySelects(){
     sel.innerHTML = categoryOptionsHTML(sel.value);
   });
   const filterCat = document.getElementById('filter-category');
-  filterCat.innerHTML = '<option value="">Toda categoria</option>' + categoryOptionsHTML();
+  if(filterCat) filterCat.innerHTML = '<option value="">Toda categoria</option>' + categoryOptionsHTML();
+  fillSubcategoryFilter();
+}
+function fillSubcategoryFilter(){
+  const sel = document.getElementById('filter-subcategory');
+  if(!sel) return;
+  const prev = sel.value;
+  const catId = (document.getElementById('filter-category')||{}).value || '';
+  const subs = [];
+  state.categories.forEach(c=>{
+    if(catId && c.id !== catId) return;
+    (c.subcategories||[]).forEach(s=>{
+      if(!subs.some(x=>x.id===s.id && x.cat===c.id)) subs.push({id:s.id, name:s.name, cat:c.id});
+    });
+  });
+  sel.innerHTML = '<option value="">Toda subcategoria</option>' +
+    subs.map(s=> `<option value="${escapeAttr(s.cat+'::'+s.id)}">${escapeHTML(s.name)}</option>`).join('');
+  if(prev && [...sel.options].some(o=>o.value===prev)) sel.value = prev;
 }
 
 function fillMonthFilter(){
@@ -4220,6 +4356,44 @@ function renderDashboard(){
     }
   }
 
+  // Farmácia / itens por subcategoria (mês atual)
+  {
+    let el = document.getElementById('subcat-breakdown');
+    if(!el){
+      const host = document.getElementById('yoy-card') || document.getElementById('ir-pf-card');
+      if(host && host.parentNode){
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.style.marginBottom = '18px';
+        card.id = 'subcat-card';
+        card.innerHTML = '<div class="panel-title">Itens por subcategoria (mês)</div><p style="font-size:12px;color:var(--ink-faint);margin:0 0 10px;line-height:1.4;">Soma dos itens de cupom (OCR) classificados — ex.: medicamento vs higiene na Farmácia.</p><div id="subcat-breakdown"></div>';
+        host.parentNode.insertBefore(card, host.nextSibling);
+        el = document.getElementById('subcat-breakdown');
+      }
+    }
+    if(el){
+      const monthTx = scopedTx.filter(t=> monthKey(t.date)===curKey && isExpense(t));
+      const withItems = monthTx.filter(t=> (t.items||[]).length);
+      if(!withItems.length){
+        el.innerHTML = '<div class="empty-state" style="padding:12px;">Nenhum item de cupom neste mês. Use foto OCR ou cadastre subcategorias em Farmácia/Saúde.</div>';
+      } else {
+        const bySub = {};
+        withItems.forEach(t=>{
+          (t.items||[]).forEach(it=>{
+            const cat = catById(it.category || t.category);
+            const sub = it.subcategory ? (subcatById(cat.id, it.subcategory)||{name:it.subcategory}).name : 'Sem subcategoria';
+            const key = cat.name+' · '+sub;
+            bySub[key] = (bySub[key]||0) + (Number(it.amount)||0);
+          });
+        });
+        const rows = Object.entries(bySub).sort((a,b)=>b[1]-a[1]).slice(0,12);
+        el.innerHTML = rows.map(([k,v])=>
+          `<div class="account-row"><span class="account-row-name">${escapeHTML(k)}</span><span class="account-row-val">${fmtBRL(v)}</span></div>`
+        ).join('') || '<div class="empty-state">—</div>';
+      }
+    }
+  }
+
   // trend chart: 6 meses terminando no mês mais recente com dados — despesas x receitas
   const [curY, curM] = curKey.split('-').map(Number);
   const months = [];
@@ -5056,6 +5230,7 @@ function renderTransactions(){
   const to = document.getElementById('filter-to').value;
   const type = document.getElementById('filter-type').value;
   const cat = document.getElementById('filter-category').value;
+  const subFilter = (document.getElementById('filter-subcategory')||{}).value || '';
   const source = document.getElementById('filter-source').value;
   const account = document.getElementById('filter-account').value;
   const tagFilter = (document.getElementById('filter-tag')||{}).value || '';
@@ -5076,7 +5251,13 @@ function renderTransactions(){
     if(to) list = list.filter(t=> t.date <= to);
   }
   if(type) list = list.filter(t=> (t.type||'despesa')===type);
-  if(cat) list = list.filter(t=>t.category===cat);
+  if(cat) list = list.filter(t=> t.category===cat || (t.items||[]).some(it=>it.category===cat));
+  if(subFilter){
+    const [subCat, subId] = subFilter.split('::');
+    list = list.filter(t=> (t.items||[]).some(it=>
+      it.subcategory === subId && (!subCat || it.category === subCat || t.category === subCat)
+    ));
+  }
   if(source) list = list.filter(t=>t.source===source);
   if(account === '__none__') list = list.filter(t=> !(t.account && String(t.account).trim()));
   else if(account) list = list.filter(t=>t.account===account);
@@ -5228,7 +5409,8 @@ document.getElementById('bulk-delete-btn').addEventListener('click', ()=>{
   );
 });
 
-['filter-month','filter-type','filter-category','filter-source','filter-account','filter-tag','filter-from','filter-to','filter-amount-min','filter-amount-max'].forEach(id=>{
+document.getElementById('filter-category') && document.getElementById('filter-category').addEventListener('change', ()=>{ fillSubcategoryFilter(); renderTransactions(); });
+['filter-month','filter-type','filter-category','filter-subcategory','filter-source','filter-account','filter-tag','filter-from','filter-to','filter-amount-min','filter-amount-max'].forEach(id=>{
   document.getElementById(id).addEventListener('change', ()=>{
     // se escolher mês, limpa período customizado; se escolher período, o mês é ignorado na filtragem
     if(id === 'filter-month' && document.getElementById('filter-month').value){
@@ -5401,7 +5583,7 @@ document.getElementById('m-save').addEventListener('click', ()=>{
    ============================================================ */
 document.getElementById('f-date').value = todayISO();
 
-function addTransaction({date, amount, desc, category, source, notes, type, photo, recurringId, account, installment, transferId, transferLeg, externalId, tags}){
+function addTransaction({date, amount, desc, category, source, notes, type, photo, recurringId, account, installment, transferId, transferLeg, externalId, tags, items}){
   const t = {
     id: uid(), date, amount, desc, category, source: source||'manual',
     type: type||'despesa', notes: notes||'', createdAt: Date.now().toString(),
@@ -5409,6 +5591,7 @@ function addTransaction({date, amount, desc, category, source, notes, type, phot
   if(photo) t.photo = photo;
   if(recurringId) t.recurringId = recurringId;
   if(account) t.account = account.trim();
+  if(items && items.length) t.items = items;
   if(installment && installment.current && installment.total) t.installment = { current: installment.current, total: installment.total };
   if(transferId) t.transferId = transferId;
   if(transferLeg) t.transferLeg = transferLeg;
@@ -5510,7 +5693,7 @@ document.getElementById('manual-form').addEventListener('submit', (e)=>{
       });
       showToast('Pagamento de fatura registrado (sem contar como despesa nova).');
     } else {
-      addTransaction({date, amount, desc, category, source, notes, type, photo: pendingPhotoDataUrl, account, tags: parseTagsInput((document.getElementById('f-tags')||{}).value)});
+      addTransaction({date, amount, desc, category, source, notes, type, photo: pendingPhotoDataUrl, account, tags: parseTagsInput((document.getElementById('f-tags')||{}).value), items: window.__pendingOcrItems||[]}); window.__pendingOcrItems = null;
       showToast(typeById(type).flowSign > 0 ? `${typeById(type).name} salva!` : `${typeById(type).name} salvo!`);
     }
 
@@ -5746,29 +5929,50 @@ function parseReceiptText(text){
   };
   const numRe = /(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})/;
 
-  // valor: prioriza a linha que diz "valor a pagar"/"valor pago"/"valor total"/"total geral" (evita
-  // pegar "total de itens" ou subtotais). Se houver mais de uma, usa a última — como "valor a pagar"
-  // costuma vir depois de "valor total" no comprovante (já com desconto aplicado), isso naturalmente
-  // prioriza o valor final pago em vez do total antes do desconto. Ignora linhas de troco/desconto.
-  const priorityMatches = [], genericMatches = [];
+  // valor: ordem de prioridade (cupom com desconto)
+  // 1) VALOR PAGO / total a pagar  2) Valor Total R$  3) total genérico  — nunca subtotal/desconto/troco
+  const paidMatches = [], totalMatches = [], genericMatches = [];
   lines0.forEach(line=>{
-    const lower = line.toLowerCase();
-    if(/subtotal|troco|desconto/.test(lower)) return;
+    const lower = line.toLowerCase().normalize('NFD').replace(/\p{M}/gu,'');
+    if(/sub\s*total|troco|desconto|qtde\s*total|quantidade\s*total|tributos|aprox/.test(lower)) return;
     const m = line.match(numRe);
     if(!m) return;
     const val = toNum(m[1]);
-    if(val===null) return;
-    if(/total a pagar|valor a pagar|valor pago|vlr\s*pago|total pago|valor total|total geral|total da compra|total r\$|forma\s*de\s*pagamento/.test(lower)) priorityMatches.push(val);
-    else if(/\btotal\b/.test(lower)) genericMatches.push(val);
+    if(val===null || val <= 0) return;
+    if(/valor\s*pago|vlr\s*pago|total\s*pago|total\s*a\s*pagar|valor\s*a\s*pagar|pago\s*r\$/.test(lower)){
+      paidMatches.push(val);
+    } else if(/valor\s*total|total\s*geral|total\s*da\s*compra|total\s*r\$/.test(lower)){
+      totalMatches.push(val);
+    } else if(/\btotal\b/.test(lower) && !/item|itens|qtde|bico/.test(lower)){
+      genericMatches.push(val);
+    }
   });
+  // linha só com valor ao lado de "VALOR PAGO" em coluna separada (OCR em 2 linhas)
+  if(!paidMatches.length){
+    for(let i=0;i<lines0.length;i++){
+      const lower = lines0[i].toLowerCase();
+      if(/valor\s*pago|vlr\s*pago|forma\s*de\s*pagamento/.test(lower)){
+        for(let k=i;k<=i+2 && k<lines0.length;k++){
+          const m = lines0[k].match(numRe);
+          if(!m) continue;
+          const val = toNum(m[1]);
+          if(val!==null && val>0) paidMatches.push(val);
+        }
+      }
+    }
+  }
   let value = null;
-  if(priorityMatches.length) value = priorityMatches[priorityMatches.length-1];
+  if(paidMatches.length) value = paidMatches[paidMatches.length-1];
+  else if(totalMatches.length) value = totalMatches[totalMatches.length-1];
   else if(genericMatches.length) value = genericMatches[genericMatches.length-1];
   else {
+    // último recurso: não pegar o maior (costuma ser subtotal); prefere valores típicos de cupom
+    const all = [];
     Array.from(text.matchAll(new RegExp(numRe, 'g'))).forEach(m=>{
       const v = toNum(m[1]);
-      if(v!==null && (value===null || v>value)) value = v;
+      if(v!==null && v>=1 && v<100000) all.push(v);
     });
+    if(all.length) value = all[all.length-1];
   }
 
   // data: dd/mm/yyyy ou dd/mm/yy — evita pegar pedaço de CNPJ/CPF/chave de acesso (que são
@@ -6033,6 +6237,7 @@ async function runOCR(file){
       ? 'Leitura de baixa confiança — confira os dados com atenção.'
       : 'Pronto — confira os dados abaixo.';
     const parsed = parseReceiptText(text);
+    window.__pendingOcrItems = productsToItems(parsed.products||[], suggestCategory(parsed.desc||'', 'despesa', parsed.value));
     document.getElementById('f-date').value = parsed.dateISO || todayISO();
     if(!parsed.dateFromOcr){
       statusEl.textContent = ((statusEl.textContent||'Pronto').replace(/\s·.*$/,'') + ' · Data não lida do cupom — ajuste antes de salvar.');
