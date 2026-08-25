@@ -1257,7 +1257,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Backup local e na nuvem (GitHub Gist), limites de cartão, recorrências, fechamento do período e preferências. Exporte backup com frequência.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-25-02 (itens e subcategorias; sem NF Gaúcha)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-25-03 (campo subcategorias no modal)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1652,6 +1652,13 @@
         <input type="text" id="cat-keywords" placeholder="Ex.: netflix, coasa:50, uber:20-80">
         <span style="font-size:11px;color:var(--ink-faint);margin-top:4px;display:block;">
           Separe por vírgula. Com limite: <code>coasa:50</code> (até R$&nbsp;50) ou <code>coasa:10-50</code> (entre 10 e 50). Ex.: COASA até 50 em Lanche → <code>coasa:50</code>.
+        </span>
+      </div>
+      <div class="field full">
+        <label>Subcategorias (opcional)</label>
+        <input type="text" id="cat-subcategories" placeholder="Ex.: Medicamento, Higiene, Consulta">
+        <span style="font-size:11px;color:var(--ink-faint);margin-top:4px;display:block;">
+          Separe por vírgula. Serve para itens do cupom (ex.: Farmácia → Medicamento vs Higiene).
         </span>
       </div>
     </div>
@@ -2663,11 +2670,15 @@ function openCatModal(kind, editId){
     document.getElementById('cat-color').value = c.color;
     document.getElementById('cat-budget').value = c.budget || '';
     document.getElementById('cat-keywords').value = keywordsToInputValue(c.keywords || []);
+    const subEl = document.getElementById('cat-subcategories');
+    if(subEl) subEl.value = (c.subcategories||[]).map(s=>s.name).join(', ');
   } else {
     document.getElementById('cat-name').value = '';
     document.getElementById('cat-color').value = randomCategoryColor();
     document.getElementById('cat-budget').value = '';
     document.getElementById('cat-keywords').value = '';
+    const subEl = document.getElementById('cat-subcategories');
+    if(subEl) subEl.value = '';
   }
   toggleCatBudgetField();
   document.getElementById('cat-modal-bg').classList.add('active');
@@ -2750,6 +2761,12 @@ document.getElementById('cat-save').addEventListener('click', ()=>{
   const budgetRaw = document.getElementById('cat-budget').value;
   const budget = (typeById(kind).flowSign < 0 && budgetRaw!=='') ? parseFloat(budgetRaw) : undefined;
   const keywords = parseKeywordsInput(document.getElementById('cat-keywords').value);
+  const subRaw = (document.getElementById('cat-subcategories')||{}).value || '';
+  const subcategories = subRaw.split(/[,;]+/).map(s=>s.trim()).filter(Boolean).map(nm=>{
+    let id = slugifyCategory(nm);
+    if(!id) id = 'sub-'+Math.random().toString(36).slice(2,7);
+    return { id, name: nm };
+  });
   if(!name){ showToast('Dê um nome pra categoria.'); return; }
   if(editingCatId){
     const c = state.categories.find(x=>x.id===editingCatId);
@@ -2757,11 +2774,12 @@ document.getElementById('cat-save').addEventListener('click', ()=>{
       c.name = name; c.kind = kind; c.color = color;
       if(budget!==undefined) c.budget = budget; else delete c.budget;
       if(keywords.length) c.keywords = keywords; else delete c.keywords;
+      c.subcategories = subcategories;
     }
   } else {
     let id = slugifyCategory(name), suffix = 1;
     while(state.categories.some(c=>c.id===id)){ suffix++; id = slugifyCategory(name)+'-'+suffix; }
-    const newCat = {id, name, color, kind};
+    const newCat = {id, name, color, kind, subcategories};
     if(budget!==undefined) newCat.budget = budget;
     if(keywords.length) newCat.keywords = keywords;
     state.categories.push(newCat);
