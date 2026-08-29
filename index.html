@@ -1257,7 +1257,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Backup local e na nuvem (GitHub Gist), limites de cartão, recorrências, fechamento do período e preferências. Exporte backup com frequência.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-25-03 (campo subcategorias no modal)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-29-01 (OCR posto/gasolina + descrição)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -6092,40 +6092,75 @@ function parseReceiptText(text){
   const dateFromOcr = !!dateISO;
   if(!dateISO) dateISO = todayISO();
 
-  // estabelecimento: prioriza farmácia, mercado, etc. (mesmo com OCR ruim no topo)
-  const merchantRe = /farm[\w\s]{0,12}confian|farm[\w\s]|farmac|drogaria|super\s*merc|mercado|padaria|restaurante|posto\s|loja\s|atacad|hiper|magazine|renner|americanas|carrefour|condor|bourbon/i;
+  // estabelecimento: prioriza farmácia, posto, mercado (OCR ruído no topo)
+  const merchantRe = /coop\.?\s*agric|agricola|posto\s|auto\s*posto|farm[\w\s]{0,12}confian|farmac|drogaria|super\s*merc|mercado|padaria|restaurante|loja\s|atacad|hiper|magazine|renner|americanas|carrefour|condor|bourbon|kaninha|agua\s*santa/i;
   let descLine = null;
-  for(const l of lines0.slice(0, 20)){
+  for(const l of lines0.slice(0, 25)){
     if(merchantRe.test(l) && l.length >= 4){
-      // limpa ruído extremo
       let clean = l.replace(/[^\wÀ-ÿ\s\d\-\/\.]/g,' ').replace(/\s+/g,' ').trim();
-      if(clean.length >= 4){ descLine = clean; break; }
+      // remove CNPJ colado no fim da linha
+      clean = clean.replace(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{0,4}-?\d{0,2}\b/g,'').replace(/\s+/g,' ').trim();
+      if(clean.length >= 4){ descLine = clean.slice(0,80); break; }
+    }
+  }
+  // se achar "POSTO" + nome em linhas vizinhas
+  if(!descLine){
+    const postoIdx = lines0.findIndex(l=> /posto|coop|agricola/i.test(l));
+    if(postoIdx>=0){
+      let clean = lines0[postoIdx].replace(/[^\wÀ-ÿ\s\d\-\/\.]/g,' ').replace(/\s+/g,' ').trim();
+      clean = clean.replace(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{0,4}-?\d{0,2}\b/g,'').trim();
+      if(clean.length >= 4) descLine = clean.slice(0,80);
     }
   }
   if(!descLine){
     for(let i=0;i<Math.min(lines0.length, 12);i++){
       const l = lines0[i];
       if(!/[A-Za-zÀ-ÿ]{3,}/.test(l)) continue;
-      if(/total|subtotal|cnpj|cpf|qr\s*code|chave|protocolo|nfc-?e|serie|documento|danfe|auxiliar|icms|quant|descri/i.test(l)) continue;
+      if(/total|subtotal|cnpj|cpf|qr\s*code|chave|protocolo|nfc-?e|serie|documento|danfe|auxiliar|icms|quant|descri|seq\s|codigo|telefone|endereco|municipio|inscri/i.test(l)) continue;
       if(/\d+[.,]\d{2}\s*$/.test(l) && l.length > 40) continue;
-      // evita linhas só de lixo OCR muito curtas sem sentido
-      if(l.length < 5) continue;
+      if(l.length < 6) continue;
+      // rejeita lixo OCR típico (poucas vogais / caracteres estranhos)
+      const letters = (l.match(/[A-Za-zÀ-ÿ]/g)||[]).length;
+      if(letters < 5) continue;
       descLine = l;
       break;
     }
   }
   if(!descLine){
-    descLine = lines0.find(l=> /[A-Za-zÀ-ÿ]{3,}/.test(l) && !/total|subtotal|cnpj|cpf/i.test(l));
+    descLine = lines0.find(l=> /[A-Za-zÀ-ÿ]{5,}/.test(l) && !/total|subtotal|cnpj|cpf/i.test(l));
   }
-  // se OCR misturou "FARM" em linha feia, tenta montar a partir de pedaços
-  if(descLine && (/j\s*ens|aa\s*ã|^\W+$/i.test(descLine) || descLine.length < 8)){
-    const farm = lines0.find(l=> /farm|confian|drogaria/i.test(l));
-    if(farm) descLine = farm.replace(/[^\wÀ-ÿ\s\d\-\/\.]/g,' ').replace(/\s+/g,' ').trim();
+  if(descLine && (/j\s*ens|aa\s*ã|^\W+$|ix\s*sex/i.test(descLine) || descLine.length < 8)){
+    const better = lines0.find(l=> /posto|coop|agricola|farm|confian|drogaria|mercado|kaninha/i.test(l));
+    if(better) descLine = better.replace(/[^\wÀ-ÿ\s\d\-\/\.]/g,' ').replace(/\s+/g,' ').trim().slice(0,80);
+  }
+  // produto gasolina no texto → descrição mínima útil se ainda ruim
+  if((!descLine || descLine.length < 10) && /gasolina|etanol|diesel|combust/i.test(text)){
+    descLine = 'Posto / combustível';
   }
 
   const products = extractReceiptProducts(lines0, value);
 
-  // se não achou produto mas tem SORO / medicamento típico
+  // gasolina / etanol em linhas tipo "GASOLINA COMUM ... 150,00" ou "L X 6,390 = 150,00"
+  if(products){
+    lines0.forEach(line=>{
+      const raw = String(line||'');
+      if(!/gasolina|etanol|diesel|gnv|chocolate|trento|salgado|refrigerante|agua\s*mineral/i.test(raw)) return;
+      const m = raw.match(/(\d{1,3}(?:\.\d{3})*,\d{2}|\d+[.,]\d{2})\s*$/);
+      const mEq = raw.match(/=\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+[.,]\d{2})/);
+      const numStr = (mEq && mEq[1]) || (m && m[1]);
+      if(!numStr) return;
+      let val = parseFloat(String(numStr).replace(/\./g,'').replace(',','.'));
+      if(isNaN(val) || val<=0) return;
+      if(value!=null && Math.abs(val-Number(value))<0.009) return;
+      let name = raw.replace(/\d{10,}/g,' ').replace(/\s+/g,' ').trim();
+      name = name.replace(/(\d{1,3}(?:\.\d{3})*,\d{2}|\d+[.,]\d{2})\s*$/,'').trim().slice(0,80);
+      if(name.length < 3) name = /gasolina/i.test(raw) ? 'Gasolina' : 'Item';
+      if(!products.some(p=> Math.abs(p.amount-val)<0.02 && normalizeDesc(p.name).includes(normalizeDesc(name).slice(0,8)))){
+        products.push({ name, amount: val });
+      }
+    });
+  }
+
   if((!products || !products.length) && value){
     const med = lines0.find(l=> /soro|medic|comprim|capsul|ml\b|mg\b/i.test(l) && /\d/.test(l));
     if(med){
@@ -6264,7 +6299,15 @@ async function runOCR(file){
     if(parsed.desc) document.getElementById('f-desc').value = parsed.desc;
     document.getElementById('f-source').value = 'ocr';
     const type = document.getElementById('f-type').value;
-    if(parsed.desc) document.getElementById('f-category').value = suggestCategory(parsed.desc, type, parsed.value);
+    {
+      let catGuess = parsed.desc ? suggestCategory(parsed.desc, type, parsed.value) : '';
+      const blob = (parsed.desc||'')+' '+((parsed.products||[]).map(p=>p.name).join(' '))+' '+text;
+      if(/gasolina|etanol|diesel|posto|combust/i.test(blob)){
+        const carro = (state.categories||[]).find(c=> c.id==='carro' || /combust|carro/i.test(c.name||''));
+        if(carro) catGuess = carro.id;
+      }
+      if(catGuess) document.getElementById('f-category').value = catGuess;
+    }
     // produtos → observações
     const notesEl = document.getElementById('f-notes');
     if(notesEl && parsed.products && parsed.products.length){
