@@ -170,6 +170,10 @@
   .stat-value.accent{color:var(--accent);}
   .stat-delta{font-size:12px;margin-top:6px;color:var(--ink-dim);}
   .dash-cols{display:grid;grid-template-columns:1.3fr 1fr;gap:18px;align-items:start;}
+  .new-entry-layout{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);}
+  @media (max-width:900px){
+    .new-entry-layout{grid-template-columns:1fr !important;}
+  }
   .panel-title{
     font-family:var(--font-display);font-size:17px;font-weight:600;margin:0 0 16px;
     display:flex;align-items:center;justify-content:space-between;
@@ -987,7 +991,7 @@
         <p class="view-desc">Digite na mão ou leia o cupom pela foto (OCR). Dica: foto primeiro guarda os itens da nota; o extrato depois pode ser mesclado sem duplicar o gasto.</p>
       </div>
 
-      <div class="dash-cols" style="grid-template-columns:1fr 1.4fr;">
+      <div class="dash-cols new-entry-layout">
         <div class="card">
           <div class="panel-title">Foto do comprovante</div>
           <div class="photo-drop" id="photo-drop">
@@ -1257,7 +1261,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Backup local e na nuvem (GitHub Gist), limites de cartão, recorrências, fechamento do período e preferências. Exporte backup com frequência.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-30-01 (OCR farmácia valor a pagar + itens)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-30-02 (OCR ignora bônus + layout mobile)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -5955,14 +5959,16 @@ function parseReceiptText(text){
   };
   const numRe = /(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})/;
 
-  // valor: prioriza VALOR A PAGAR / VALOR PAGO (nunca total antes do desconto)
-  const paidMatches = [], totalMatches = [], genericMatches = [];
+  // valor: VALOR A PAGAR / VALOR PAGO no cartão — nunca bônus, desconto ou troco
+  const paidAPagar = [], paidPago = [], totalMatches = [];
   const hasDiscount = lines0.some(l=> /desconto/i.test(l));
-  lines0.forEach((line, idx)=>{
+  lines0.forEach((line)=>{
     const lower = line.toLowerCase().normalize('NFD').replace(/\p{M}/gu,'');
-    // ignora linhas só de desconto / economia / tributos
-    if(/^\s*desconto|voce\s*econom|tributos\s*aprox|qtde\.?\s*total|quantidade\s*total|troco/i.test(lower) && !/valor\s*a\s*pagar|valor\s*pago/i.test(lower)) return;
-    if(/sub\s*total/.test(lower) && !/valor\s*a\s*pagar/i.test(lower)) return;
+    // ignora bônus, desconto isolado, tributos, economia
+    if(/\bb[oô]nus\b|\bbonus\b|economizou|tributos\s*aprox/i.test(lower)) return;
+    if(/^\s*desconto|valor\s*descont/i.test(lower) && !/valor\s*a\s*pagar/i.test(lower)) return;
+    if(/troco|qtde\.?\s*total|quantidade\s*total de itens/i.test(lower)) return;
+    if(/sub\s*total/i.test(lower) && !/valor\s*a\s*pagar/i.test(lower)) return;
 
     const nums = [];
     let m;
@@ -5972,40 +5978,66 @@ function parseReceiptText(text){
       if(val!==null && val>0 && val<1000000) nums.push(val);
     }
     if(!nums.length) return;
-    // valor a pagar / valor pago → usa o último número da linha (coluna da direita)
-    if(/valor\s*a\s*pagar|valor\s*pago|vlr\s*pago|total\s*pago|total\s*a\s*pagar|pago\s*r\$/i.test(lower)){
-      paidMatches.push(nums[nums.length-1]);
+    const last = nums[nums.length-1];
+
+    if(/valor\s*a\s*pagar|total\s*a\s*pagar/i.test(lower)){
+      paidAPagar.push(last);
       return;
+    }
+    if(/valor\s*pago|vlr\s*pago|total\s*pago|pago\s*r\$/i.test(lower)){
+      // evita linha que só tem bônus colado
+      if(/\bb[oô]nus\b|\bbonus\b/i.test(lower)) return;
+      paidPago.push(last);
+      return;
+    }
+    // "CARTAO CREDITO 112,96" na área de pagamento (sem ser bônus)
+    if(/cart[aã]o|credito|d[eé]bito|pix|dinheiro/i.test(lower) && /forma|pagamento|pago|valor/i.test(text.toLowerCase())){
+      // só se a linha parece valor de pagamento (não lista de produto)
+      if(!/[A-Za-zÀ-ÿ]{6,}/.test(line.replace(/cart[aã]o|credito|d[eé]bito|visa|master|elo|hiper/gi,''))){
+        paidPago.push(last);
+        return;
+      }
     }
     if(/valor\s*total|total\s*geral|total\s*da\s*compra|total\s*r\$/i.test(lower)){
-      if(!/desconto/i.test(lower)) totalMatches.push(nums[nums.length-1]);
-      return;
-    }
-    if(/\btotal\b/.test(lower) && !/item|itens|qtde|bico|vl\s*tot/i.test(lower)){
-      genericMatches.push(nums[nums.length-1]);
+      if(!/desconto/i.test(lower)) totalMatches.push(last);
     }
   });
-  // OCR separou rótulo e valor em linhas vizinhas
-  if(!paidMatches.length){
+  // rótulo e valor em linhas vizinhas
+  if(!paidAPagar.length){
     for(let i=0;i<lines0.length;i++){
       const lower = lines0[i].toLowerCase();
-      if(!/valor\s*a\s*pagar|valor\s*pago|vlr\s*pago|forma\s*de\s*pagamento/i.test(lower)) continue;
-      for(let k=i;k<=i+3 && k<lines0.length;k++){
+      if(!/valor\s*a\s*pagar|total\s*a\s*pagar/i.test(lower)) continue;
+      for(let k=i;k<=i+2 && k<lines0.length;k++){
+        if(/\bb[oô]nus\b|\bbonus\b/i.test(lines0[k])) continue;
         const mm = String(lines0[k]).match(/(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})/g);
         if(!mm) continue;
         const val = toNum(mm[mm.length-1]);
-        if(val!==null && val>0) paidMatches.push(val);
+        if(val!==null && val>0) paidAPagar.push(val);
+      }
+    }
+  }
+  if(!paidPago.length){
+    for(let i=0;i<lines0.length;i++){
+      const lower = lines0[i].toLowerCase();
+      if(!/valor\s*pago|vlr\s*pago|forma\s*de\s*pagamento/i.test(lower)) continue;
+      for(let k=i;k<=i+4 && k<lines0.length;k++){
+        if(/\bb[oô]nus\b|\bbonus\b/i.test(lines0[k])) continue;
+        const mm = String(lines0[k]).match(/(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})/g);
+        if(!mm) continue;
+        const val = toNum(mm[mm.length-1]);
+        // ignora valores muito pequenos isolados (tipicamente bônus residual)
+        if(val!==null && val>=1) paidPago.push(val);
       }
     }
   }
   let value = null;
-  if(paidMatches.length){
-    // com desconto, o valor pago costuma ser o menor entre os candidatos "pago"
-    value = hasDiscount ? Math.min(...paidMatches) : paidMatches[paidMatches.length-1];
+  if(paidAPagar.length){
+    value = paidAPagar[paidAPagar.length-1];
+  } else if(paidPago.length){
+    // com vários "pago", prefere o maior razoável (evita bônus 2,51 vs 112,96)
+    value = Math.max(...paidPago);
   } else if(totalMatches.length){
     value = hasDiscount ? Math.min(...totalMatches) : totalMatches[totalMatches.length-1];
-  } else if(genericMatches.length){
-    value = genericMatches[genericMatches.length-1];
   }
 
   // data: dd/mm/yyyy ou dd/mm/yy — evita pegar pedaço de CNPJ/CPF/chave de acesso (que são
