@@ -1267,7 +1267,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Backup local e na nuvem (GitHub Gist), limites de cartão, recorrências, fechamento do período e preferências. Exporte backup com frequência.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-09-01-02 (integridade: não excluir período conferido)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-09-01-04 (duplicatas respeitam mostrar valores)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -2207,6 +2207,11 @@ function setPrivacy(on, persist){
     const active = document.querySelector('.view.active');
     if(active && active.id === 'view-dashboard') renderDashboard();
     if(active && active.id === 'view-transactions') renderTransactions();
+    // painel de duplicatas guarda HTML estático — redesenha se estiver aberto
+    const dupCard = document.getElementById('dup-scan-card');
+    if(dupCard && dupCard.style.display !== 'none' && typeof renderDupScanResults === 'function'){
+      renderDupScanResults();
+    }
   }catch(e){}
 }
 let privacyAppliedOnBoot = false;
