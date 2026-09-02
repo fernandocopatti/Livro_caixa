@@ -949,6 +949,12 @@
           <option value="recorrente">Recorrente</option>
           <option value="transferencia">Transferência</option>
         </select>
+        <select id="filter-imported" title="Quando o arquivo foi importado no app">
+          <option value="">Qualquer importação</option>
+          <option value="today">Importados hoje</option>
+          <option value="date">Importados em data…</option>
+        </select>
+        <input type="date" id="filter-imported-date" style="display:none;max-width:150px;" title="Data da importação">
         <select id="filter-account"><option value="">Toda conta/cartão</option><!-- Sem conta definida é preenchida dinamicamente --></select>
         <select id="filter-tag"><option value="">Todas as tags</option></select>
         <input class="text-input" id="filter-search" placeholder="Buscar descrição… (/)" style="flex:1;min-width:160px;">
@@ -1261,7 +1267,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Backup local e na nuvem (GitHub Gist), limites de cartão, recorrências, fechamento do período e preferências. Exporte backup com frequência.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-08-30-02 (OCR ignora bônus + layout mobile)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-09-01-01 (filtro data de importação)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -5262,6 +5268,8 @@ function renderTransactions(){
   const cat = document.getElementById('filter-category').value;
   const subFilter = (document.getElementById('filter-subcategory')||{}).value || '';
   const source = document.getElementById('filter-source').value;
+  const importedMode = (document.getElementById('filter-imported')||{}).value || '';
+  const importedDate = (document.getElementById('filter-imported-date')||{}).value || '';
   const account = document.getElementById('filter-account').value;
   const tagFilter = (document.getElementById('filter-tag')||{}).value || '';
   const search = document.getElementById('filter-search').value.trim().toLowerCase();
@@ -5289,6 +5297,12 @@ function renderTransactions(){
     ));
   }
   if(source) list = list.filter(t=>t.source===source);
+  if(importedMode === 'today'){
+    const today = todayISO();
+    list = list.filter(t=> t.importedAt === today || (!t.importedAt && t.createdAt && new Date(Number(t.createdAt)).toISOString().slice(0,10) === today && ['ofx','planilha','pdf','csv'].includes(t.source)));
+  } else if(importedMode === 'date' && importedDate){
+    list = list.filter(t=> t.importedAt === importedDate);
+  }
   if(account === '__none__') list = list.filter(t=> !(t.account && String(t.account).trim()));
   else if(account) list = list.filter(t=>t.account===account);
   if(tagFilter) list = list.filter(t=> (t.tags||[]).includes(tagFilter));
@@ -5440,7 +5454,16 @@ document.getElementById('bulk-delete-btn').addEventListener('click', ()=>{
 });
 
 document.getElementById('filter-category') && document.getElementById('filter-category').addEventListener('change', ()=>{ fillSubcategoryFilter(); renderTransactions(); });
-['filter-month','filter-type','filter-category','filter-subcategory','filter-source','filter-account','filter-tag','filter-from','filter-to','filter-amount-min','filter-amount-max'].forEach(id=>{
+
+document.getElementById('filter-imported') && document.getElementById('filter-imported').addEventListener('change', ()=>{
+  const mode = document.getElementById('filter-imported').value;
+  const d = document.getElementById('filter-imported-date');
+  if(d) d.style.display = mode === 'date' ? '' : 'none';
+  if(mode === 'date' && d && !d.value) d.value = todayISO();
+  renderTransactions();
+});
+
+['filter-month','filter-type','filter-category','filter-subcategory','filter-source','filter-imported','filter-imported-date','filter-account','filter-tag','filter-from','filter-to','filter-amount-min','filter-amount-max'].forEach(id=>{
   document.getElementById(id).addEventListener('change', ()=>{
     // se escolher mês, limpa período customizado; se escolher período, o mês é ignorado na filtragem
     if(id === 'filter-month' && document.getElementById('filter-month').value){
@@ -5463,6 +5486,8 @@ document.getElementById('filter-clear-btn').addEventListener('click', ()=>{
   document.getElementById('filter-type').value = '';
   document.getElementById('filter-category').value = '';
   document.getElementById('filter-source').value = '';
+  const fi = document.getElementById('filter-imported'); if(fi) fi.value = '';
+  const fid = document.getElementById('filter-imported-date'); if(fid){ fid.value = ''; fid.style.display = 'none'; }
   document.getElementById('filter-account').value = '';
   document.getElementById('filter-search').value = '';
   const famin = document.getElementById('filter-amount-min');
@@ -5613,7 +5638,7 @@ document.getElementById('m-save').addEventListener('click', ()=>{
    ============================================================ */
 document.getElementById('f-date').value = todayISO();
 
-function addTransaction({date, amount, desc, category, source, notes, type, photo, recurringId, account, installment, transferId, transferLeg, externalId, tags, items}){
+function addTransaction({date, amount, desc, category, source, notes, type, photo, recurringId, account, installment, transferId, transferLeg, externalId, tags, items, importedAt}){
   const t = {
     id: uid(), date, amount, desc, category, source: source||'manual',
     type: type||'despesa', notes: notes||'', createdAt: Date.now().toString(),
@@ -5627,6 +5652,9 @@ function addTransaction({date, amount, desc, category, source, notes, type, phot
   if(transferLeg) t.transferLeg = transferLeg;
   if(externalId) t.externalId = String(externalId);
   if(tags && tags.length) t.tags = tags;
+  const fileSources = { ofx:1, planilha:1, pdf:1, csv:1 };
+  if(importedAt) t.importedAt = String(importedAt).slice(0,10);
+  else if(fileSources[t.source]) t.importedAt = todayISO();
   state.transactions.push(t);
   saveState();
 }
@@ -7392,6 +7420,7 @@ function renderReviewTable(containerId, items, sourceType){
     let skippedDup = 0;
     let skippedManual = 0;
     const skippedDupLines = [];
+    const batchImportedAt = todayISO();
     rows.forEach(row=>{
       const idx = parseInt(row.dataset.idx, 10);
       const it = items[idx];
@@ -7432,7 +7461,7 @@ function renderReviewTable(containerId, items, sourceType){
       const photo = it ? it.photo : undefined;
       const account = it ? it.account : undefined;
       const installment = it ? it.installment : undefined;
-      addTransaction({date, amount, desc, category, source: sourceType, type, photo, account, installment, externalId: it && it.externalId});
+      addTransaction({date, amount, desc, category, source: sourceType, type, photo, account, installment, externalId: it && it.externalId, importedAt: batchImportedAt});
       if(row.querySelector('.rv-remember') && row.querySelector('.rv-remember').checked){
         learnCategory(desc, category);
       }
