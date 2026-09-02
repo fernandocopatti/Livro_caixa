@@ -1267,7 +1267,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Backup local e na nuvem (GitHub Gist), limites de cartão, recorrências, fechamento do período e preferências. Exporte backup com frequência.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-09-01-01 (filtro data de importação)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-09-01-02 (integridade: não excluir período conferido)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1313,7 +1313,7 @@
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="lock-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Período conferido (fechamento)</div>
           <p style="font-size:12.5px;color:var(--ink-dim);line-height:1.45;margin:0 0 10px;">
-            Lançamentos com data <strong>até</strong> esta data ficam protegidos: reclassificar e alterações em massa não os alteram.
+            Lançamentos com data <strong>até</strong> esta data ficam protegidos: não podem ser <strong>excluídos</strong> e a reclassificação em massa não os altera. Limpe a data para liberar.
             Edição individual continua permitida.
           </p>
           <div class="field" style="margin:0 0 8px;max-width:220px;">
@@ -2233,6 +2233,21 @@ function isTxLocked(t){
   if(!until || !t || !t.date) return false;
   return String(t.date) <= String(until);
 }
+/** true se o lançamento (ou a transferência ligada) está no período conferido */
+function isTxDeleteProtected(t){
+  if(!t) return false;
+  if(isTxLocked(t)) return true;
+  if(t.transferId){
+    return state.transactions.some(x=> x.transferId === t.transferId && isTxLocked(x));
+  }
+  return false;
+}
+function closedUntilMsg(){
+  const until = getClosedUntil();
+  return until
+    ? ('Lançamentos até '+fmtDate(until)+' estão conferidos. Limpe a data de fechamento em Config para excluí-los.')
+    : '';
+}
 
 function getClosedUntil(){ return (state.settings && state.settings.closedUntil) || ''; }
 
@@ -2330,8 +2345,8 @@ function updateClosedUntilUI(){
   if(input) input.value = until || '';
   if(status){
     status.textContent = until
-      ? ('Período fechado até '+fmtDate(until)+'. Reclassificação e ações em massa não alteram esses lançamentos.')
-      : 'Nenhuma trava ativa — todos os lançamentos podem ser reclassificados em massa.';
+      ? ('Período fechado até '+fmtDate(until)+'. Esses lançamentos não podem ser excluídos nem reclassificados em massa.')
+      : 'Nenhuma trava ativa — exclusão e reclassificação em massa liberadas.';
   }
 }
 function monthKey(iso){ return iso ? iso.slice(0,7) : ''; }
@@ -5126,7 +5141,7 @@ function rowHTML(t, selectable){
     <span class="ledger-desc">${escapeHTML(t.desc)}${t.photo ? ' 📎' : ''}${t.transferId ? ` <span style="color:#5C8FD6;font-size:11px;">↔ ${t.transferLeg==='in'?'entrada':'saída'}</span>` : ''}${t.installment ? ` <span style="color:var(--gold);font-size:11px;">📅${t.installment.current}/${t.installment.total}</span>` : ''}${isTxLocked(t) ? ` <span style="color:var(--ink-faint);font-size:11px;" title="Período conferido">🔒</span>` : ''}${t.account ? `<span class="ledger-desc-sub">💳 ${escapeHTML(t.account)}</span>` : ''}${t.notes ? `<span class="ledger-desc-sub">${escapeHTML(t.notes)}</span>`:''}</span>
     <span class="cat-tag cat-quick-wrap" data-cat-edit="${t.id}" title="Clique para mudar a categoria (também aprende a correção)"><span class="stamp" style="background:${c.color}">${initials(c.name)}</span>${c.name}</span>
     <span class="ledger-amt" style="color:${tType.color};">${tType.flowSign===0 ? '↔' : (isInflow ? '+' : '−')} ${fmtBRL(t.amount)}</span>
-    <button class="row-del" data-del="${t.id}" title="Excluir">✕</button>
+    <button class="row-del" data-del="${t.id}" title="${isTxDeleteProtected(t) ? 'Período conferido — exclusão bloqueada' : 'Excluir'}" ${isTxDeleteProtected(t)?'disabled style="opacity:.35;cursor:not-allowed;"':''}>✕</button>
   </div>`;
 }
 
@@ -5144,10 +5159,13 @@ function attachRowHandlers(container){
       const idx = state.transactions.findIndex(t=>t.id===id);
       if(idx===-1) return;
       const target = state.transactions[idx];
+      if(isTxDeleteProtected(target)){
+        showToast(closedUntilMsg() || 'Lançamento no período conferido — exclusão bloqueada.');
+        return;
+      }
       const doRemove = ()=>{
         const removed = [];
         if(target.transferId){
-          // remove as duas pernas da transferência
           for(let i=state.transactions.length-1;i>=0;i--){
             if(state.transactions[i].transferId === target.transferId){
               removed.push(state.transactions.splice(i,1)[0]);
@@ -5431,18 +5449,47 @@ document.getElementById('bulk-account-clear-btn').addEventListener('click', ()=>
 document.getElementById('bulk-delete-btn').addEventListener('click', ()=>{
   const count = selectedIds.size;
   if(!count) return;
+  const selected = state.transactions.filter(t=> selectedIds.has(t.id));
+  const locked = selected.filter(t=> isTxDeleteProtected(t));
+  const unlocked = selected.filter(t=> !isTxDeleteProtected(t));
+  if(!unlocked.length){
+    showToast(closedUntilMsg() || 'Todos os selecionados estão no período conferido.');
+    return;
+  }
+  const msg = locked.length
+    ? `Excluir ${unlocked.length} lançamento(s)? ${locked.length} no período conferido serão mantidos.`
+    : `Tem certeza que quer excluir ${unlocked.length} lançamento${unlocked.length===1?'':'s'}?`;
   askConfirm(
     'Excluir lançamentos',
-    `Tem certeza que quer excluir ${count} lançamento${count===1?'':'s'}?`,
+    msg,
     ()=>{
-      const removedIds = new Set(selectedIds);
-      const removed = state.transactions.filter(t=>removedIds.has(t.id));
-      state.transactions = state.transactions.filter(t=>!removedIds.has(t.id));
+      const removedIds = new Set(unlocked.map(t=>t.id));
+      // se transferência: remove as duas pernas só se ambas estiverem na lista desbloqueada
+      const removed = [];
+      const skip = new Set();
+      unlocked.forEach(t=>{
+        if(skip.has(t.id)) return;
+        if(t.transferId){
+          const legs = state.transactions.filter(x=> x.transferId === t.transferId);
+          if(legs.some(x=> isTxDeleteProtected(x))){
+            return; // não remove transferência parcialmente protegida
+          }
+          legs.forEach(leg=>{
+            const i = state.transactions.findIndex(x=>x.id===leg.id);
+            if(i>=0){ removed.push(state.transactions.splice(i,1)[0]); skip.add(leg.id); }
+          });
+        } else {
+          const i = state.transactions.findIndex(x=>x.id===t.id);
+          if(i>=0) removed.push(state.transactions.splice(i,1)[0]);
+        }
+      });
       selectedIds.clear();
       saveState();
       renderDashboard();
       renderTransactions();
-      showToast(`${count} lançamento${count===1?'':'s'} excluído${count===1?'':'s'}.`, 'Desfazer', ()=>{
+      const n = removed.length;
+      const extra = locked.length ? ` (${locked.length} protegido${locked.length===1?'':'s'})` : '';
+      showToast(`${n} excluído${n===1?'':'s'}${extra}.`, 'Desfazer', ()=>{
         state.transactions.push(...removed);
         saveState();
         renderDashboard();
@@ -7303,7 +7350,20 @@ function deleteDupExtras(){
     g.items.slice(1).forEach(t=> removeIds.add(t.id));
   });
   if(!removeIds.size){ showToast('Nada para excluir.'); return; }
-  askConfirm('Excluir duplicatas', `Remover ${removeIds.size} lançamento${removeIds.size===1?'':'s'} duplicado${removeIds.size===1?'':'s'}, mantendo 1 de cada grupo?`, ()=>{
+  // não apaga período conferido
+  const lockedDup = [...removeIds].filter(id=>{
+    const t = state.transactions.find(x=>x.id===id);
+    return t && isTxDeleteProtected(t);
+  });
+  lockedDup.forEach(id=> removeIds.delete(id));
+  if(!removeIds.size){
+    showToast(lockedDup.length ? (closedUntilMsg()||'Duplicatas no período conferido — exclusão bloqueada.') : 'Nada a remover.');
+    return;
+  }
+  const dupMsg = lockedDup.length
+    ? `Remover ${removeIds.size} duplicata(s)? ${lockedDup.length} no período conferido serão mantidas.`
+    : `Remover ${removeIds.size} lançamento${removeIds.size===1?'':'s'} duplicado${removeIds.size===1?'':'s'}, mantendo 1 de cada grupo?`;
+  askConfirm('Excluir duplicatas', dupMsg, ()=>{
     const removed = state.transactions.filter(t=> removeIds.has(t.id));
     state.transactions = state.transactions.filter(t=> !removeIds.has(t.id));
     saveState();
