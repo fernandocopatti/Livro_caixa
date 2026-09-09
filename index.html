@@ -668,7 +668,10 @@
 <div id="app">
   <aside class="spine">
     <div class="brand">
-      <div class="brand-mark">Livro-Caixa</div>
+      <div class="brand-mark" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        Livro-Caixa
+        <span id="pro-badge" style="display:none;font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;background:linear-gradient(135deg,var(--gold),#e0b84a);color:#1a1408;padding:3px 8px;border-radius:20px;line-height:1.2;">Pro</span>
+      </div>
       <div class="brand-sub">controle de gastos</div>
     </div>
     <nav class="spine-nav">
@@ -1267,7 +1270,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Backup local e na nuvem (GitHub Gist), limites de cartão, recorrências, fechamento do período e preferências. Exporte backup com frequência.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-09-01-04 (duplicatas respeitam mostrar valores)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-09-09-pro (assinatura + badge Pro)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1297,6 +1300,25 @@
             (tipo “Aplicativo da Web”). Ative também a <strong>Google Drive API</strong>. Em origens JavaScript autorizadas, use a URL HTTPS do app.
           </p>
         </div>
+
+        <!-- Assinatura Pro -->
+        <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="pro-config-card">
+          <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+            Assinatura Pro
+            <span id="pro-status-pill" style="font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:2px 8px;border-radius:20px;background:var(--surface-3);color:var(--ink-dim);">Free</span>
+          </div>
+          <div id="pro-status-detail" style="font-size:13px;color:var(--ink-dim);margin-bottom:12px;line-height:1.45;">
+            Plano gratuito ativo. Recursos avançados (importação, Drive, metas, dívidas, regras e exportação) ficam bloqueados.
+          </div>
+          <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
+            <button type="button" class="btn" id="cfg-btn-upgrade-pro" style="padding:8px 14px;">Assinar Pro</button>
+            <button type="button" class="btn secondary" id="cfg-btn-activate-test" style="padding:8px 14px;" title="Apenas para teste local">Ativar Pro (teste)</button>
+          </div>
+          <p style="font-size:11.5px;color:var(--ink-faint);margin:10px 0 0;line-height:1.45;">
+            No app da Play Store a compra será feita pela Google. Aqui no navegador o botão “Ativar Pro (teste)” libera tudo para você validar o fluxo.
+          </p>
+        </div>
+
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="privacy-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Privacidade dos valores</div>
           <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;margin-bottom:8px;">
@@ -1773,6 +1795,41 @@
     </div>
   </div>
 </div>
+
+<!-- ========== PAYWALL PRO ========== -->
+<div class="modal-bg" id="paywall-modal-bg">
+  <div class="modal" style="max-width:440px;">
+    <h3 style="margin-bottom:6px;">Desbloqueie o Livro-Caixa Pro</h3>
+    <p style="color:var(--ink-dim);font-size:14px;margin:0 0 18px;line-height:1.5;">
+      Você tentou usar: <strong id="paywall-feature-name" style="color:var(--ink);">recurso Pro</strong>
+    </p>
+
+    <div style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:18px;">
+      <div style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Incluso no Pro:</div>
+      <ul style="margin:0;padding-left:18px;font-size:13.5px;line-height:1.7;color:var(--ink);">
+        <li>Importação OFX, PDF + OCR e planilhas</li>
+        <li>Backup automático no Google Drive</li>
+        <li>Metas, dívidas e regras inteligentes</li>
+        <li>Relatórios avançados e exportação completa</li>
+        <li>Contas ilimitadas</li>
+      </ul>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <button class="btn" id="paywall-yearly" style="width:100%;justify-content:space-between;padding:14px 18px;">
+        <span>Anual — R$ 149</span>
+        <span style="font-size:12px;opacity:.85;">Melhor valor</span>
+      </button>
+      <button class="btn secondary" id="paywall-monthly" style="width:100%;">
+        Mensal — R$ 19,90
+      </button>
+      <button class="btn ghost" id="paywall-close" style="width:100%;margin-top:4px;">
+        Continuar no plano gratuito
+      </button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"><span id="toast-msg"></span><button id="toast-action" class="toast-action" style="display:none;"></button></div>
 
 <script>
@@ -1862,7 +1919,14 @@ let state = {
   settings: {
     filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null,
     remindersEnabled: false, cashFlowDays: 30,
-    dashCards: null // null = defaults
+    dashCards: null, // null = defaults
+    // Assinatura Pro
+    subscription: {
+      status: 'free',          // 'free' | 'active' | 'expired' | 'grace'
+      productId: null,         // 'pro_monthly' | 'pro_yearly'
+      expiresAt: null,         // ISO date string
+      lastChecked: null
+    }
   },
   accountLimits: {},
   accounts: {}, // { 'Conta X': { initialBalance: 0, asOf: 'YYYY-MM-DD' } }
@@ -1871,6 +1935,153 @@ let state = {
   importPrefs: { lastAccountOfx:'', lastAccountPdf:'', lastAccountSheet:'', sheetMaps:{} },
   transactionTypes: DEFAULT_TRANSACTION_TYPES.slice(),
 };
+
+/* ============================================================
+   ASSINATURA PRO
+   ============================================================ */
+function ensureSubscriptionObject(){
+  if(!state.settings) state.settings = {};
+  if(!state.settings.subscription){
+    state.settings.subscription = {
+      status: 'free',
+      productId: null,
+      expiresAt: null,
+      lastChecked: null
+    };
+  }
+  return state.settings.subscription;
+}
+
+function isPro(){
+  const sub = ensureSubscriptionObject();
+  if(!sub || sub.status !== 'active') return false;
+  if(sub.expiresAt){
+    const exp = new Date(sub.expiresAt);
+    if(!isNaN(exp.getTime()) && exp < new Date()){
+      sub.status = 'expired';
+      return false;
+    }
+  }
+  return true;
+}
+
+function requirePro(featureName = 'este recurso'){
+  if(isPro()) return true;
+  showPaywall(featureName);
+  return false;
+}
+
+function showPaywall(featureName = 'este recurso'){
+  const bg = document.getElementById('paywall-modal-bg');
+  const nameEl = document.getElementById('paywall-feature-name');
+  if(nameEl) nameEl.textContent = featureName;
+  if(bg) bg.classList.add('active');
+}
+
+function hidePaywall(){
+  const bg = document.getElementById('paywall-modal-bg');
+  if(bg) bg.classList.remove('active');
+}
+
+/** Atualiza badge da sidebar e card de assinatura em Config */
+function updateProUI(){
+  const pro = isPro();
+  const badge = document.getElementById('pro-badge');
+  if(badge) badge.style.display = pro ? 'inline-block' : 'none';
+
+  const pill = document.getElementById('pro-status-pill');
+  const detail = document.getElementById('pro-status-detail');
+  const sub = ensureSubscriptionObject();
+
+  if(pill){
+    if(pro){
+      pill.textContent = 'Pro';
+      pill.style.background = 'linear-gradient(135deg,var(--gold),#e0b84a)';
+      pill.style.color = '#1a1408';
+    } else if(sub.status === 'expired'){
+      pill.textContent = 'Expirado';
+      pill.style.background = 'rgba(217,124,87,.2)';
+      pill.style.color = 'var(--warn)';
+    } else {
+      pill.textContent = 'Free';
+      pill.style.background = 'var(--surface-3)';
+      pill.style.color = 'var(--ink-dim)';
+    }
+  }
+
+  if(detail){
+    if(pro){
+      const exp = sub.expiresAt ? new Date(sub.expiresAt) : null;
+      const expTxt = exp && !isNaN(exp.getTime())
+        ? exp.toLocaleDateString('pt-BR')
+        : '—';
+      const plan = sub.productId === 'pro_monthly' ? 'Mensal' : (sub.productId === 'pro_yearly' ? 'Anual' : 'Pro');
+      detail.innerHTML = `Plano <strong style="color:var(--ink);">${plan}</strong> ativo até <strong style="color:var(--ink);">${expTxt}</strong>. Todos os recursos estão liberados.`;
+    } else if(sub.status === 'expired'){
+      detail.textContent = 'Sua assinatura expirou. Renove para continuar usando importação, Drive, metas e demais recursos Pro.';
+    } else {
+      detail.textContent = 'Plano gratuito ativo. Recursos avançados (importação, Drive, metas, dívidas, regras e exportação) ficam bloqueados.';
+    }
+  }
+
+  // Esconde botão de upgrade se já for Pro
+  const upBtn = document.getElementById('cfg-btn-upgrade-pro');
+  if(upBtn) upBtn.style.display = pro ? 'none' : '';
+}
+
+/** Ativa Pro manualmente (útil para testes ou códigos de ativação) */
+function activatePro(productId = 'pro_yearly', days = 365){
+  const sub = ensureSubscriptionObject();
+  const expires = new Date();
+  expires.setDate(expires.getDate() + days);
+  sub.status = 'active';
+  sub.productId = productId;
+  sub.expiresAt = expires.toISOString();
+  sub.lastChecked = new Date().toISOString();
+  saveState();
+  hidePaywall();
+  updateProUI();
+  showToast('Livro-Caixa Pro ativado!');
+  try{ renderDashboard(); }catch(e){}
+}
+
+/** Placeholder para integração futura com Google Play Billing / RevenueCat / Capacitor */
+function startPurchase(productId){
+  // Em produção (Capacitor + Google Play):
+  // 1. Usar @capgo/capacitor-purchases ou cordova-plugin-purchase
+  // 2. Chamar Purchases.purchaseProduct(productId)
+  // 3. No callback de sucesso → activatePro(productId, days)
+  // Por enquanto simulamos a compra para testes locais.
+  console.log('[Pro] Iniciando compra:', productId);
+  showToast('Simulando compra de ' + productId + '…');
+  setTimeout(()=>{
+    const days = productId === 'pro_monthly' ? 30 : 365;
+    activatePro(productId, days);
+  }, 800);
+}
+
+// Eventos do Paywall + botões de Config (registrados depois do DOM carregar)
+function initPaywallUI(){
+  const closeBtn = document.getElementById('paywall-close');
+  const monthlyBtn = document.getElementById('paywall-monthly');
+  const yearlyBtn = document.getElementById('paywall-yearly');
+  const bg = document.getElementById('paywall-modal-bg');
+  const cfgUpgrade = document.getElementById('cfg-btn-upgrade-pro');
+  const cfgTest = document.getElementById('cfg-btn-activate-test');
+
+  if(closeBtn) closeBtn.addEventListener('click', hidePaywall);
+  if(monthlyBtn) monthlyBtn.addEventListener('click', ()=> startPurchase('pro_monthly'));
+  if(yearlyBtn) yearlyBtn.addEventListener('click', ()=> startPurchase('pro_yearly'));
+  if(bg){
+    bg.addEventListener('click', (e)=>{
+      if(e.target.id === 'paywall-modal-bg') hidePaywall();
+    });
+  }
+  if(cfgUpgrade) cfgUpgrade.addEventListener('click', ()=> showPaywall('Assinatura Pro'));
+  if(cfgTest) cfgTest.addEventListener('click', ()=> activatePro('pro_yearly', 365));
+
+  updateProUI();
+}
 
 const STORAGE_KEY_BASE = 'finance-data';
 const AUTH_SESSION_KEY = 'lc-auth-session';
@@ -2015,7 +2226,11 @@ function normalizeLoadedState(parsed){
   state.categoryRules = parsed.categoryRules || [];
   state.categoryRules.forEach(r=>{ if(r && !r.source) r.source = ruleSourceOf(r); });
   state.recurringTemplates = parsed.recurringTemplates || [];
-  state.settings = { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null, hideAmounts: false, hideOnOpen: false, closedUntil: null, ...(parsed.settings || {}) };
+  state.settings = { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null, hideAmounts: false, hideOnOpen: false, closedUntil: null, subscription: { status: 'free', productId: null, expiresAt: null, lastChecked: null }, ...(parsed.settings || {}) };
+  // Garante objeto de assinatura mesmo em backups antigos
+  if(!state.settings.subscription || typeof state.settings.subscription !== 'object'){
+    state.settings.subscription = { status: 'free', productId: null, expiresAt: null, lastChecked: null };
+  }
   state.accountLimits = parsed.accountLimits && typeof parsed.accountLimits === 'object' ? parsed.accountLimits : {};
   state.accounts = parsed.accounts && typeof parsed.accounts === 'object' ? parsed.accounts : {};
   state.goals = Array.isArray(parsed.goals) ? parsed.goals : [];
@@ -3976,6 +4191,7 @@ function renderDashConfig(){
 
 function renderDashboard(){
  try{
+  try{ updateProUI(); }catch(e){}
   // filtro global por conta/cartão na visão geral
   const dashAccSel = document.getElementById('dash-account-filter');
   const prevDashAcc = dashAccSel ? dashAccSel.value : '';
@@ -6398,6 +6614,7 @@ function showOcrDupHint(candidates){
 }
 
 async function runOCR(file){
+  if(!requirePro('Leitura de cupom por foto (OCR)')) return;
   const url = URL.createObjectURL(file);
   document.getElementById('ocr-img').src = url;
   document.getElementById('ocr-preview').style.display = 'flex';
@@ -6491,6 +6708,7 @@ async function runOCR(file){
 }
 
 async function runBatchOCR(files){
+  if(!requirePro('Leitura de cupom por foto (OCR)')) return;
   const area = document.getElementById('batch-ocr-area');
   area.innerHTML = `<div class="ocr-status" id="batch-status">Lendo 1 de ${files.length} fotos…</div><div class="progress-bar" style="width:100%;"><div class="progress-fill" id="batch-progress"></div></div>`;
   const statusEl = document.getElementById('batch-status');
@@ -7683,6 +7901,7 @@ function parseOFX(text){
 }
 
 async function handleOfxFiles(fileList){
+  if(!requirePro('Importação OFX')) return;
   const files = Array.from(fileList || []);
   const metaEl = document.getElementById('ofx-meta');
   const reviewEl = document.getElementById('review-ofx');
@@ -7796,6 +8015,7 @@ async function readPdfFileToItems(file){
 }
 
 setupDropZone('drop-pdf','input-pdf', async (files)=>{
+  if(!requirePro('Importação de PDF')) return;
   const container = document.getElementById('review-pdf');
   const list = Array.isArray(files) ? files : Array.from(files||[]);
   if(!list.length) return;
@@ -7947,6 +8167,7 @@ function readSheetFileToRows(file){
 }
 
 setupDropZone('drop-planilha','input-planilha', async (files)=>{
+  if(!requirePro('Importação de planilha')) return;
   const list = Array.isArray(files) ? files : Array.from(files||[]);
   if(!list.length) return;
   const review = document.getElementById('review-planilha');
@@ -9531,6 +9752,7 @@ document.getElementById('new-account-btn').addEventListener('click', ()=>{
   showToast('Conta salva.');
 });
 document.getElementById('new-goal-btn').addEventListener('click', ()=>{
+  if(!requirePro('Metas financeiras')) return;
   const name = document.getElementById('new-goal-name').value.trim();
   const target = parseFloat(document.getElementById('new-goal-target').value);
   const current = parseFloat(document.getElementById('new-goal-current').value) || 0;
@@ -9548,6 +9770,7 @@ document.getElementById('new-goal-btn').addEventListener('click', ()=>{
   showToast('Objetivo adicionado.');
 });
 document.getElementById('new-debt-btn').addEventListener('click', ()=>{
+  if(!requirePro('Controle de dívidas')) return;
   const name = document.getElementById('new-debt-name').value.trim();
   const total = parseFloat(document.getElementById('new-debt-total').value) || 0;
   const remaining = parseFloat(document.getElementById('new-debt-remaining').value);
@@ -9750,7 +9973,11 @@ async function enterAppAs(user){
       categories: DEFAULT_CATEGORIES.slice(),
       categoryRules: [],
       recurringTemplates: [],
-      settings: { filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null, remindersEnabled: false, cashFlowDays: 30, dashCards: null, hideAmounts: false, hideOnOpen: false, closedUntil: null },
+      settings: {
+        filePrefix: 'livro-caixa', monthlyGoal: null, onboardingDone: false, reductionGoal: null,
+        remindersEnabled: false, cashFlowDays: 30, dashCards: null, hideAmounts: false, hideOnOpen: false, closedUntil: null,
+        subscription: { status: 'free', productId: null, expiresAt: null, lastChecked: null }
+      },
       accountLimits: {},
       accounts: {},
       goals: [],
@@ -9763,6 +9990,8 @@ async function enterAppAs(user){
     if(!state.accounts) state.accounts = {};
     if(!state.goals) state.goals = [];
     if(!state.debts) state.debts = [];
+    ensureSubscriptionObject();
+    initPaywallUI();
     runRecurringGeneration();
     try{ fillCategorySelects(); }catch(e){ console.warn(e); }
     try{ fillAccountSuggestions(); }catch(e){ console.warn(e); }
@@ -9857,6 +10086,7 @@ function renderGoogleButton(){
 
 document.getElementById('dash-cycle-mode') && document.getElementById('dash-cycle-mode').addEventListener('change', ()=> renderDashboard());
 document.getElementById('btn-export-csv') && document.getElementById('btn-export-csv').addEventListener('click', ()=>{
+  if(!requirePro('Exportação completa de CSV')) return;
   // reutiliza o mesmo filtro de renderTransactions
   const month = document.getElementById('filter-month')?.value || '';
   const type = document.getElementById('filter-type')?.value || '';
@@ -9917,6 +10147,7 @@ document.getElementById('rules-bulk-delete') && document.getElementById('rules-b
 });
 
 document.getElementById('rule-add-btn') && document.getElementById('rule-add-btn').addEventListener('click', ()=>{
+  if(!requirePro('Regras inteligentes de categorização')) return;
   const keyword = (document.getElementById('rule-kw')?.value || '').trim().toLowerCase();
   const category = document.getElementById('rule-cat')?.value;
   const minAmount = document.getElementById('rule-min')?.value;
@@ -10268,6 +10499,7 @@ function initDriveUI(){
   if(!connectBtn) return;
 
   connectBtn.addEventListener('click', async ()=>{
+    if(!requirePro('Backup no Google Drive')) return;
     try{
       await requestDriveAccess();
       const file = await findDriveBackupFile();
@@ -10283,6 +10515,7 @@ function initDriveUI(){
   });
 
   upBtn.addEventListener('click', async ()=>{
+    if(!requirePro('Backup no Google Drive')) return;
     try{
       await uploadBackupToDrive();
       showToast('Backup salvo no Google Drive.');
@@ -10294,6 +10527,7 @@ function initDriveUI(){
   });
 
   downBtn.addEventListener('click', ()=>{
+    if(!requirePro('Backup no Google Drive')) return;
     askConfirm('Restaurar do Drive', 'Isso substitui os dados atuais deste perfil pelos do arquivo no Google Drive. Continuar?', async ()=>{
       try{
         await downloadBackupFromDrive();
@@ -10342,6 +10576,8 @@ async function init(){
     fillCategorySelects();
     fillAccountSuggestions();
     fillMonthFilter();
+    ensureSubscriptionObject();
+    initPaywallUI();
     renderDashboard();
     renderTransactions();
 
