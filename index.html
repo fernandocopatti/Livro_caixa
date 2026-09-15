@@ -616,7 +616,35 @@
   @media (max-width:720px){
     #privacy-toggle{top:8px;right:8px;padding:7px 12px;font-size:12px;}
   }
-
+/* --- UI upgrade --- */
+.fab-top{
+  position:fixed;bottom:90px;right:26px;width:44px;height:44px;border-radius:50%;
+  background:var(--surface-3);color:var(--ink);border:1px solid var(--line);
+  font-size:18px;cursor:pointer;z-index:89;
+  display:none;align-items:center;justify-content:center;
+  box-shadow:0 4px 14px rgba(0,0,0,.3);
+}
+.fab-top.show{display:flex;}
+.bottom-nav{
+  display:none;position:fixed;left:0;right:0;bottom:0;z-index:80;
+  background:var(--surface);border-top:1px solid var(--line);
+  padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+  justify-content:space-around;gap:2px;
+}
+.bottom-nav-btn{
+  flex:1;min-width:0;background:none;border:none;color:var(--ink-dim);
+  font-size:10px;font-weight:500;cursor:pointer;font-family:inherit;
+  display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 2px;border-radius:8px;
+}
+.bottom-nav-btn .bn-icon{font-size:18px;line-height:1;}
+.bottom-nav-btn.active{color:var(--accent);}
+@media (max-width:880px){
+  .bottom-nav{display:flex;}
+  main{padding-bottom:72px !important;}
+  .fab{bottom:72px !important;right:18px !important;}
+  .fab-top{bottom:88px;right:18px;}
+  .spine-btn .tab-num{display:none;}
+}
 </style>
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -1270,7 +1298,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Backup local e na nuvem (GitHub Gist), limites de cartão, recorrências, fechamento do período e preferências. Exporte backup com frequência.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-09-14-02 (base 09-09-pro + cota IndexedDB)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-09-09-pro (assinatura + badge Pro)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -1754,7 +1782,15 @@
   </div>
 </div>
 
-<button class="fab" id="fab-quick-add" title="Novo lançamento">+</button>
+<button class="fab" id="fab-quick-add" title="Novo lançamento">+<button class="fab-top" id="fab-scroll-top" title="Voltar ao topo">↑</button>
+<nav class="bottom-nav" id="bottom-nav">
+  <button type="button" class="bottom-nav-btn active" data-view="dashboard"><span class="bn-icon">📊</span><span>Visão</span></button>
+  <button type="button" class="bottom-nav-btn" data-view="transactions"><span class="bn-icon">📋</span><span>Lançam.</span></button>
+  <button type="button" class="bottom-nav-btn" data-view="new"><span class="bn-icon">➕</span><span>Novo</span></button>
+  <button type="button" class="bottom-nav-btn" data-view="import"><span class="bn-icon">📥</span><span>Importar</span></button>
+  <button type="button" class="bottom-nav-btn" data-view="categories"><span class="bn-icon">🏷</span><span>Categorias</span></button>
+  <button type="button" class="bottom-nav-btn" data-view="config"><span class="bn-icon">⚙️</span><span>Config</span></button>
+</nav></button>
 
 <div class="modal-bg" id="onboard-modal-bg">
   <div class="modal" style="max-width:460px;">
@@ -2257,92 +2293,6 @@ function normalizeLoadedState(parsed){
     .forEach(dc => state.categories.push(dc));
 }
 
-function isQuotaError(e){
-  if(!e) return false;
-  const name = e.name || '';
-  const msg = String(e.message || e);
-  return name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED'
-    || /quota/i.test(msg) || /exceeded/i.test(msg);
-}
-function countPhotosInState(st){
-  return (st.transactions||[]).filter(t=> t.photo && String(t.photo).length > 50).length;
-}
-function stripPhotosFromState(st){
-  let n = 0;
-  (st.transactions||[]).forEach(t=>{
-    if(t.photo){ delete t.photo; n++; }
-  });
-  return n;
-}
-const IDB_KV_NAME = 'livro-caixa-kv';
-const IDB_KV_STORE = 'kv';
-function idbKvOpen(){
-  return new Promise((resolve, reject)=>{
-    try{
-      const req = indexedDB.open(IDB_KV_NAME, 1);
-      req.onupgradeneeded = ()=>{
-        const db = req.result;
-        if(!db.objectStoreNames.contains(IDB_KV_STORE)) db.createObjectStore(IDB_KV_STORE);
-      };
-      req.onsuccess = ()=> resolve(req.result);
-      req.onerror = ()=> reject(req.error || new Error('idb open'));
-    }catch(e){ reject(e); }
-  });
-}
-async function idbKvSet(key, value){
-  const db = await idbKvOpen();
-  return new Promise((resolve, reject)=>{
-    const tx = db.transaction(IDB_KV_STORE, 'readwrite');
-    tx.objectStore(IDB_KV_STORE).put(value, key);
-    tx.oncomplete = ()=>{ try{ db.close(); }catch(e){} resolve(); };
-    tx.onerror = ()=>{ try{ db.close(); }catch(e){} reject(tx.error); };
-  });
-}
-async function idbKvGet(key){
-  const db = await idbKvOpen();
-  return new Promise((resolve, reject)=>{
-    const tx = db.transaction(IDB_KV_STORE, 'readonly');
-    const req = tx.objectStore(IDB_KV_STORE).get(key);
-    req.onsuccess = ()=>{ try{ db.close(); }catch(e){} resolve(req.result); };
-    req.onerror = ()=>{ try{ db.close(); }catch(e){} reject(req.error); };
-  });
-}
-async function persistLocalPayload(key, jsonStr){
-  try{
-    window.localStorage.setItem(key, jsonStr);
-    try{ window.localStorage.setItem(key+'::idb', '0'); }catch(e){}
-    return { ok:true, where:'localStorage' };
-  }catch(e){
-    if(!isQuotaError(e)) throw e;
-  }
-  try{
-    await idbKvSet(key, jsonStr);
-    try{ window.localStorage.setItem(key+'::idb', '1'); }catch(e){}
-    try{ window.localStorage.removeItem(key); }catch(e){}
-    return { ok:true, where:'indexedDB' };
-  }catch(e2){
-    throw e2;
-  }
-}
-async function loadLocalPayload(key){
-  try{
-    const flag = window.localStorage.getItem(key+'::idb');
-    if(flag === '1'){
-      const fromIdb = await idbKvGet(key);
-      if(fromIdb) return fromIdb;
-    }
-  }catch(e){}
-  try{
-    const raw = window.localStorage.getItem(key);
-    if(raw) return raw;
-  }catch(e){}
-  try{
-    const fromIdb = await idbKvGet(key);
-    if(fromIdb) return fromIdb;
-  }catch(e){}
-  return null;
-}
-
 async function loadState(){
   STORAGE_KEY = activeStorageKey();
   if(STORAGE_MODE === 'cloud'){
@@ -2354,7 +2304,7 @@ async function loadState(){
   }
   if(STORAGE_MODE === 'local'){
     try{
-      const raw = await loadLocalPayload(STORAGE_KEY);
+      const raw = window.localStorage.getItem(STORAGE_KEY);
       if(raw) normalizeLoadedState(JSON.parse(raw));
     }catch(e){ /* sem dados salvos ainda — ok, mantém os padrões */ }
   }
@@ -2375,36 +2325,13 @@ function saveState(){
       }
     } else if(STORAGE_MODE === 'local'){
       try{
-        let payload = JSON.stringify(state);
-        try{
-          await persistLocalPayload(STORAGE_KEY, payload);
-        }catch(e){
-          if(isQuotaError(e) || /quota|exceeded/i.test(String(e && e.message))){
-            const photos = countPhotosInState(state);
-            if(photos > 0){
-              const n = stripPhotosFromState(state);
-              payload = JSON.stringify(state);
-              try{
-                await persistLocalPayload(STORAGE_KEY, payload);
-                showToast('Espaço cheio: removi '+n+' foto(s) de cupom para salvar. Lançamentos ok.');
-              }catch(e2){
-                console.error(e2);
-                showToast('Armazenamento cheio. Exporte backup JSON e limpe dados do site no navegador.');
-              }
-            } else {
-              showToast('Armazenamento do navegador cheio. Exporte backup e limpe dados do site (Safari/Chrome).');
-            }
-          } else {
-            console.error('Erro ao salvar localmente:', e);
-            showToast('Erro ao salvar localmente: ' + (e && e.message ? e.message : 'motivo desconhecido'));
-          }
-        }
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       }catch(e){
         console.error('Erro ao salvar localmente:', e);
         showToast('Erro ao salvar localmente: ' + (e && e.message ? e.message : 'motivo desconhecido'));
       }
     }
-    try{ syncToFile(); }catch(e){}
+    syncToFile();
   }, 250);
 }
 
@@ -9383,34 +9310,8 @@ document.getElementById('import-backup-input').addEventListener('change', (e)=>{
         'Importar backup',
         `Isso vai SUBSTITUIR todos os dados atuais por este backup (${parsed.transactions.length} lançamentos). Recomendado só se você quer restaurar um backup anterior. Continuar?`,
         ()=>{
-          const photos = (parsed.transactions||[]).filter(t=>t.photo).length;
-          if(photos > 30){
-            (parsed.transactions||[]).forEach(t=>{ delete t.photo; });
-            showToast('Backup grande: importando sem fotos de cupom para caber no aparelho.');
-          }
           normalizeLoadedState(parsed);
-          clearTimeout(saveTimer);
-          (async ()=>{
-            try{
-              STORAGE_KEY = activeStorageKey();
-              await persistLocalPayload(STORAGE_KEY, JSON.stringify(state));
-              showToast('Backup importado com sucesso.');
-            }catch(e){
-              if(isQuotaError(e) || /quota|exceeded/i.test(String(e&&e.message))){
-                const n = stripPhotosFromState(state);
-                try{
-                  await persistLocalPayload(STORAGE_KEY, JSON.stringify(state));
-                  showToast('Importado sem '+n+' foto(s) — espaço do navegador estava cheio.');
-                }catch(e2){
-                  showToast('Não coube no armazenamento. Limpe dados do site ou use backup menor.');
-                }
-              } else {
-                showToast('Erro ao salvar backup: '+(e&&e.message?e.message:'falha'));
-              }
-            }
-            try{ markGistDirty(); }catch(e){}
-            try{ syncToFile(); }catch(e){}
-          })();
+          saveState();
           document.getElementById('type-toggle').innerHTML = typeToggleHTML('despesa');
           fillCategorySelects();
           renderDashboard();
@@ -9418,6 +9319,7 @@ document.getElementById('import-backup-input').addEventListener('change', (e)=>{
           renderCategoriesView();
           renderRecurringList();
           renderTypesList();
+          showToast('Backup importado com sucesso.');
         }
       );
     }catch(err){
@@ -10731,6 +10633,29 @@ async function init(){
   }
   renderSyncBar();
 }
+(function(){
+  const topBtn = document.getElementById('fab-scroll-top');
+  if(topBtn){
+    window.addEventListener('scroll', ()=>{
+      topBtn.classList.toggle('show', (window.scrollY||0) > 400);
+    }, {passive:true});
+    topBtn.addEventListener('click', ()=> window.scrollTo({top:0, behavior:'smooth'}));
+  }
+  document.querySelectorAll('.bottom-nav-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      const spine = document.querySelector('.spine-btn[data-view="'+btn.dataset.view+'"]');
+      if(spine) spine.click();
+      document.querySelectorAll('.bottom-nav-btn').forEach(b=> b.classList.toggle('active', b===btn));
+    });
+  });
+  document.querySelectorAll('.spine-btn').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('.bottom-nav-btn').forEach(b=>{
+        b.classList.toggle('active', b.dataset.view === btn.dataset.view);
+      });
+    });
+  });
+})();
 init();
 
 </script>
