@@ -1270,7 +1270,7 @@
       <div class="view-head">
         <h1 class="view-title">Configurações</h1>
         <p class="view-desc">Backup local e na nuvem (GitHub Gist), limites de cartão, recorrências, fechamento do período e preferências. Exporte backup com frequência.</p>
-                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-09-09-pro (assinatura + badge Pro)</p>
+                <p style="font-size:11px;color:var(--ink-faint);font-family:var(--font-mono);margin-top:6px;">Versão do app: 2026-09-14-02 (base 09-09-pro + cota IndexedDB)</p>
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
@@ -2257,6 +2257,92 @@ function normalizeLoadedState(parsed){
     .forEach(dc => state.categories.push(dc));
 }
 
+function isQuotaError(e){
+  if(!e) return false;
+  const name = e.name || '';
+  const msg = String(e.message || e);
+  return name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED'
+    || /quota/i.test(msg) || /exceeded/i.test(msg);
+}
+function countPhotosInState(st){
+  return (st.transactions||[]).filter(t=> t.photo && String(t.photo).length > 50).length;
+}
+function stripPhotosFromState(st){
+  let n = 0;
+  (st.transactions||[]).forEach(t=>{
+    if(t.photo){ delete t.photo; n++; }
+  });
+  return n;
+}
+const IDB_KV_NAME = 'livro-caixa-kv';
+const IDB_KV_STORE = 'kv';
+function idbKvOpen(){
+  return new Promise((resolve, reject)=>{
+    try{
+      const req = indexedDB.open(IDB_KV_NAME, 1);
+      req.onupgradeneeded = ()=>{
+        const db = req.result;
+        if(!db.objectStoreNames.contains(IDB_KV_STORE)) db.createObjectStore(IDB_KV_STORE);
+      };
+      req.onsuccess = ()=> resolve(req.result);
+      req.onerror = ()=> reject(req.error || new Error('idb open'));
+    }catch(e){ reject(e); }
+  });
+}
+async function idbKvSet(key, value){
+  const db = await idbKvOpen();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(IDB_KV_STORE, 'readwrite');
+    tx.objectStore(IDB_KV_STORE).put(value, key);
+    tx.oncomplete = ()=>{ try{ db.close(); }catch(e){} resolve(); };
+    tx.onerror = ()=>{ try{ db.close(); }catch(e){} reject(tx.error); };
+  });
+}
+async function idbKvGet(key){
+  const db = await idbKvOpen();
+  return new Promise((resolve, reject)=>{
+    const tx = db.transaction(IDB_KV_STORE, 'readonly');
+    const req = tx.objectStore(IDB_KV_STORE).get(key);
+    req.onsuccess = ()=>{ try{ db.close(); }catch(e){} resolve(req.result); };
+    req.onerror = ()=>{ try{ db.close(); }catch(e){} reject(req.error); };
+  });
+}
+async function persistLocalPayload(key, jsonStr){
+  try{
+    window.localStorage.setItem(key, jsonStr);
+    try{ window.localStorage.setItem(key+'::idb', '0'); }catch(e){}
+    return { ok:true, where:'localStorage' };
+  }catch(e){
+    if(!isQuotaError(e)) throw e;
+  }
+  try{
+    await idbKvSet(key, jsonStr);
+    try{ window.localStorage.setItem(key+'::idb', '1'); }catch(e){}
+    try{ window.localStorage.removeItem(key); }catch(e){}
+    return { ok:true, where:'indexedDB' };
+  }catch(e2){
+    throw e2;
+  }
+}
+async function loadLocalPayload(key){
+  try{
+    const flag = window.localStorage.getItem(key+'::idb');
+    if(flag === '1'){
+      const fromIdb = await idbKvGet(key);
+      if(fromIdb) return fromIdb;
+    }
+  }catch(e){}
+  try{
+    const raw = window.localStorage.getItem(key);
+    if(raw) return raw;
+  }catch(e){}
+  try{
+    const fromIdb = await idbKvGet(key);
+    if(fromIdb) return fromIdb;
+  }catch(e){}
+  return null;
+}
+
 async function loadState(){
   STORAGE_KEY = activeStorageKey();
   if(STORAGE_MODE === 'cloud'){
@@ -2268,7 +2354,7 @@ async function loadState(){
   }
   if(STORAGE_MODE === 'local'){
     try{
-      const raw = window.localStorage.getItem(STORAGE_KEY);
+      const raw = await loadLocalPayload(STORAGE_KEY);
       if(raw) normalizeLoadedState(JSON.parse(raw));
     }catch(e){ /* sem dados salvos ainda — ok, mantém os padrões */ }
   }
@@ -2289,13 +2375,36 @@ function saveState(){
       }
     } else if(STORAGE_MODE === 'local'){
       try{
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        let payload = JSON.stringify(state);
+        try{
+          await persistLocalPayload(STORAGE_KEY, payload);
+        }catch(e){
+          if(isQuotaError(e) || /quota|exceeded/i.test(String(e && e.message))){
+            const photos = countPhotosInState(state);
+            if(photos > 0){
+              const n = stripPhotosFromState(state);
+              payload = JSON.stringify(state);
+              try{
+                await persistLocalPayload(STORAGE_KEY, payload);
+                showToast('Espaço cheio: removi '+n+' foto(s) de cupom para salvar. Lançamentos ok.');
+              }catch(e2){
+                console.error(e2);
+                showToast('Armazenamento cheio. Exporte backup JSON e limpe dados do site no navegador.');
+              }
+            } else {
+              showToast('Armazenamento do navegador cheio. Exporte backup e limpe dados do site (Safari/Chrome).');
+            }
+          } else {
+            console.error('Erro ao salvar localmente:', e);
+            showToast('Erro ao salvar localmente: ' + (e && e.message ? e.message : 'motivo desconhecido'));
+          }
+        }
       }catch(e){
         console.error('Erro ao salvar localmente:', e);
         showToast('Erro ao salvar localmente: ' + (e && e.message ? e.message : 'motivo desconhecido'));
       }
     }
-    syncToFile();
+    try{ syncToFile(); }catch(e){}
   }, 250);
 }
 
@@ -9274,8 +9383,34 @@ document.getElementById('import-backup-input').addEventListener('change', (e)=>{
         'Importar backup',
         `Isso vai SUBSTITUIR todos os dados atuais por este backup (${parsed.transactions.length} lançamentos). Recomendado só se você quer restaurar um backup anterior. Continuar?`,
         ()=>{
+          const photos = (parsed.transactions||[]).filter(t=>t.photo).length;
+          if(photos > 30){
+            (parsed.transactions||[]).forEach(t=>{ delete t.photo; });
+            showToast('Backup grande: importando sem fotos de cupom para caber no aparelho.');
+          }
           normalizeLoadedState(parsed);
-          saveState();
+          clearTimeout(saveTimer);
+          (async ()=>{
+            try{
+              STORAGE_KEY = activeStorageKey();
+              await persistLocalPayload(STORAGE_KEY, JSON.stringify(state));
+              showToast('Backup importado com sucesso.');
+            }catch(e){
+              if(isQuotaError(e) || /quota|exceeded/i.test(String(e&&e.message))){
+                const n = stripPhotosFromState(state);
+                try{
+                  await persistLocalPayload(STORAGE_KEY, JSON.stringify(state));
+                  showToast('Importado sem '+n+' foto(s) — espaço do navegador estava cheio.');
+                }catch(e2){
+                  showToast('Não coube no armazenamento. Limpe dados do site ou use backup menor.');
+                }
+              } else {
+                showToast('Erro ao salvar backup: '+(e&&e.message?e.message:'falha'));
+              }
+            }
+            try{ markGistDirty(); }catch(e){}
+            try{ syncToFile(); }catch(e){}
+          })();
           document.getElementById('type-toggle').innerHTML = typeToggleHTML('despesa');
           fillCategorySelects();
           renderDashboard();
@@ -9283,7 +9418,6 @@ document.getElementById('import-backup-input').addEventListener('change', (e)=>{
           renderCategoriesView();
           renderRecurringList();
           renderTypesList();
-          showToast('Backup importado com sucesso.');
         }
       );
     }catch(err){
