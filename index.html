@@ -66,24 +66,46 @@
     padding:28px 0 18px;
   }
   .brand{
-    padding:0 22px 22px;
+    padding:0 20px 16px;
     border-bottom:1px solid var(--line);
-    margin-bottom:14px;
+    margin-bottom:12px;
   }
   .brand-mark{
-    font-family:var(--font-display);
-    font-size:26px;
-    font-weight:600;
-    letter-spacing:.2px;
-    line-height:1.1;
-    color:var(--ink);
+    display:flex;align-items:center;gap:10px;
+    min-width:0;
   }
+  .brand-text{min-width:0;display:flex;flex-direction:column;gap:1px;flex:1;}
+  .brand-name{
+    font-family:var(--font-display);
+    font-size:16px;
+    font-weight:600;
+    letter-spacing:-.01em;
+    line-height:1.15;
+    color:var(--ink);
+    display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+  }
+  .brand-logo{
+    width:42px;height:42px;flex-shrink:0;
+    border-radius:11px;
+    display:block;
+    box-shadow:0 1px 4px rgba(0,0,0,.2);
+  }
+  .brand-logo.lg{width:48px;height:48px;border-radius:12px;}
+  .auth-brand{
+    display:flex;align-items:center;gap:12px;margin-bottom:12px;
+  }
+  .auth-brand h1{margin:0;}
   .brand-sub{
     font-size:11px;
-    letter-spacing:1.5px;
-    text-transform:uppercase;
+    letter-spacing:.25px;
     color:var(--ink-faint);
-    margin-top:4px;
+    line-height:1.25;
+  }
+  .brand-dev{
+    font-size:10px;
+    color:var(--ink-faint);
+    letter-spacing:.15px;
+    opacity:.8;
   }
   .spine-nav{display:flex;flex-direction:column;gap:2px;padding:8px 10px;flex:1;}
   .spine-btn{
@@ -112,10 +134,12 @@
   main{flex:1;min-width:0;padding:34px 40px 60px;max-width:1180px;}
 
   .sync-bar{
-    display:flex;flex-direction:column;gap:8px;
+    display:none;
+    flex-direction:column;gap:8px;
     background:var(--surface);border:1px solid var(--line);border-radius:14px;
-    padding:10px 16px;margin-bottom:26px;font-size:12.5px;color:var(--ink-dim);
+    padding:10px 16px;margin-bottom:18px;font-size:12.5px;color:var(--ink-dim);
   }
+  .sync-bar.has-content{display:flex;}
   .sync-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
   .sync-warning{
     font-size:12px;line-height:1.5;color:var(--warn);
@@ -143,10 +167,10 @@
 
   .view{display:none;}
   .view.active{display:block;}
-  .view-head{margin-bottom:26px;}
+  .view-head{margin-bottom:14px;}
   .view-title{
     font-family:var(--font-display);
-    font-size:30px;font-weight:600;margin:0 0 4px;
+    font-size:26px;font-weight:600;margin:0;
   }
   .view-desc{color:var(--ink-dim);font-size:14px;margin:0;}
 
@@ -241,23 +265,72 @@
   .cat-icon-btn:disabled:hover{background:none;}
 
   /* ---------- Filters ---------- */
-  .filter-bar{display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;}
+  .filter-bar{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;align-items:flex-end;}
+  .filter-panel{
+    background:var(--surface);border:1px solid var(--line);border-radius:12px;
+    padding:12px 14px;margin-bottom:14px;
+  }
+  .filter-panel-grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;align-items:end;
+  }
+  .filter-panel .field{margin:0;}
+  .filter-panel .field label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);margin-bottom:4px;}
+  .filter-panel select,.filter-panel input[type="date"],.filter-panel input[type="number"],.filter-panel .text-input{
+    width:100%;max-width:100%;
+  }
+  .filter-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;}
+  .filter-advanced summary{
+    cursor:pointer;color:var(--ink-dim);font-size:12.5px;font-weight:600;
+    padding:6px 0;list-style:none;
+  }
+  .filter-advanced summary::-webkit-details-marker{display:none;}
+  .filter-advanced[open] summary{margin-bottom:10px;color:var(--accent);}
   select,.text-input{
     background:var(--surface-2);border:1px solid var(--line);color:var(--ink);
     padding:9px 12px;border-radius:8px;font-size:13px;outline:none;
   }
   select:focus,.text-input:focus,textarea:focus{border-color:var(--accent-dim);}
 
-  /* ---------- Forms ---------- */
-  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
-  .field{display:flex;flex-direction:column;gap:6px;}
-  .field.full{grid-column:1/-1;}
-  .field label{font-size:11.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-faint);}
-  .field input,.field select,.field textarea{
-    background:var(--surface-2);border:1px solid var(--line);color:var(--ink);
-    padding:11px 12px;border-radius:8px;font-size:14px;outline:none;width:100%;
+  /* ---------- Forms (alinhamento uniforme) ---------- */
+  .form-grid,.account-limit-fields{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px 12px;
+    align-items:stretch;
+    width:100%;
+    max-width:100%;
+    box-sizing:border-box;
   }
-  .field textarea{resize:vertical;min-height:60px;font-family:var(--font-body);}
+  .field{
+    display:flex;flex-direction:column;gap:4px;
+    min-width:0;width:100%;box-sizing:border-box;
+  }
+  .field.full{grid-column:1 / -1;}
+  .field label{
+    font-size:10.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-faint);
+    line-height:1.25;min-height:2.5em;display:flex;align-items:flex-end;
+  }
+  .field input,.field select,.field textarea,
+  .form-grid input,.form-grid select,.form-grid textarea,
+  .account-limit-fields input,.account-limit-fields select{
+    background:var(--surface-2);border:1px solid var(--line);color:var(--ink);
+    padding:0 12px;border-radius:8px;font-size:13.5px;outline:none;
+    width:100%;max-width:100%;box-sizing:border-box;
+    height:42px;min-height:42px;line-height:42px;
+    -webkit-appearance:none;appearance:none;
+  }
+  .field select,.form-grid select,.account-limit-fields select{
+    padding-right:28px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238a9aa3' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 10px center;
+  }
+  .field textarea,.form-grid textarea{
+    height:auto;min-height:64px;line-height:1.4;padding:10px 12px;resize:vertical;
+    font-family:var(--font-body);
+  }
+  .field .btn, .form-grid .btn{
+    height:42px;width:100%;box-sizing:border-box;
+  }
   .btn{
     display:inline-flex;align-items:center;justify-content:center;gap:8px;
     background:var(--accent);color:#0D1416;border:none;
@@ -272,11 +345,17 @@
   .btn:disabled{opacity:.5;cursor:not-allowed;}
   .btn-row{display:flex;gap:10px;margin-top:20px;}
 
-  .type-toggle{display:flex;gap:8px;margin-bottom:18px;}
+  .type-toggle{
+    display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:14px;
+  }
+  @media (min-width:720px){
+    .type-toggle{grid-template-columns:repeat(4,1fr);}
+  }
   .type-btn{
-    flex:1;background:var(--surface-2);border:1px solid var(--line);color:var(--ink-dim);
-    padding:10px;border-radius:8px;font-size:13.5px;font-weight:600;cursor:pointer;
+    background:var(--surface-2);border:1px solid var(--line);color:var(--ink-dim);
+    padding:8px 6px;border-radius:8px;font-size:11.5px;font-weight:600;cursor:pointer;
     transition:background .15s,color .15s,border-color .15s;
+    text-align:center;line-height:1.25;min-width:0;
   }
   .type-btn.active[data-type="despesa"]{background:rgba(217,124,87,.15);border-color:var(--warn-dim);color:var(--warn);}
   .type-btn.active[data-type="receita"]{background:rgba(89,179,163,.15);border-color:var(--accent-dim);color:var(--accent);}
@@ -410,13 +489,14 @@
 
   .bottom-nav{
     display:none;
-    position:fixed;left:0;right:0;bottom:0;z-index:80;
+    position:fixed;left:0;right:0;bottom:0;z-index:200;
     background:rgba(15,20,24,.96);
     backdrop-filter:blur(12px);
     border-top:1px solid var(--line);
     padding:6px 4px calc(8px + env(safe-area-inset-bottom));
     justify-content:space-around;align-items:stretch;
     gap:2px;
+    pointer-events:auto;
   }
   .bottom-nav-btn{
     flex:1;min-width:0;
@@ -426,8 +506,13 @@
     gap:3px;padding:8px 2px;border-radius:10px;
     letter-spacing:.2px;
   }
-  .bottom-nav-btn .bn-icon{font-size:18px;line-height:1;opacity:.9;}
-  .bottom-nav-btn.active{color:var(--accent);background:rgba(61,214,140,.08);}
+  .bottom-nav-btn .bn-icon{
+    width:22px;height:22px;display:flex;align-items:center;justify-content:center;
+    opacity:.85;
+  }
+  .bottom-nav-btn .bn-icon svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+  .bottom-nav-btn.active{color:var(--accent);background:rgba(89,179,163,.1);}
+  .bottom-nav-btn.active .bn-icon{opacity:1;}
   .bottom-nav-btn:active{background:var(--surface-2);}
 
   /* tipografia e cards um pouco mais polidos */
@@ -437,51 +522,144 @@
   }
   .spine-btn{font-weight:500;letter-spacing:.1px;}
 
+  /* IR dashboard — layout responsivo */
+  .ir-kpi-grid{
+    display:grid;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:10px;
+    margin-bottom:12px;
+  }
+  .ir-kpi-grid-2{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .ir-kpi{
+    padding:12px;
+    border-radius:12px;
+    border:1px solid var(--line);
+    background:var(--surface-2);
+    min-width:0;
+  }
+  .ir-kpi-label{
+    font-size:10px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.4px;
+    line-height:1.3;
+  }
+  .ir-kpi-val{
+    font-family:var(--font-mono);font-size:15px;font-weight:700;
+    margin-top:6px;line-height:1.25;word-break:break-word;
+  }
+  .ir-kpi-val.accent{color:var(--accent);}
+  .ir-kpi-val.warn{color:var(--warn);}
+  .ir-kpi-sub{font-size:10.5px;color:var(--ink-faint);margin-top:4px;line-height:1.35;}
+  .ir-section-label{
+    font-size:11px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.5px;
+    margin:4px 0 8px;
+  }
+  .ir-rows .account-row{align-items:flex-start;}
+  .ir-rows .account-row-name{flex:1;min-width:0;padding-right:10px;line-height:1.35;}
+  .ir-rows .account-row-val{flex-shrink:0;white-space:nowrap;}
+  .ir-soft{color:var(--ink-faint);font-size:11px;font-weight:400;}
+  .ir-bar{
+    height:6px;background:var(--surface-2);border-radius:4px;margin:4px 0 10px;overflow:hidden;
+  }
+  .ir-bar-fill{height:100%;border-radius:4px;}
+  .ir-tips{
+    margin-top:12px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);
+    background:var(--surface-2);font-size:12.5px;color:var(--ink-dim);line-height:1.45;
+  }
+  .ir-footnote{font-size:11px;color:var(--ink-faint);margin:12px 0 0;line-height:1.4;}
+  @media (max-width:880px){
+    .ir-kpi-grid{grid-template-columns:1fr;gap:8px;}
+    .ir-kpi-grid-2{grid-template-columns:1fr 1fr;}
+    .ir-kpi-val{font-size:16px;}
+  }
+  @media (max-width:420px){
+    .ir-kpi-grid-2{grid-template-columns:1fr;}
+  }
+
   /* Config: blocos recolhíveis */
   #view-config .card.cfg-fold{
-    padding:0 !important; overflow:hidden;
+    padding:0 !important; overflow:hidden; margin-bottom:8px !important;
   }
   #view-config .card.cfg-fold > .cfg-head{
     display:flex; align-items:center; justify-content:space-between; gap:10px;
-    padding:14px 16px; cursor:pointer; user-select:none;
+    padding:10px 12px; cursor:pointer; user-select:none;
     font-size:13px; font-weight:600; color:var(--ink);
   }
   #view-config .card.cfg-fold > .cfg-head:hover{background:var(--surface-3);}
   #view-config .card.cfg-fold > .cfg-head .cfg-chevron{
-    font-size:12px; color:var(--ink-faint); transition:transform .2s; flex-shrink:0;
+    font-size:11px; color:var(--ink-faint); transition:transform .2s; flex-shrink:0;
   }
   #view-config .card.cfg-fold.open > .cfg-head .cfg-chevron{transform:rotate(90deg); color:var(--accent);}
   #view-config .card.cfg-fold > .cfg-body{
-    display:none; padding:0 16px 16px; border-top:1px solid var(--line);
+    display:none; padding:0 12px 12px; border-top:1px solid var(--line);
   }
-  #view-config .card.cfg-fold.open > .cfg-body{display:block; padding-top:14px;}
+  #view-config .card.cfg-fold.open > .cfg-body{display:block; padding-top:10px;}
+  #view-config .card.cfg-fold .panel-title{display:none;}
+  #view-config .view-desc{display:none;}
+  #view-config p{font-size:12px !important;line-height:1.4 !important;margin:0 0 8px !important;}
+  #view-config .field{margin-bottom:8px;}
+  .soft-hint{font-size:11px;font-weight:400;color:var(--ink-faint);margin-left:6px;}
+  .compact-card{padding:12px 14px !important;}
+  .compact-card .panel-title{margin-bottom:8px;font-size:14px;}
+  .tip-fold > summary::-webkit-details-marker{display:none;}
+  .tip-fold:not([open]){padding:10px 14px !important;}
 
   ::-webkit-scrollbar{width:8px;height:8px;}
   ::-webkit-scrollbar-thumb{background:var(--surface-3);border-radius:4px;}
 
   @media (max-width:880px){
     #app{flex-direction:column;}
-    .spine{width:100%;flex-direction:row;align-items:center;padding:12px 14px;border-right:none;border-bottom:1px solid var(--line);overflow-x:auto;-webkit-overflow-scrolling:touch;}
-    .brand{border-bottom:none;padding:0 14px 0 0;margin-bottom:0;border-right:1px solid var(--line);flex-shrink:0;}
-    .brand-mark{font-size:14px;}
-    .spine-nav{flex-direction:row;padding:0 0 0 10px;gap:4px;}
-    .spine-btn{font-size:12px;padding:8px 10px;white-space:nowrap;}
-    .spine-btn .tab-num{display:none;}
+    .spine{
+      width:100%;flex-direction:row;align-items:center;
+      padding:10px 14px;border-right:none;border-bottom:1px solid var(--line);
+    }
+    .spine{
+      background:var(--surface);
+      padding:10px 14px;
+      min-height:0;
+    }
+    .brand{border-bottom:none;padding:0;margin-bottom:0;border-right:none;flex:1;min-width:0;}
+    .brand-mark{gap:10px;align-items:center;}
+    .brand-logo{width:40px;height:40px;border-radius:10px;box-shadow:none;}
+    .brand-name{font-size:14.5px;line-height:1.15;}
+    .brand-sub{font-size:10px;letter-spacing:.2px;}
+    .brand-dev{font-size:9px;opacity:.75;}
+    /* menu superior escondido no celular — usa bottom-nav */
+    .spine-nav{display:none !important;}
     .spine-foot{display:none;}
-    main{padding:20px 16px 88px;}
+    main{padding:12px 14px 96px;}
+    .view-head{margin-bottom:12px;}
+    .view-title{font-size:22px;}
+    .card{margin-bottom:12px !important;}
+    .dash-toolbar{margin-bottom:12px;gap:8px;}
     .stat-row{grid-template-columns:1fr 1fr;}
-    .dash-cols{grid-template-columns:1fr;}
-    .form-grid{grid-template-columns:1fr;}
-    .ledger-row{grid-template-columns:70px 1fr 90px 30px;}
-    .ledger-row.selectable{grid-template-columns:22px 70px 1fr 90px 30px;}
+    .dash-cols{grid-template-columns:1fr !important;}
+    .form-grid,.account-limit-fields{grid-template-columns:1fr 1fr !important;gap:10px 12px !important;max-width:100% !important;}
+    .form-grid .field.full,.account-limit-fields .field.full{grid-column:1 / -1;}
+    #view-config .form-grid{grid-template-columns:1fr 1fr !important;}
+    #view-config .card{padding:12px !important;}
+    #view-config .panel-title{font-size:13.5px;margin-bottom:8px;}
+    #view-config .form-grid[style]{max-width:100% !important;}
+    #view-new .photo-drop{padding:16px;}
+    .field input,.field select{height:40px;min-height:40px;line-height:40px;font-size:13px;}
+    .filter-panel-grid{grid-template-columns:1fr 1fr;}
+    .ledger-row.head{display:none;}
+    .ledger-row, .ledger-row.selectable{
+      grid-template-columns:22px 1fr auto;
+      gap:8px 10px;
+      padding:12px 10px;
+      align-items:start;
+    }
+    .ledger-row .ledger-date{grid-column:2;font-size:11px;}
+    .ledger-row .ledger-desc{grid-column:2;grid-row:2;}
     .ledger-row .cat-tag{display:none;}
+    .ledger-row .ledger-amt{grid-column:3;grid-row:1 / span 2;align-self:center;font-size:13px;}
+    .ledger-row .row-actions, .ledger-row > span:last-child{grid-column:3;grid-row:1;}
     .filter-summary{gap:10px 14px;}
     .filter-summary .fs-count{margin-left:0;width:100%;}
     .date-range-row{width:100%;}
     .date-range-row input[type="date"]{flex:1;min-width:0;}
     .bottom-nav{display:flex;}
-    .fab{bottom:76px;right:16px;width:52px;height:52px;}
-    .fab-top{bottom:140px;right:18px;}
+    .fab{bottom:76px;right:16px;width:52px;height:52px;z-index:90;}
+    .fab-top{bottom:140px;right:18px;z-index:90;}
   }
   @media (max-width:520px){
     .stat-row{grid-template-columns:1fr;}
@@ -543,14 +721,7 @@
     border-bottom:1px dashed var(--line);
   }
   .account-limit-cfg-row .acc-name{color:var(--ink);font-weight:500;font-size:14px;}
-  .account-limit-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-  .account-limit-fields .field{margin:0;}
-  .account-limit-fields label{font-size:11px;display:block;margin-bottom:4px;}
-  .account-limit-fields input{width:100%;max-width:none;box-sizing:border-box;}
   .account-limit-actions{display:flex;gap:8px;flex-wrap:wrap;}
-  @media (max-width:420px){
-    .account-limit-fields{grid-template-columns:1fr;}
-  }
 
 
   /* ---------- Pacote 5: orçamento, lojas, agenda, relatório ---------- */
@@ -573,8 +744,18 @@
 
 
   /* ---------- Itens 1-7 ---------- */
-  .dash-toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:18px;}
-  .dash-toolbar label{font-size:11px;text-transform:uppercase;letter-spacing:.8px;color:var(--ink-faint);}
+  .dash-toolbar{
+    display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;margin-bottom:12px;
+    background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;
+  }
+  .dash-toolbar label{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-faint);}
+  .dash-toolbar-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;width:100%;}
+  .dash-toolbar select{min-width:0;max-width:160px;font-size:13px;padding:7px 10px;}
+  .dash-cycle-label{
+    display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-dim);cursor:pointer;
+    white-space:nowrap;margin:0;
+  }
+  .dash-cycle-label input{margin:0;}
   .onboard-steps{display:flex;flex-direction:column;gap:10px;margin:12px 0 18px;}
   .onboard-step{
     display:flex;gap:12px;align-items:flex-start;padding:12px 14px;
@@ -637,10 +818,16 @@
   #auth-gate.hidden{display:none;}
   .auth-card{
     width:100%;max-width:400px;background:var(--surface);border:1px solid var(--line);
-    border-radius:16px;padding:28px 24px;box-shadow:0 20px 50px rgba(0,0,0,.35);
+    border-radius:16px;padding:22px 18px;box-shadow:0 20px 50px rgba(0,0,0,.35);
+    box-sizing:border-box;overflow:hidden;
   }
-  .auth-card h1{font-family:var(--font-display);font-size:26px;margin:0 0 6px;color:var(--ink);}
-  .auth-card .auth-sub{color:var(--ink-dim);font-size:13.5px;line-height:1.5;margin:0 0 20px;}
+  .auth-card h1{
+    font-family:var(--font-display);font-size:18px;margin:0 0 4px;color:var(--ink);
+    line-height:1.2;word-break:break-word;
+  }
+  .auth-card .auth-sub{color:var(--ink-dim);font-size:12.5px;line-height:1.45;margin:0 0 14px;}
+  .auth-brand{align-items:flex-start;}
+  .auth-brand .brand-logo.lg{width:40px;height:40px;border-radius:10px;}
   .auth-user-pill{
     display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;
     background:var(--surface-2);border:1px solid var(--line);margin-bottom:14px;
@@ -669,18 +856,21 @@
   @media (max-width:700px){ .rule-adv-row{grid-template-columns:1fr 1fr; } }
 
 
-  /* ---------- Privacidade ---------- */
+  /* ---------- Privacidade (canto inferior esquerdo) ---------- */
   #privacy-toggle{
-    position:fixed;top:12px;right:12px;z-index:1500;
-    border:1px solid var(--line);background:var(--surface);color:var(--ink);
+    position:fixed;left:16px;bottom:20px;z-index:95;
+    border:1px solid var(--line);background:rgba(18,26,29,.92);color:var(--ink);
     border-radius:999px;padding:8px 14px;font-size:12.5px;cursor:pointer;
-    display:flex;align-items:center;gap:6px;box-shadow:0 4px 16px rgba(0,0,0,.25);
-    font-family:var(--font-body);
+    display:flex;align-items:center;gap:6px;box-shadow:0 4px 16px rgba(0,0,0,.3);
+    font-family:var(--font-body);backdrop-filter:blur(8px);
   }
   #privacy-toggle:hover{background:var(--surface-2);}
   body.privacy-on #privacy-toggle{border-color:var(--accent);color:var(--accent);}
-  @media (max-width:720px){
-    #privacy-toggle{top:8px;right:8px;padding:7px 12px;font-size:12px;}
+  @media (max-width:880px){
+    /* acima da bottom-nav */
+    #privacy-toggle{
+      left:12px;bottom:78px;padding:8px 12px;font-size:12px;z-index:85;
+    }
   }
 
 </style>
@@ -691,8 +881,20 @@
 <button type="button" id="privacy-toggle" title="Ocultar valores na tela (útil em público)">👁 Ocultar valores</button>
 <div id="auth-gate">
   <div class="auth-card">
-    <h1>Livro-Caixa</h1>
-    <p class="auth-sub">Cadastro local neste aparelho. Escolha um perfil, crie um novo ou importe um backup JSON se já tiver dados salvos.</p>
+    <div class="auth-brand">
+      <svg class="brand-logo lg" viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="14" fill="#1a2228"/>
+        <path d="M18 42h22c1.5 0 2.5-1.2 2.5-2.6V34c0-1.2-.7-2-1.8-2.3l-8.2-2.4V28c0-3.2-2.4-5.2-6-5.2s-6 2-6 5.2v1.1H18V28c0-5.2 4.1-8.4 9.5-8.4S37 22.8 37 28v1.1h2.5V28c0-6.6-5.1-10.6-12-10.6S15.5 21.4 15.5 28v12.2c0 1.2.9 1.8 2.5 1.8z" fill="#59B3A3"/>
+        <path d="M22 30h4v12h-4zm7 4h4v8h-4zm7-6h4v14h-4zm7-4h4v18h-4z" fill="#C9A227" opacity=".95"/>
+        <path d="M22 26c8-1 16-6 24-14" stroke="#C9A227" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <path d="M42 12l4 1.2-1.5 4" stroke="#C9A227" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <div style="min-width:0;flex:1;">
+        <h1>Meu Caixa Inteligente</h1>
+        <p class="auth-sub" style="margin:2px 0 0;">Gastos e saldos neste aparelho</p>
+      </div>
+    </div>
+    <p class="auth-sub">Crie um perfil, entre com Google ou importe um backup.</p>
 
     <div id="auth-profiles-list" style="margin-bottom:14px;"></div>
 
@@ -700,9 +902,9 @@
       <label>Novo perfil</label>
       <input type="text" id="auth-new-profile-name" placeholder="Seu nome ou “Casa”, “Pessoal”…" autocomplete="name">
     </div>
-    <button type="button" class="btn" id="auth-create-profile" style="width:100%;margin-bottom:10px;">Criar perfil e entrar</button>
+    <button type="button" class="btn" id="auth-create-profile" onclick="authCreateProfile()" style="width:100%;margin-bottom:10px;">Criar perfil e entrar</button>
 
-    <button type="button" class="btn" id="auth-google-native-btn" style="width:100%;margin:4px 0 10px;background:#fff;color:#1f1f1f;border:1px solid #dadce0;font-weight:600;">
+    <button type="button" class="btn" id="auth-google-native-btn" onclick="loginWithGoogleNative()" style="width:100%;margin:4px 0 10px;background:#fff;color:#1f1f1f;border:1px solid #dadce0;font-weight:600;">
       Entrar com Google
     </button>
     <div id="google-btn-wrap"></div>
@@ -710,8 +912,8 @@
     <input type="hidden" id="auth-google-client-id" value="366921253291-47ra3dkdid71dr2kvr8a3ac4v7b77t5s.apps.googleusercontent.com">
 
     <div class="auth-divider">recuperar dados</div>
-    <button type="button" class="btn secondary" id="auth-import-backup" style="width:100%;margin-bottom:8px;">Importar backup (.json)</button>
-    <input type="file" id="auth-backup-input" accept="application/json,.json" style="display:none;">
+    <button type="button" class="btn secondary" id="auth-import-backup" onclick="authImportBackupClick()" style="width:100%;margin-bottom:8px;">Importar backup (.json)</button>
+    <input type="file" id="auth-backup-input" accept="application/json,.json" style="display:none;" onchange="authImportBackupFile(event)">
     <p style="font-size:12px;color:var(--ink-faint);line-height:1.45;margin:0 0 12px;">
       Use o arquivo de backup exportado em Config. Ideal se trocou de celular ou limpou o navegador.
     </p>
@@ -719,7 +921,7 @@
     <details style="margin-top:4px;">
       <summary style="cursor:pointer;color:var(--ink-dim);font-size:13px;">Outras opções</summary>
       <div style="margin-top:12px;">
-        <button type="button" class="btn ghost" id="auth-continue-local" style="width:100%;">Entrar no perfil legado (sem nome)</button>
+        <button type="button" class="btn ghost" id="auth-continue-local" onclick="authContinueLocal()" style="width:100%;">Entrar no perfil legado (sem nome)</button>
         <input type="hidden" id="auth-local-name" value="">
       </div>
     </details>
@@ -734,11 +936,22 @@
 <div id="app">
   <aside class="spine">
     <div class="brand">
-      <div class="brand-mark" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        Meu Caixa Inteligente
-        <span id="pro-badge" style="display:none;font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;background:linear-gradient(135deg,var(--gold),#e0b84a);color:#1a1408;padding:3px 8px;border-radius:20px;line-height:1.2;">Pro</span>
+      <div class="brand-mark">
+        <svg class="brand-logo" viewBox="0 0 64 64" aria-hidden="true">
+          <rect width="64" height="64" rx="14" fill="#1a2228"/>
+          <path d="M18 42h22c1.5 0 2.5-1.2 2.5-2.6V34c0-1.2-.7-2-1.8-2.3l-8.2-2.4V28c0-3.2-2.4-5.2-6-5.2s-6 2-6 5.2v1.1H18V28c0-5.2 4.1-8.4 9.5-8.4S37 22.8 37 28v1.1h2.5V28c0-6.6-5.1-10.6-12-10.6S15.5 21.4 15.5 28v12.2c0 1.2.9 1.8 2.5 1.8z" fill="#59B3A3"/>
+          <path d="M22 30h4v12h-4zm7 4h4v8h-4zm7-6h4v14h-4zm7-4h4v18h-4z" fill="#C9A227" opacity=".95"/>
+          <path d="M22 26c8-1 16-6 24-14" stroke="#C9A227" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+          <path d="M42 12l4 1.2-1.5 4" stroke="#C9A227" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <div class="brand-text">
+          <div class="brand-name">
+            Meu Caixa Inteligente
+            <span id="pro-badge" style="display:none;font-family:var(--font-mono);font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;background:linear-gradient(135deg,var(--gold),#e0b84a);color:#1a1408;padding:3px 8px;border-radius:20px;line-height:1.2;">Pro</span>
+          </div>
+          <div class="brand-sub">Fluxo de caixa e saldos · <span class="brand-dev">F. Copatti</span></div>
+        </div>
       </div>
-      <div class="brand-sub">controle de gastos</div>
     </div>
     <nav class="spine-nav">
       <button class="spine-btn active" data-view="dashboard"><span class="tab-num">01</span>Visão geral</button>
@@ -759,35 +972,29 @@
     <section class="view active" id="view-dashboard">
       <div class="view-head">
         <h1 class="view-title">Visão geral</h1>
-        <p class="view-desc">Visão geral do mês: quanto saiu, ritmo de gasto, cartões e alertas. Para achar um lançamento antigo: <a href="#" id="link-view-all" style="color:var(--accent);">Lançamentos → Todo período</a>.</p>
       </div>
 
       <div class="dash-toolbar">
-        <div>
-          <label for="dash-account-filter">Conta / cartão</label><br>
-          <select id="dash-account-filter" style="min-width:200px;margin-top:4px;"><option value="">Todas as contas</option></select>
-        </div>
-        <div style="padding-top:18px;">
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-dim);cursor:pointer;">
+        <div class="dash-toolbar-row">
+          <div style="flex:1;min-width:120px;">
+            <label for="dash-account-filter">Conta / cartão</label>
+            <select id="dash-account-filter" style="width:100%;max-width:180px;margin-top:3px;"><option value="">Todas as contas</option></select>
+          </div>
+          <label class="dash-cycle-label" title="Usa dia de fechamento do cartão (não o mês civil)">
             <input type="checkbox" id="dash-cycle-mode"> Só ciclo do cartão
           </label>
-          <div style="font-size:11.5px;color:var(--ink-faint);margin-top:4px;max-width:220px;line-height:1.35;">Usa dia de fechamento do cartão selecionado (não o mês civil).</div>
-        </div>
-        <div style="font-size:12px;color:var(--ink-faint);max-width:280px;line-height:1.4;padding-top:14px;">
-          Filtra a visão geral para um cartão ou conta.
         </div>
       </div>
 
       <div id="alerts-banner-wrap" style="margin-bottom:8px;"></div>
 
-      <div class="card" style="margin-bottom:18px;" id="since-visit-card">
+      <div class="card compact-card" style="margin-bottom:12px;" id="since-visit-card">
         <div class="panel-title">Desde a última visita</div>
         <div id="since-visit-content"></div>
       </div>
 
-      <div class="card" style="margin-bottom:18px;" id="networth-card">
-        <div class="panel-title">Patrimônio consolidado</div>
-        <p style="color:var(--ink-dim);font-size:12.5px;margin:-8px 0 12px;">Saldos só de contas (corrente/poupança). Cartões não entram como saldo negativo — só ocupação do limite.</p>
+      <div class="card compact-card" style="margin-bottom:12px;" id="networth-card">
+        <div class="panel-title">Patrimônio consolidado <span class="soft-hint">contas (sem cartão)</span></div>
         <div class="networth-grid" id="networth-grid"></div>
       </div>
 
@@ -986,7 +1193,7 @@
     <section class="view" id="view-transactions">
       <div class="view-head">
         <h1 class="view-title">Lançamentos</h1>
-        <p class="view-desc">Lista com filtros (mês, conta, valor, categoria). Selecione vários para reclassificar juntos. <a href="#" id="link-scan-dups" style="color:var(--accent);">Verificar duplicatas</a></p>
+        <p class="view-desc" style="margin-top:4px;"><a href="#" id="link-scan-dups" style="color:var(--accent);">Verificar duplicatas</a></p>
       </div>
       <div class="card" id="dup-scan-card" style="display:none;margin-bottom:18px;">
         <div class="panel-title">Duplicatas encontradas <button type="button" class="btn ghost" id="dup-scan-close" style="padding:4px 10px;font-size:12px;">Fechar</button></div>
@@ -997,44 +1204,49 @@
         </div>
       </div>
 
-      <div class="filter-bar">
-        <select id="filter-month"></select>
-        <div class="date-range-row">
-          <label for="filter-from">De</label>
-          <input type="date" id="filter-from" title="Data inicial">
-          <label for="filter-to">Até</label>
-          <input type="date" id="filter-to" title="Data final">
+      <div class="filter-panel">
+        <div class="filter-panel-grid">
+          <div class="field"><label>Período</label><select id="filter-month"></select></div>
+          <div class="field"><label>Tipo</label><select id="filter-type"><option value="">Todo tipo</option></select></div>
+          <div class="field"><label>Conta / cartão</label><select id="filter-account"><option value="">Toda conta/cartão</option></select></div>
+          <div class="field"><label>Buscar</label><input class="text-input" id="filter-search" placeholder="Descrição…"></div>
         </div>
-        <select id="filter-type"><option value="">Todo tipo</option></select>
-        <select id="filter-category"></select>
-        <select id="filter-subcategory"><option value="">Toda subcategoria</option></select>
-        <select id="filter-source">
-          <option value="">Toda origem</option>
-          <option value="manual">Manual</option>
-          <option value="ocr">Foto (OCR)</option>
-          <option value="ofx">OFX</option>
-          <option value="pdf">PDF</option>
-          <option value="planilha">Planilha</option>
-          <option value="recorrente">Recorrente</option>
-          <option value="transferencia">Transferência</option>
-        </select>
-        <select id="filter-imported" title="Quando o arquivo foi importado no app">
-          <option value="">Qualquer importação</option>
-          <option value="today">Importados hoje</option>
-          <option value="date">Importados em data…</option>
-        </select>
-        <input type="date" id="filter-imported-date" style="display:none;max-width:150px;" title="Data da importação">
-        <select id="filter-account"><option value="">Toda conta/cartão</option><!-- Sem conta definida é preenchida dinamicamente --></select>
-        <select id="filter-tag"><option value="">Todas as tags</option></select>
-        <input class="text-input" id="filter-search" placeholder="Buscar descrição… (/)" style="flex:1;min-width:160px;">
-        <div class="date-range-row" title="Filtrar por valor">
-          <label for="filter-amount-min">R$ min</label>
-          <input type="number" id="filter-amount-min" step="0.01" min="0" placeholder="0" style="width:90px;" title="Valor mínimo">
-          <label for="filter-amount-max">máx</label>
-          <input type="number" id="filter-amount-max" step="0.01" min="0" placeholder="∞" style="width:90px;" title="Valor máximo">
+        <details class="filter-advanced" style="margin-top:10px;">
+          <summary>Mais filtros</summary>
+          <div class="filter-panel-grid">
+            <div class="field"><label>De</label><input type="date" id="filter-from" title="Data inicial"></div>
+            <div class="field"><label>Até</label><input type="date" id="filter-to" title="Data final"></div>
+            <div class="field"><label>Categoria</label><select id="filter-category"></select></div>
+            <div class="field"><label>Subcategoria</label><select id="filter-subcategory"><option value="">Toda subcategoria</option></select></div>
+            <div class="field"><label>Origem</label>
+              <select id="filter-source">
+                <option value="">Toda origem</option>
+                <option value="manual">Manual</option>
+                <option value="ocr">Foto (OCR)</option>
+                <option value="ofx">OFX</option>
+                <option value="pdf">PDF</option>
+                <option value="planilha">Planilha</option>
+                <option value="recorrente">Recorrente</option>
+                <option value="transferencia">Transferência</option>
+              </select>
+            </div>
+            <div class="field"><label>Importação</label>
+              <select id="filter-imported" title="Quando o arquivo foi importado no app">
+                <option value="">Qualquer importação</option>
+                <option value="today">Importados hoje</option>
+                <option value="date">Importados em data…</option>
+              </select>
+            </div>
+            <div class="field"><label>Data importação</label><input type="date" id="filter-imported-date" title="Data da importação"></div>
+            <div class="field"><label>Tags</label><select id="filter-tag"><option value="">Todas as tags</option></select></div>
+            <div class="field"><label>R$ mín</label><input type="number" id="filter-amount-min" step="0.01" min="0" placeholder="0" title="Valor mínimo"></div>
+            <div class="field"><label>R$ máx</label><input type="number" id="filter-amount-max" step="0.01" min="0" placeholder="∞" title="Valor máximo"></div>
+          </div>
+        </details>
+        <div class="filter-actions">
+          <button type="button" class="btn ghost" id="filter-clear-btn" onclick="clearTransactionFilters()" style="padding:8px 12px;font-size:12px;">Limpar filtros</button>
+          <button type="button" class="btn secondary" id="btn-export-csv" onclick="exportTransactionsCsv()" style="padding:8px 12px;font-size:12px;">Exportar CSV</button>
         </div>
-        <button type="button" class="btn ghost" id="filter-clear-btn" style="padding:8px 12px;font-size:12px;">Limpar filtros</button>
-        <button type="button" class="btn secondary" id="btn-export-csv" style="padding:8px 12px;font-size:12px;">Exportar CSV</button>
       </div>
 
       <div class="filter-summary" id="filter-summary" style="display:none;"></div>
@@ -1075,8 +1287,8 @@
             <span style="font-size:11px;">JPG ou PNG · lê o valor total de cada nota</span>
           </div>
           <div class="btn-row" style="margin-top:12px;">
-            <button type="button" class="btn secondary" id="btn-take-photo" style="flex:1;">📷 Tirar foto</button>
-            <button type="button" class="btn secondary" id="btn-choose-gallery" style="flex:1;">🖼️ Escolher da galeria (várias)</button>
+            <button type="button" class="btn secondary" id="btn-take-photo" onclick="document.getElementById('camera-input').click()" style="flex:1;">📷 Tirar foto</button>
+            <button type="button" class="btn secondary" id="btn-choose-gallery" onclick="document.getElementById('gallery-input').click()" style="flex:1;">🖼️ Galeria</button>
           </div>
           <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none;">
           <input type="file" id="gallery-input" accept="image/*" multiple style="display:none;">
@@ -1165,8 +1377,8 @@
               </div>
             </div>
             <div class="btn-row">
-              <button type="submit" class="btn">Salvar lançamento</button>
-              <button type="button" class="btn ghost" id="f-clear">Limpar</button>
+              <button type="button" class="btn" id="f-save-btn" onclick="saveManualFormClick()">Salvar lançamento</button>
+              <button type="button" class="btn ghost" id="f-clear" onclick="clearManualForm()">Limpar</button>
             </div>
           </form>
         </div>
@@ -1180,18 +1392,19 @@
         <p class="view-desc">Prefira OFX; PDF e planilha também funcionam. O app evita duplicata e, se já existir cupom OCR da mesma compra, oferece <strong>mesclar</strong> (mantém os itens da nota).</p>
       </div>
 
-      <div class="card" style="margin-bottom:16px;" id="bank-integration-tips">
-        <div class="panel-title">Como exportar do seu banco</div>
-        <p style="color:var(--ink-dim);font-size:13px;line-height:1.55;margin:0 0 10px;">
-          A melhor opção é o arquivo <strong>OFX</strong> (ou QFX): vem estruturado, com data, valor e identificação única da transação.
-          Não há conexão automática com o banco neste app (sem Open Banking) — você exporta o arquivo e importa aqui.
-        </p>
-        <ul style="margin:0;padding-left:18px;color:var(--ink-dim);font-size:12.5px;line-height:1.65;">
-          <li><strong>Nubank / Inter / C6 / PicPay</strong> — no app, procure Extrato → Exportar / Baixar OFX ou CSV</li>
-          <li><strong>Itaú / Bradesco / Santander / BB</strong> — internet banking → Extrato → Exportar OFX ou planilha</li>
-          <li><strong>Cartão</strong> — fatura fechada em PDF (texto) ou CSV; se o PDF for imagem, use OFX/CSV</li>
-        </ul>
-      </div>
+      <details class="card tip-fold" id="bank-integration-tips" style="margin-bottom:12px;">
+        <summary class="panel-title" style="cursor:pointer;list-style:none;">Como exportar do seu banco <span style="font-weight:400;color:var(--ink-faint);font-size:12px;">(toque para expandir)</span></summary>
+        <div style="padding-top:10px;">
+          <p style="color:var(--ink-dim);font-size:12.5px;line-height:1.5;margin:0 0 8px;">
+            Prefira <strong>OFX</strong> (ou QFX). Não há conexão automática com o banco — você exporta o arquivo e importa aqui.
+          </p>
+          <ul style="margin:0;padding-left:18px;color:var(--ink-dim);font-size:12px;line-height:1.55;">
+            <li><strong>Nubank / Inter / C6 / PicPay</strong> — Extrato → Exportar OFX ou CSV</li>
+            <li><strong>Itaú / Bradesco / Santander / BB</strong> — Extrato → Exportar OFX ou planilha</li>
+            <li><strong>Cartão</strong> — fatura em PDF (texto) ou CSV</li>
+          </ul>
+        </div>
+      </details>
 
       <div class="import-tabs">
         <button class="import-tab active" data-tab="ofx">Arquivo OFX</button>
@@ -1350,7 +1563,7 @@
             <p style="font-size:11.5px;color:var(--ink-faint);margin:8px 0 0;line-height:1.4;">Só altere se souber o que está fazendo. O app já vem com o Client ID padrão.</p>
           </details>
           <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
-            <button type="button" class="btn ghost" id="btn-logout" style="padding:8px 14px;">Sair da conta</button>
+            <button type="button" class="btn ghost" id="btn-logout" onclick="logoutAccount()" style="padding:8px 14px;">Sair da conta</button>
           </div>
           <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);">
             <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;">Google Drive</div>
@@ -1398,7 +1611,7 @@
             <input type="checkbox" id="cfg-hide-on-open"> Iniciar com valores ocultos
           </label>
           <p style="font-size:11.5px;color:var(--ink-faint);margin:10px 0 0;line-height:1.45;">
-            Também pode usar o botão 👁 no canto superior direito. Útil ao abrir o app em público.
+            Também pode usar o botão 👁 no canto inferior esquerdo. Útil ao abrir o app em público.
           </p>
         </div>
 
@@ -1424,36 +1637,28 @@
         <p style="font-size:12px;color:var(--ink-dim);margin:8px 0 0;line-height:1.45;">Recarregar só atualiza o arquivo do app (como F5). <strong>Não apaga</strong> lançamentos, metas nem backups — isso fica salvo neste navegador.</p>
       </div>
 
-      <div class="card" style="margin-bottom:18px;">
-        <div class="panel-title">Meta mensal de despesas</div>
-        <p style="color:var(--ink-dim);font-size:13px;line-height:1.5;margin:0 0 14px;">
-          Define um teto de gastos para o mês. O progresso aparece na <strong>Visão geral</strong>.
-        </p>
-        <div class="field" style="max-width:320px;margin-bottom:0;">
-          <label>Valor da meta (R$)</label>
-          <input type="number" id="monthly-goal-input" step="0.01" min="0" placeholder="Ex.: 4000,00 — deixe vazio para desativar">
-        </div>
-      </div>
-
-      <div class="card" style="margin-bottom:18px;" id="reduction-config-card">
-        <div class="panel-title">Meta de redução</div>
-        <p style="color:var(--ink-dim);font-size:13px;line-height:1.5;margin:0 0 14px;">
-          Ex.: reduzir 10% em uma categoria em relação ao mês anterior. Acompanhe na visão geral.
-        </p>
-        <div class="form-grid" style="max-width:520px;">
+      <div class="card" style="margin-bottom:12px;">
+        <div class="panel-title">Metas</div>
+        <div class="form-grid">
           <div class="field">
-            <label>Categoria</label>
+            <label>Meta mensal (R$)</label>
+            <input type="number" id="monthly-goal-input" step="0.01" min="0" placeholder="Ex.: 4000">
+          </div>
+          <div class="field">
+            <label>Categoria redução</label>
             <select id="reduction-cat-input"><option value="">— desativada —</option></select>
           </div>
           <div class="field">
-            <label>Reduzir em (%)</label>
+            <label>Reduzir (%)</label>
             <input type="number" id="reduction-pct-input" min="1" max="80" step="1" placeholder="Ex.: 10">
           </div>
-        </div>
-        <div class="btn-row" style="margin-top:12px;">
-          <button type="button" class="btn secondary" id="reduction-save-btn" style="padding:8px 16px;">Salvar meta de redução</button>
+          <div class="field">
+            <label>Ação</label>
+            <button type="button" class="btn secondary" id="reduction-save-btn">Salvar redução</button>
+          </div>
         </div>
       </div>
+      <div id="reduction-config-card" style="display:none;"></div>
 
       <div class="card" style="margin-bottom:18px;" id="limits-section">
         <div class="panel-title">Limites por conta/cartão</div>
@@ -1464,17 +1669,17 @@
         <div id="account-limits-list"></div>
         <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);">
           <div class="panel-title" style="font-size:13px;margin-bottom:10px;">Adicionar limite para conta ainda sem lançamentos</div>
-          <div class="account-limit-fields" style="max-width:520px;">
-            <div class="field" style="grid-column:1/-1;">
+          <div class="form-grid">
+            <div class="field full">
               <label>Nome da conta / cartão</label>
               <input type="text" id="new-limit-account" placeholder="Ex.: Cartão Nubank" list="account-suggestions">
             </div>
             <div class="field">
-              <label>Limite do cartão (R$)</label>
+              <label>Limite (R$)</label>
               <input type="number" id="new-limit-value" step="0.01" min="0" placeholder="Ex.: 5000">
             </div>
             <div class="field">
-              <label>Dia de fechamento (1–28)</label>
+              <label>Dia fechamento</label>
               <input type="number" id="new-limit-closing" min="1" max="28" placeholder="Ex.: 10">
             </div>
           </div>
@@ -1490,7 +1695,7 @@
           Saldo de partida de cada conta. O app aplica os lançamentos a partir da data informada.
         </p>
         <div id="accounts-config-list"></div>
-        <div class="form-grid" style="max-width:520px;margin-top:12px;">
+        <div class="form-grid" style="margin-top:12px;">
           <div class="field"><label>Nome da conta</label><input type="text" id="new-account-name" list="account-suggestions" placeholder="Ex.: Conta Nubank"></div>
           <div class="field"><label>Saldo inicial (R$)</label><input type="number" id="new-account-balance" step="0.01" placeholder="0,00"></div>
           <div class="field"><label>Desde</label><input type="date" id="new-account-asof"></div>
@@ -1501,7 +1706,7 @@
       <div class="card" style="margin-bottom:18px;" id="goals-config-card">
         <div class="panel-title">Objetivos de poupança</div>
         <div id="goals-config-list"></div>
-        <div class="form-grid" style="max-width:520px;margin-top:12px;">
+        <div class="form-grid" style="margin-top:12px;">
           <div class="field"><label>Nome</label><input type="text" id="new-goal-name" placeholder="Ex.: Reserva de emergência"></div>
           <div class="field"><label>Meta (R$)</label><input type="number" id="new-goal-target" step="0.01" min="0"></div>
           <div class="field"><label>Já guardado (R$)</label><input type="number" id="new-goal-current" step="0.01" min="0" value="0"></div>
@@ -1513,7 +1718,7 @@
       <div class="card" style="margin-bottom:18px;" id="debts-config-card">
         <div class="panel-title">Dívidas</div>
         <div id="debts-config-list"></div>
-        <div class="form-grid" style="max-width:520px;margin-top:12px;">
+        <div class="form-grid" style="margin-top:12px;">
           <div class="field"><label>Nome</label><input type="text" id="new-debt-name" placeholder="Ex.: Empréstimo"></div>
           <div class="field"><label>Total original (R$)</label><input type="number" id="new-debt-total" step="0.01" min="0"></div>
           <div class="field"><label>Saldo restante (R$)</label><input type="number" id="new-debt-remaining" step="0.01" min="0"></div>
@@ -1579,19 +1784,15 @@
         </div>
       </div>
 
-      <div class="card" style="margin-top:18px;" id="ir-config-card">
-        <div class="panel-title">Parâmetros de IR (PF · básico)</div>
-        <p style="color:var(--ink-dim);font-size:13px;line-height:1.5;margin:0 0 14px;">
-          Valores de referência para o painel do Dashboard. Pensado para carteira assinada.
-          <strong>Não é cálculo oficial da Receita.</strong>
-        </p>
-        <div class="form-grid" style="max-width:720px;">
+      <div class="card" style="margin-top:12px;" id="ir-config-card">
+        <div class="panel-title">Parâmetros de IR <span class="soft-hint">estimativa · não oficial</span></div>
+        <div class="form-grid">
           <div class="field">
-            <label>Regime preferido</label>
+            <label>Regime</label>
             <select id="ir-regime">
-              <option value="auto">Comparar os dois (recomendado)</option>
-              <option value="simplificada">Desconto simplificado (20%)</option>
-              <option value="completa">Declaração completa (deduções)</option>
+              <option value="auto">Comparar os dois</option>
+              <option value="simplificada">Simplificado 20%</option>
+              <option value="completa">Completa</option>
             </select>
           </div>
           <div class="field">
@@ -1599,31 +1800,31 @@
             <input type="number" id="ir-dependents" min="0" step="1" placeholder="0">
           </div>
           <div class="field">
-            <label>Renda bruta mensal estimada (R$)</label>
+            <label>Renda mensal (R$)</label>
             <input type="number" id="ir-renda-mensal" min="0" step="0.01" placeholder="Ex.: 8000">
           </div>
           <div class="field">
-            <label>IRRF retido no ano (R$)</label>
-            <input type="number" id="ir-irrf-ano" min="0" step="0.01" placeholder="Soma dos holerites (se souber)">
+            <label>IRRF no ano (R$)</label>
+            <input type="number" id="ir-irrf-ano" min="0" step="0.01" placeholder="Holerites">
           </div>
           <div class="field">
-            <label>ou % de IRRF na folha</label>
-            <input type="number" id="ir-irrf-pct" min="0" max="100" step="0.01" placeholder="Ex.: 7,5 — se vazio, usa o R$ acima">
+            <label>% IRRF folha</label>
+            <input type="number" id="ir-irrf-pct" min="0" max="100" step="0.01" placeholder="Ex.: 7,5">
           </div>
           <div class="field">
-            <label>Limite anual educação (R$)</label>
+            <label>Limite educação/ano</label>
             <input type="number" id="ir-limite-educacao" min="0" step="0.01" placeholder="3561.50">
           </div>
           <div class="field">
-            <label>Dedução por dependente / ano (R$)</label>
+            <label>Ded. dependente/ano</label>
             <input type="number" id="ir-ded-dependente" min="0" step="0.01" placeholder="2275.08">
           </div>
           <div class="field">
-            <label>Meta saúde no ano (R$)</label>
+            <label>Meta saúde/ano</label>
             <input type="number" id="ir-meta-saude" min="0" step="0.01" placeholder="Opcional">
           </div>
           <div class="field">
-            <label>Meta educação no ano (R$)</label>
+            <label>Meta educação/ano</label>
             <input type="number" id="ir-meta-educacao" min="0" step="0.01" placeholder="Opcional">
           </div>
         </div>
@@ -1828,12 +2029,30 @@
 <button class="fab-top" id="fab-scroll-top" title="Voltar ao topo" aria-label="Voltar ao topo">↑</button>
 
 <nav class="bottom-nav" id="bottom-nav" aria-label="Menu principal">
-  <button type="button" class="bottom-nav-btn active" data-view="dashboard"><span class="bn-icon">📊</span><span>Visão</span></button>
-  <button type="button" class="bottom-nav-btn" data-view="transactions"><span class="bn-icon">📋</span><span>Lançam.</span></button>
-  <button type="button" class="bottom-nav-btn" data-view="new"><span class="bn-icon">➕</span><span>Novo</span></button>
-  <button type="button" class="bottom-nav-btn" data-view="import"><span class="bn-icon">📥</span><span>Importar</span></button>
-  <button type="button" class="bottom-nav-btn" data-view="categories"><span class="bn-icon">🏷</span><span>Categorias</span></button>
-  <button type="button" class="bottom-nav-btn" data-view="config"><span class="bn-icon">⚙️</span><span>Config</span></button>
+  <button type="button" class="bottom-nav-btn active" data-view="dashboard" onclick="goToView('dashboard')">
+    <span class="bn-icon"><svg viewBox="0 0 24 24"><path d="M4 19V9l8-5 8 5v10"/><path d="M9 19v-6h6v6"/></svg></span>
+    <span>Visão</span>
+  </button>
+  <button type="button" class="bottom-nav-btn" data-view="transactions" onclick="goToView('transactions')">
+    <span class="bn-icon"><svg viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg></span>
+    <span>Lançam.</span>
+  </button>
+  <button type="button" class="bottom-nav-btn" data-view="new" onclick="goToView('new')">
+    <span class="bn-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span>
+    <span>Novo</span>
+  </button>
+  <button type="button" class="bottom-nav-btn" data-view="import" onclick="goToView('import')">
+    <span class="bn-icon"><svg viewBox="0 0 24 24"><path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 19h14"/></svg></span>
+    <span>Importar</span>
+  </button>
+  <button type="button" class="bottom-nav-btn" data-view="categories" onclick="goToView('categories')">
+    <span class="bn-icon"><svg viewBox="0 0 24 24"><path d="M20 7l-8-4-8 4 8 4 8-4z"/><path d="M4 12l8 4 8-4"/><path d="M4 17l8 4 8-4"/></svg></span>
+    <span>Categorias</span>
+  </button>
+  <button type="button" class="bottom-nav-btn" data-view="config" onclick="goToView('config')">
+    <span class="bn-icon"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></span>
+    <span>Config</span>
+  </button>
 </nav>
 
 <div class="modal-bg" id="onboard-modal-bg">
@@ -1841,22 +2060,22 @@
     <h3>Bem-vindo ao Meu Caixa Inteligente</h3>
     <p style="color:var(--ink-dim);font-size:13.5px;line-height:1.5;margin:0;">Três passos rápidos para começar a controlar o mês — ou pule e explore com calma.</p>
     <div class="onboard-steps">
-      <div class="onboard-step" data-onboard="import">
+      <div class="onboard-step" data-onboard="import" onclick="onboardGo('import')">
         <span class="num">1</span>
         <div><strong>Importe um extrato</strong><span>OFX do banco ou cartão — em minutos o mês já aparece no dashboard.</span></div>
       </div>
-      <div class="onboard-step" data-onboard="goal">
+      <div class="onboard-step" data-onboard="goal" onclick="onboardGo('goal')">
         <span class="num">2</span>
         <div><strong>Defina uma meta mensal</strong><span>Um teto de gastos; o app mostra se você está no ritmo ou acima.</span></div>
       </div>
-      <div class="onboard-step" data-onboard="limit">
+      <div class="onboard-step" data-onboard="limit" onclick="onboardGo('limit')">
         <span class="num">3</span>
         <div><strong>Cadastre o limite do cartão</strong><span>Com dia de fechamento, vê quanto da fatura já está comprometido.</span></div>
       </div>
     </div>
     <div class="btn-row">
-      <button class="btn" id="onboard-start-import">Começar importando</button>
-      <button class="btn ghost" id="onboard-skip">Pular</button>
+      <button type="button" class="btn" id="onboard-start-import" onclick="onboardGo('import')">Começar importando</button>
+      <button type="button" class="btn ghost" id="onboard-skip" onclick="onboardSkip()">Pular</button>
     </div>
   </div>
 </div>
@@ -2454,12 +2673,21 @@ function typeById(id){
     || DEFAULT_TRANSACTION_TYPES[0];
 }
 
+function shortTypeName(t){
+  const map = {
+    despesa:'Despesa', receita:'Receita', transferencia:'Transf.',
+    pagamento_fatura:'Fatura', investimento:'Invest.',
+  };
+  if(map[t.id]) return map[t.id];
+  const n = t.name || t.id;
+  return n.length > 10 ? n.slice(0,9)+'…' : n;
+}
 function typeToggleHTML(activeId){
   return state.transactionTypes.map(t=>{
     const isActive = t.id===activeId;
     const style = isActive ? `background:${t.color}26;border-color:${t.color};color:${t.color};` : '';
     const arrow = t.arrow || (t.flowSign<0?'↓':(t.flowSign>0?'↑':'↔'));
-    return `<button type="button" class="type-btn${isActive?' active':''}" data-type="${t.id}" style="${style}">${arrow} ${escapeHTML(t.name)}</button>`;
+    return `<button type="button" class="type-btn${isActive?' active':''}" data-type="${t.id}" style="${style}" title="${escapeHTML(t.name)}">${arrow} ${escapeHTML(shortTypeName(t))}</button>`;
   }).join('');
 }
 function setActiveTypeButton(container, activeId){
@@ -4664,45 +4892,49 @@ function renderDashboard(){
       }
 
       irEl.innerHTML = `
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">
-          <div style="padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);">
-            <div style="font-size:10px;color:var(--ink-faint);text-transform:uppercase;">Renda ${escapeHTML(year)} (est.)</div>
-            <div style="font-family:var(--font-mono);font-size:16px;font-weight:700;color:var(--accent);margin-top:4px;">${fmtBRL(rendaYtdEst)}</div>
-            <div style="font-size:10px;color:var(--ink-faint);">${ir.rendaMensal!=null?'holerite × '+monthsElapsed+' meses':'soma receitas no app'}</div>
+        <div class="ir-kpi-grid">
+          <div class="ir-kpi">
+            <div class="ir-kpi-label">Renda ${escapeHTML(year)} (est.)</div>
+            <div class="ir-kpi-val accent">${fmtBRL(rendaYtdEst)}</div>
+            <div class="ir-kpi-sub">${ir.rendaMensal!=null?'holerite × '+monthsElapsed+' meses':'soma receitas no app'}</div>
           </div>
-          <div style="padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);">
-            <div style="font-size:10px;color:var(--ink-faint);text-transform:uppercase;">Despesas no app</div>
-            <div style="font-family:var(--font-mono);font-size:16px;font-weight:700;color:var(--warn);margin-top:4px;">${fmtBRL(despesas)}</div>
+          <div class="ir-kpi">
+            <div class="ir-kpi-label">Despesas no app</div>
+            <div class="ir-kpi-val warn">${fmtBRL(despesas)}</div>
+            <div class="ir-kpi-sub">lançamentos do ano</div>
           </div>
-          <div style="padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);">
-            <div style="font-size:10px;color:var(--ink-faint);text-transform:uppercase;">Resultado (caixa)</div>
-            <div style="font-family:var(--font-mono);font-size:16px;font-weight:700;color:${resultado>=0?'var(--accent)':'var(--warn)'};margin-top:4px;">${fmtBRL(resultado)}</div>
-          </div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
-          <div style="padding:10px 12px;border-radius:10px;border:1px solid var(--line);">
-            <div style="font-size:11px;color:var(--ink-faint);">Deduções completa (YTD)</div>
-            <div style="font-family:var(--font-mono);font-weight:700;margin-top:4px;">${fmtBRL(deducoesCompleta)}</div>
-            <div style="font-size:10px;color:var(--ink-faint);margin-top:2px;">saúde+educação†+prev+pensão+dependentes</div>
-          </div>
-          <div style="padding:10px 12px;border-radius:10px;border:1px solid var(--line);">
-            <div style="font-size:11px;color:var(--ink-faint);">Desconto simplificado 20% (YTD)</div>
-            <div style="font-family:var(--font-mono);font-weight:700;margin-top:4px;">${fmtBRL(descontoSimplificadoYtd)}</div>
-            <div style="font-size:10px;color:var(--ink-faint);margin-top:2px;">Modelo usado agora: <strong>${regimeUsado}</strong></div>
+          <div class="ir-kpi">
+            <div class="ir-kpi-label">Resultado (caixa)</div>
+            <div class="ir-kpi-val ${resultado>=0?'accent':'warn'}">${fmtBRL(resultado)}</div>
+            <div class="ir-kpi-sub">renda est. − despesas</div>
           </div>
         </div>
-        <div style="font-size:11px;color:var(--ink-faint);text-transform:uppercase;margin-bottom:8px;">Gastos por tipo (categorias) · ${escapeHTML(year)}</div>
-        <div class="account-row"><span class="account-row-name">Saúde ${metaS!=null?'· meta '+fmtBRL(metaS):''}</span><span class="account-row-val">${fmtBRL(buckets.saude)}</span></div>
-        <div class="account-row"><span class="account-row-name">Educação †limite ${fmtBRL(EDU_LIMIT)} ${metaE!=null?'· meta '+fmtBRL(metaE):''}</span><span class="account-row-val">${fmtBRL(buckets.educacao)}</span></div>
-        <div style="height:6px;background:var(--surface-2);border-radius:4px;margin:4px 0 10px;overflow:hidden;"><div style="height:100%;width:${eduPct}%;background:${eduPct>=100?'var(--warn)':'var(--accent)'};"></div></div>
-        <div class="account-row"><span class="account-row-name">Previdência</span><span class="account-row-val">${fmtBRL(buckets.previdencia)}</span></div>
-        <div class="account-row"><span class="account-row-name">Pensão</span><span class="account-row-val">${fmtBRL(buckets.pensao)}</span></div>
-        <div class="account-row"><span class="account-row-name">Dependentes (${ir.dependents||0})</span><span class="account-row-val">${fmtBRL(dedDep)}</span></div>
-        <div class="account-row"><span class="account-row-name">IRRF estimado/retido <span style="color:var(--ink-faint);font-size:11px;">(${escapeHTML(irrfFonte)})</span></span><span class="account-row-val">${fmtBRL(irrf)}</span></div>
-        <div class="account-row"><span class="account-row-name">IR estimado no ano (grossa)</span><span class="account-row-val">${fmtBRL(irEstimadoAno)}</span></div>
-        ${tips.length?`<div style="margin-top:12px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-size:12.5px;color:var(--ink-dim);line-height:1.45;">${tips.map(t=> '• '+escapeHTML(t)).join('<br>')}</div>`:''}
-        <p style="font-size:11px;color:var(--ink-faint);margin:12px 0 0;line-height:1.4;">
-          Estimativa educativa. Ajuste os parâmetros em <strong>Config → Parâmetros de IR</strong>. Nomeie categorias (Saúde, Escola…) para alimentar as deduções.
+        <div class="ir-kpi-grid ir-kpi-grid-2">
+          <div class="ir-kpi">
+            <div class="ir-kpi-label">Deduções completa (YTD)</div>
+            <div class="ir-kpi-val">${fmtBRL(deducoesCompleta)}</div>
+            <div class="ir-kpi-sub">saúde + educação† + prev. + pensão + dep.</div>
+          </div>
+          <div class="ir-kpi">
+            <div class="ir-kpi-label">Simplificado 20% (YTD)</div>
+            <div class="ir-kpi-val">${fmtBRL(descontoSimplificadoYtd)}</div>
+            <div class="ir-kpi-sub">Modelo agora: <strong>${regimeUsado}</strong></div>
+          </div>
+        </div>
+        <div class="ir-section-label">Gastos por tipo · ${escapeHTML(year)}</div>
+        <div class="ir-rows">
+          <div class="account-row"><span class="account-row-name">Saúde${metaS!=null?' · meta '+fmtBRL(metaS):''}</span><span class="account-row-val">${fmtBRL(buckets.saude)}</span></div>
+          <div class="account-row"><span class="account-row-name">Educação <span class="ir-soft">limite ${fmtBRL(EDU_LIMIT)}</span>${metaE!=null?' · meta '+fmtBRL(metaE):''}</span><span class="account-row-val">${fmtBRL(buckets.educacao)}</span></div>
+          <div class="ir-bar"><div class="ir-bar-fill" style="width:${eduPct}%;background:${eduPct>=100?'var(--warn)':'var(--accent)'};"></div></div>
+          <div class="account-row"><span class="account-row-name">Previdência</span><span class="account-row-val">${fmtBRL(buckets.previdencia)}</span></div>
+          <div class="account-row"><span class="account-row-name">Pensão</span><span class="account-row-val">${fmtBRL(buckets.pensao)}</span></div>
+          <div class="account-row"><span class="account-row-name">Dependentes (${ir.dependents||0})</span><span class="account-row-val">${fmtBRL(dedDep)}</span></div>
+          <div class="account-row"><span class="account-row-name">IRRF retido <span class="ir-soft">(${escapeHTML(irrfFonte)})</span></span><span class="account-row-val">${fmtBRL(irrf)}</span></div>
+          <div class="account-row"><span class="account-row-name">IR estimado no ano</span><span class="account-row-val">${fmtBRL(irEstimadoAno)}</span></div>
+        </div>
+        ${tips.length?`<div class="ir-tips">${tips.map(t=> '• '+escapeHTML(t)).join('<br>')}</div>`:''}
+        <p class="ir-footnote">
+          Estimativa educativa. Ajuste em <strong>Config → Parâmetros de IR</strong>. Use categorias Saúde, Escola… para alimentar as deduções.
         </p>
       `;
     }
@@ -8567,51 +8799,47 @@ async function reconnectSheet(){
 
 function renderSyncBar(){
   const bar = document.getElementById('sync-bar');
+  if(!bar) return;
+
+  // No app nativo, dados já salvam sozinho — não mostra faixa vazia/ruído de planilha
+  const isNative = !!(window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform());
+
   let storageWarning = '';
   if(STORAGE_MODE === 'none'){
-    storageWarning = `<div class="sync-warning">⚠ Não consegui achar nenhuma forma de salvar seus dados neste momento (armazenamento do navegador bloqueado — comum em navegação privada). Use "conectar/compartilhar planilha" com frequência, ou os dados podem se perder ao fechar a aba.</div>`;
-  } else if(STORAGE_MODE === 'local'){
-    storageWarning = `<div class="sync-info">ℹ Salvando localmente neste navegador/aparelho (modo standalone, fora do Claude). Os dados <strong>não</strong> aparecem em outro dispositivo — para acessar de outro aparelho, abra pelo Claude ou mantenha uma planilha atualizada.</div>`;
+    storageWarning = `<div class="sync-warning">⚠ Armazenamento bloqueado (ex.: navegação privada). Exporte backup com frequência.</div>`;
   }
 
-  if(!FS_SUPPORTED){
-    const msg = IS_IOS
-      ? 'O iOS não permite manter um arquivo sincronizado automaticamente (limitação da Apple, não do app). Use o botão para compartilhar/salvar uma cópia quando quiser.'
-      : 'Este navegador não permite sincronizar direto com um arquivo local.';
-    bar.innerHTML = `
-      ${storageWarning}
-      <div class="sync-row">
-      <span class="sync-dot"></span>
-      <span class="sync-text">${msg}</span>
-      <button class="sync-btn primary" id="btn-download-now">${IS_IOS ? 'Compartilhar planilha' : 'Baixar planilha agora'}</button>
-      </div>`;
-  } else if(fileHandle){
-    bar.innerHTML = `
-      ${storageWarning}
+  let html = '';
+  if(STORAGE_MODE === 'none'){
+    html = storageWarning;
+  } else if(FS_SUPPORTED && fileHandle){
+    html = `
       <div class="sync-row">
       <span class="sync-dot on"></span>
       <span class="sync-text">Sincronizado com <strong>${escapeHTML(fileHandle.name)}</strong></span>
       <button class="sync-btn" id="btn-download-now">Baixar cópia agora</button>
       </div>`;
-  } else if(hasStoredHandle){
-    bar.innerHTML = `
-      ${storageWarning}
+  } else if(FS_SUPPORTED && hasStoredHandle){
+    html = `
       <div class="sync-row">
       <span class="sync-dot warn"></span>
-      <span class="sync-text">Planilha conectada antes, mas precisa reconectar nesta sessão.</span>
+      <span class="sync-text">Planilha precisa reconectar nesta sessão.</span>
       <button class="sync-btn primary" id="btn-reconnect">Reconectar planilha</button>
       <button class="sync-btn" id="btn-download-now">Baixar agora</button>
       </div>`;
-  } else {
-    bar.innerHTML = `
-      ${storageWarning}
+  } else if(!isNative && FS_SUPPORTED){
+    // Só no navegador desktop: oferecer conectar planilha
+    html = `
       <div class="sync-row">
       <span class="sync-dot"></span>
-      <span class="sync-text">Nenhuma planilha conectada — os dados ficam salvos no app. <span style="color:var(--ink-faint);">Dica: aponte para uma pasta do Google Drive, Dropbox ou iCloud pra sincronizar sozinho.</span></span>
+      <span class="sync-text">Dados salvos neste aparelho. Opcional: conectar planilha para arquivo local.</span>
       <button class="sync-btn primary" id="btn-connect">Conectar planilha</button>
-      <button class="sync-btn" id="btn-download-now">Baixar agora</button>
       </div>`;
   }
+
+  bar.innerHTML = html;
+  bar.classList.toggle('has-content', !!html.trim());
+
   const c = document.getElementById('btn-connect'); if(c) c.addEventListener('click', connectSheet);
   const r = document.getElementById('btn-reconnect'); if(r) r.addEventListener('click', reconnectSheet);
   const d = document.getElementById('btn-download-now'); if(d) d.addEventListener('click', downloadSheetNow);
@@ -9928,41 +10156,54 @@ document.getElementById('report-modal-print').addEventListener('click', ()=>{
 });
 
 function maybeShowOnboarding(){
-  if(state.settings.onboardingDone) return;
-  if(state.transactions.length > 0){
-    state.settings.onboardingDone = true;
-    saveState();
-    return;
-  }
-  const bg = document.getElementById('onboard-modal-bg');
-  if(bg) bg.classList.add('active');
+  try{
+    if(!state || !state.settings) return;
+    if(state.settings.onboardingDone) return;
+    if((state.transactions||[]).length > 0){
+      state.settings.onboardingDone = true;
+      try{ saveState(); }catch(e){}
+      return;
+    }
+    const bg = document.getElementById('onboard-modal-bg');
+    if(bg) bg.classList.add('active');
+  }catch(e){ console.warn(e); }
 }
 function completeOnboarding(){
-  state.settings.onboardingDone = true;
-  saveState();
-  const bg = document.getElementById('onboard-modal-bg');
-  if(bg) bg.classList.remove('active');
+  try{
+    if(state && state.settings) state.settings.onboardingDone = true;
+    try{ saveState(); }catch(e){}
+    const bg = document.getElementById('onboard-modal-bg');
+    if(bg) bg.classList.remove('active');
+  }catch(e){ console.warn(e); }
 }
-
-document.getElementById('onboard-skip').addEventListener('click', completeOnboarding);
-document.getElementById('onboard-start-import').addEventListener('click', ()=>{
+function onboardSkip(){
   completeOnboarding();
-  document.querySelector('.spine-btn[data-view="import"]').click();
-});
-document.querySelectorAll('[data-onboard]').forEach(step=>{
-  step.addEventListener('click', ()=>{
-    const go = step.dataset.onboard;
-    completeOnboarding();
-    if(go==='import') document.querySelector('.spine-btn[data-view="import"]').click();
-    if(go==='goal' || go==='limit') {
-      document.querySelector('.spine-btn[data-view="config"]').click();
+}
+function onboardGo(go){
+  completeOnboarding();
+  try{
+    if(go==='import'){
+      if(typeof goToView === 'function') goToView('import');
+      else {
+        const b = document.querySelector('.spine-btn[data-view="import"]');
+        if(b) b.click();
+      }
+    } else if(go==='goal' || go==='limit'){
+      if(typeof goToView === 'function') goToView('config');
+      else {
+        const b = document.querySelector('.spine-btn[data-view="config"]');
+        if(b) b.click();
+      }
       setTimeout(()=>{
         const el = document.getElementById(go==='goal' ? 'monthly-goal-input' : 'limits-section');
         if(el) el.scrollIntoView({behavior:'smooth', block:'start'});
-      }, 80);
+      }, 120);
     }
-  });
-});
+  }catch(e){ console.warn(e); }
+}
+window.completeOnboarding = completeOnboarding;
+window.onboardSkip = onboardSkip;
+window.onboardGo = onboardGo;
 
 function fillReductionConfig(){
   const sel = document.getElementById('reduction-cat-input');
@@ -10126,78 +10367,99 @@ function getSocialLoginPlugin(){
   return null;
 }
 
+function emailFromIdToken(idToken){
+  try{
+    if(!idToken || typeof idToken !== 'string') return null;
+    const payload = parseJwtPayload(idToken);
+    return payload || null;
+  }catch(e){ return null; }
+}
+
 async function loginWithGoogleNative(){
   try{
     notifyUser('Abrindo Google…');
-
-    if(!window.Capacitor){
-      notifyUser('Capacitor não encontrado. Abra pelo app Android.');
-      alert('Abra pelo app Android (Run no Android Studio), não pelo navegador.');
-      return;
-    }
-    if(!isNativeApp()){
-      notifyUser('Login Google nativo só no app instalado.');
-      alert('Login Google nativo só funciona no emulador/celular.');
-      return;
-    }
-
-    const SocialLogin = getSocialLoginPlugin();
-    if(!SocialLogin || typeof SocialLogin.login !== 'function'){
-      notifyUser('Plugin Google ausente. Instale com npm e faça cap sync.');
-      alert('Plugin Google não instalado.\n\nNo PowerShell:\ncd C:\\Projetos\\LivroCaixa\nnpm install @capgo/capacitor-social-login@8\nnpx cap sync\nnpx cap open android');
-      return;
-    }
-
     const webClientId = (getSavedGoogleClientId() || GOOGLE_WEB_CLIENT_ID || '').trim();
     if(!webClientId){
-      notifyUser('Configure o Google Client ID Web.');
+      alert('Client ID Web não configurado.');
       return;
     }
 
-    if(typeof SocialLogin.initialize === 'function'){
-      await SocialLogin.initialize({
-        google: {
-          webClientId: webClientId,
-          mode: 'online'
+    // —— App Android/iOS (plugin Capgo) ——
+    if(isNativeApp()){
+      const SocialLogin = getSocialLoginPlugin();
+      if(!SocialLogin || typeof SocialLogin.login !== 'function'){
+        alert('Plugin Google não instalado no app.\n\nNo PowerShell:\ncd C:\\Projetos\\LivroCaixa\nnpm install @capgo/capacitor-social-login@8\nnpx cap sync\nnpx cap open android\n\nDepois Rebuild no Android Studio.');
+        return;
+      }
+
+      if(typeof SocialLogin.initialize === 'function'){
+        await SocialLogin.initialize({
+          google: { webClientId: webClientId, mode: 'online' }
+        });
+      }
+
+      const response = await SocialLogin.login({
+        provider: 'google',
+        options: {}
+      });
+      console.log('Google login response', response);
+
+      const result = (response && (response.result || response)) || {};
+      const profile = result.profile || result.user || {};
+      let email = profile.email || result.email || '';
+      let name = profile.name || profile.displayName || result.name || '';
+      let picture = profile.imageUrl || profile.picture || result.imageUrl || '';
+      let sub = profile.id || profile.sub || result.id || '';
+
+      // Fallback: ler JWT (idToken)
+      if(!email && (result.idToken || result.id_token)){
+        const payload = emailFromIdToken(result.idToken || result.id_token);
+        if(payload){
+          email = payload.email || email;
+          name = name || payload.name || email;
+          picture = picture || payload.picture || '';
+          sub = sub || payload.sub || '';
+        }
+      }
+
+      if(!email){
+        alert('Google respondeu, mas sem e-mail.\nVeja o Logcat / console.\n\n' + JSON.stringify(response).slice(0, 280));
+        return;
+      }
+
+      notifyUser('Entrando…');
+      await enterAppAs({ provider:'google', email, name: name || email, picture, sub: String(sub) });
+      return;
+    }
+
+    // —— Navegador: Google Identity Services ——
+    if(typeof google !== 'undefined' && google.accounts && google.accounts.id){
+      google.accounts.id.initialize({
+        client_id: webClientId,
+        callback: handleGoogleCredential,
+        auto_select: false
+      });
+      // Dispara o seletor de conta (One Tap / prompt)
+      google.accounts.id.prompt((notification)=>{
+        if(notification && notification.isNotDisplayed && notification.isNotDisplayed()){
+          alert('Popup Google bloqueado ou Client ID sem origem autorizada.\nNo Google Cloud, em Client ID Web, adicione a origem deste site (ex.: http://localhost).');
         }
       });
-    }
-
-    // Sem scopes explícitos: evita exigir alteração da MainActivity no Android
-    const response = await SocialLogin.login({
-      provider: 'google',
-      options: {}
-    });
-    console.log('Google login response', response);
-
-    const result = response && (response.result || response);
-    const profile = (result && (result.profile || result.user)) || result || {};
-    const email = profile.email || result.email;
-    const name = profile.name || profile.displayName || result.name || email;
-    const picture = profile.imageUrl || profile.picture || result.imageUrl || '';
-    const sub = profile.id || profile.sub || result.id || '';
-    if(!email){
-      notifyUser('Google não retornou o e-mail.');
       return;
     }
-    notifyUser('Entrando…');
-    await enterAppAs({
-      provider: 'google',
-      email: email,
-      name: name,
-      picture: picture,
-      sub: String(sub)
-    });
+
+    alert('Abra pelo app Android (Android Studio → Run) para login Google nativo.\n\nNo navegador, o script do Google ainda não carregou ou o Client ID está incompleto.');
   }catch(e){
     console.error('loginWithGoogleNative', e);
     const msg = (e && (e.message || e.errorMessage)) ? (e.message || e.errorMessage) : String(e);
     if(/cancel|dismiss|user/i.test(msg)) notifyUser('Login cancelado.');
     else {
-      notifyUser('Falha no login Google: ' + String(msg).slice(0, 100));
-      try{ alert('Erro Google:\n' + String(msg).slice(0, 220)); }catch(err){}
+      try{ alert('Erro Google:\n' + String(msg).slice(0, 280)); }catch(err){}
     }
   }
 }
+// garante acesso pelo onclick do HTML
+window.loginWithGoogleNative = loginWithGoogleNative;
 
 function handleGoogleCredential(response){
   try{
@@ -10484,13 +10746,15 @@ function initAuthUI(){
     }
   });
 
-  document.getElementById('cfg-save-google-client').addEventListener('click', ()=>{
-    const id = (document.getElementById('cfg-google-client-id').value || '').trim();
+  const cfgSave = document.getElementById('cfg-save-google-client');
+  if(cfgSave) cfgSave.addEventListener('click', ()=>{
+    const id = ((document.getElementById('cfg-google-client-id')||{}).value || '').trim();
     setSavedGoogleClientId(id);
     showToast(id ? 'Client ID salvo.' : 'Client ID limpo.');
   });
 
-  document.getElementById('btn-logout').addEventListener('click', ()=>{
+  const btnLogout = document.getElementById('btn-logout');
+  if(btnLogout) btnLogout.addEventListener('click', ()=>{
     askConfirm('Sair da conta', 'Os dados deste perfil ficam salvos neste aparelho. Você voltará à tela de entrada.', ()=>{
       currentUser = null;
       saveAuthSession(null);
@@ -10862,37 +11126,264 @@ async function init(){
   else run();
 })();
 
-/* UI profissional: scroll top + bottom nav sync */
+/* Navegação unificada: não depende só do menu lateral */
+function goToView(view){
+  if(!view) return;
+  try{
+    document.querySelectorAll('.spine-btn').forEach(b=> b.classList.toggle('active', b.dataset.view === view));
+    document.querySelectorAll('.bottom-nav-btn').forEach(b=> b.classList.toggle('active', b.dataset.view === view));
+    document.querySelectorAll('.view').forEach(v=> v.classList.remove('active'));
+    const el = document.getElementById('view-'+view);
+    if(el) el.classList.add('active');
+
+    // dispara a mesma lógica de conteúdo do menu lateral
+    if(view==='dashboard'){ try{ renderDashboard(); }catch(e){ console.warn(e); } }
+    if(view==='transactions'){ try{ renderTransactions(); }catch(e){ console.warn(e); } }
+    if(view==='import'){
+      try{
+        const p = state.importPrefs || {};
+        if(p.lastAccountOfx && !document.getElementById('import-account-ofx').value)
+          document.getElementById('import-account-ofx').value = p.lastAccountOfx;
+        if(p.lastAccountPdf && !document.getElementById('import-account-pdf').value)
+          document.getElementById('import-account-pdf').value = p.lastAccountPdf;
+        if(p.lastAccountSheet && !document.getElementById('import-account-planilha').value)
+          document.getElementById('import-account-planilha').value = p.lastAccountSheet;
+      }catch(e){}
+    }
+    if(view==='categories'){ try{ renderCategoriesView(); }catch(e){ try{ renderCategories(); }catch(err){} } }
+    if(view==='config'){
+      try{ refreshGistUI(); }catch(e){}
+      try{ renderRecurringList(); }catch(e){}
+      try{ renderTypesList(); }catch(e){}
+      try{
+        const fp = document.getElementById('file-prefix-input');
+        if(fp) fp.value = (state.settings && state.settings.filePrefix) || 'livro-caixa';
+      }catch(e){}
+      try{ updateAuthConfigUI(); }catch(e){}
+      try{ fillReductionConfig(); }catch(e){}
+      try{ renderAccountLimitsConfig(); }catch(e){}
+      try{ renderAccountsConfig(); }catch(e){}
+      try{ renderGoalsConfig(); }catch(e){}
+      try{ renderDebtsConfig(); }catch(e){}
+      try{ renderDashConfig(); }catch(e){}
+      try{ renderConfigStorageSection(); }catch(e){}
+    }
+    const fab = document.getElementById('fab-quick-add');
+    if(fab) fab.classList.toggle('hide', view==='new');
+
+    try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(e){ window.scrollTo(0,0); }
+    try{ document.documentElement.scrollTop = 0; document.body.scrollTop = 0; }catch(e){}
+  }catch(err){
+    console.error('goToView', err);
+    try{ alert('Erro ao abrir tela: '+(err.message||err)); }catch(e){}
+  }
+}
+window.goToView = goToView;
+
+/* Login: funções globais (onclick no HTML) */
+function authCreateProfile(){
+  try{
+    const name = ((document.getElementById('auth-new-profile-name')||{}).value || '').trim();
+    if(!name){ showToast('Informe um nome para o perfil.'); alert('Informe um nome para o perfil.'); return; }
+    const p = createProfile(name);
+    enterAppAs({ provider:'local', name: p.name, profileId: p.id });
+  }catch(err){
+    console.error(err);
+    alert('Erro ao criar perfil: '+(err.message||err));
+  }
+}
+function authContinueLocal(){
+  try{ enterAppAs({ provider:'local', name:'Usuário local', email:'' }); }
+  catch(err){ alert('Erro: '+(err.message||err)); }
+}
+function authImportBackupClick(){
+  const inp = document.getElementById('auth-backup-input');
+  if(inp) inp.click();
+}
+async function authImportBackupFile(e){
+  const file = e && e.target && e.target.files && e.target.files[0];
+  if(e && e.target) e.target.value = '';
+  if(!file) return;
+  try{
+    const textJson = await file.text();
+    const parsed = JSON.parse(textJson);
+    if(!parsed || typeof parsed !== 'object'){ showToast('Backup inválido.'); return; }
+    const payload = parsed.transactions ? parsed : (parsed.state || parsed.data || parsed);
+    if(!payload || typeof payload !== 'object'){ showToast('Arquivo não parece backup do app.'); return; }
+    let name = ((document.getElementById('auth-new-profile-name')||{}).value || '').trim();
+    if(!name) name = (parsed.profileName || parsed.userName || file.name.replace(/\.json$/i,'').slice(0,40) || 'Restaurado');
+    const p = createProfile(name);
+    const user = { provider:'local', name: p.name, profileId: p.id };
+    currentUser = user;
+    saveAuthSession(user);
+    STORAGE_KEY = activeStorageKey();
+    try{
+      if(typeof STORAGE_MODE !== 'undefined' && STORAGE_MODE === 'local'){
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(payload.transactions ? payload : {
+          transactions: payload.transactions || [],
+          categories: payload.categories,
+          categoryRules: payload.categoryRules,
+          settings: payload.settings,
+          accountLimits: payload.accountLimits,
+          accounts: payload.accounts,
+          goals: payload.goals,
+          debts: payload.debts,
+          importPrefs: payload.importPrefs,
+          recurringTemplates: payload.recurringTemplates,
+          transactionTypes: payload.transactionTypes
+        }));
+      }
+    }catch(err){ console.warn(err); }
+    await enterAppAs(user);
+    showToast('Backup importado no perfil '+p.name);
+  }catch(err){
+    console.error(err);
+    alert('Não consegui ler o backup.');
+  }
+}
+window.authCreateProfile = authCreateProfile;
+window.authContinueLocal = authContinueLocal;
+window.authImportBackupClick = authImportBackupClick;
+window.authImportBackupFile = authImportBackupFile;
+
+function clearTransactionFilters(){
+  try{
+    const ids = ['filter-month','filter-from','filter-to','filter-type','filter-category','filter-subcategory','filter-source','filter-imported','filter-imported-date','filter-account','filter-search','filter-amount-min','filter-amount-max','filter-tag'];
+    ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+    renderTransactions();
+    showToast('Filtros limpos.');
+  }catch(e){ console.error(e); }
+}
+function exportTransactionsCsv(){
+  try{
+    if(typeof requirePro === 'function' && !requirePro('Exportação completa de CSV')) return;
+    // dispara o handler já registrado no botão (sem usar click — evita loop com onclick)
+    const month = document.getElementById('filter-month')?.value || '';
+    const type = document.getElementById('filter-type')?.value || '';
+    const category = document.getElementById('filter-category')?.value || '';
+    const source = document.getElementById('filter-source')?.value || '';
+    const account = document.getElementById('filter-account')?.value || '';
+    const tagFilter = document.getElementById('filter-tag')?.value || '';
+    const search = (document.getElementById('filter-search')?.value || '').trim().toLowerCase();
+    const from = document.getElementById('filter-from')?.value || '';
+    const to = document.getElementById('filter-to')?.value || '';
+    let list = (state.transactions||[]).slice();
+    if(month && !from && !to) list = list.filter(t=> monthKey(t.date)===month || String(t.date||'').startsWith(month));
+    else {
+      if(from) list = list.filter(t=> t.date >= from);
+      if(to) list = list.filter(t=> t.date <= to);
+    }
+    if(type) list = list.filter(t=> t.type===type);
+    if(category) list = list.filter(t=> t.category===category);
+    if(source) list = list.filter(t=> t.source===source);
+    if(account === '__none__') list = list.filter(t=> !(t.account && String(t.account).trim()));
+    else if(account) list = list.filter(t=> (t.account||'')===account);
+    if(tagFilter) list = list.filter(t=> (t.tags||[]).includes(tagFilter));
+    if(search) list = list.filter(t=> (t.desc||'').toLowerCase().includes(search));
+    // deixa o handler original completar se existir — senão gera CSV simples
+    const btn = document.getElementById('btn-export-csv');
+    if(btn && btn._csvHandler){ btn._csvHandler(); return; }
+    const rows = [['data','tipo','descricao','categoria','conta','valor','origem']];
+    list.forEach(t=>{
+      rows.push([t.date||'', t.type||'', (t.desc||'').replace(/"/g,"'"), t.category||'', t.account||'', String(t.amount||0).replace('.',','), t.source||'']);
+    });
+    const csv = rows.map(r=> r.map(c=> '"'+String(c)+'"').join(';')).join('\n');
+    const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8;'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'lancamentos.csv';
+    a.click();
+    showToast(list.length+' lançamentos exportados.');
+  }catch(e){ console.error(e); alert('Erro ao exportar: '+(e.message||e)); }
+}
+function clearManualForm(){
+  try{
+    const form = document.getElementById('manual-form');
+    if(form) form.reset();
+    const d = document.getElementById('f-date'); if(d) d.value = todayISO();
+    const s = document.getElementById('f-source'); if(s) s.value = 'manual';
+    const tt = document.getElementById('type-toggle'); if(tt) tt.innerHTML = typeToggleHTML('despesa');
+    const ft = document.getElementById('f-type'); if(ft) ft.value = 'despesa';
+    try{ toggleTransferFields('despesa'); }catch(e){}
+    try{ fillCategorySelects(); }catch(e){}
+    const prev = document.getElementById('ocr-preview'); if(prev) prev.style.display = 'none';
+    if(typeof pendingPhotoDataUrl !== 'undefined') pendingPhotoDataUrl = null;
+    showToast('Formulário limpo.');
+  }catch(e){ console.error(e); alert('Erro ao limpar: '+(e.message||e)); }
+}
+function saveManualFormClick(){
+  try{
+    const form = document.getElementById('manual-form');
+    if(!form) return;
+    // requestSubmit aciona o listener addEventListener('submit', ...)
+    if(typeof form.requestSubmit === 'function') form.requestSubmit();
+    else form.dispatchEvent(new Event('submit', {cancelable:true, bubbles:true}));
+  }catch(err){
+    console.error(err);
+    alert('Erro ao salvar: '+(err.message||err));
+  }
+}
+window.clearTransactionFilters = clearTransactionFilters;
+window.exportTransactionsCsv = exportTransactionsCsv;
+window.clearManualForm = clearManualForm;
+window.saveManualFormClick = saveManualFormClick;
+
+function logoutAccount(){
+  try{
+    const doLogout = ()=>{
+      try{
+        currentUser = null;
+        if(typeof saveAuthSession === 'function') saveAuthSession(null);
+        if(typeof showAuthGate === 'function') showAuthGate();
+        try{ if(typeof renderGoogleButton === 'function') renderGoogleButton(); }catch(e){}
+        try{ if(typeof renderAuthProfilesList === 'function') renderAuthProfilesList(); }catch(e){}
+        showToast('Sessão encerrada.');
+      }catch(err){
+        console.error(err);
+        alert('Erro ao sair: '+(err.message||err));
+      }
+    };
+    if(typeof askConfirm === 'function'){
+      askConfirm('Sair da conta', 'Os dados deste perfil ficam salvos neste aparelho. Você voltará à tela de entrada.', doLogout);
+    } else if(confirm('Sair da conta? Os dados ficam salvos neste aparelho.')){
+      doLogout();
+    }
+  }catch(e){
+    console.error(e);
+    alert('Erro ao sair: '+(e.message||e));
+  }
+}
+window.logoutAccount = logoutAccount;
+
 (function initProfessionalUI(){
   const topBtn = document.getElementById('fab-scroll-top');
   if(topBtn){
-    const onScroll = ()=>{
-      const y = window.scrollY || document.documentElement.scrollTop || 0;
-      topBtn.classList.toggle('show', y > 380);
-    };
+    const scrollY = ()=> window.scrollY || document.documentElement.scrollTop || document.body.scrollTop || 0;
+    const onScroll = ()=> topBtn.classList.toggle('show', scrollY() > 280);
     window.addEventListener('scroll', onScroll, {passive:true});
-    topBtn.addEventListener('click', ()=> window.scrollTo({top:0, behavior:'smooth'}));
-    onScroll();
-  }
-
-  function syncBottomNav(view){
-    document.querySelectorAll('.bottom-nav-btn').forEach(b=>{
-      b.classList.toggle('active', b.dataset.view === view);
+    document.addEventListener('scroll', onScroll, {passive:true, capture:true});
+    topBtn.addEventListener('click', ()=>{
+      try{ window.scrollTo({top:0, behavior:'smooth'}); }catch(e){ window.scrollTo(0,0); }
+      try{ document.documentElement.scrollTop = 0; document.body.scrollTop = 0; }catch(e){}
     });
+    onScroll();
+    // reavalia após trocar de tela
+    setInterval(onScroll, 800);
   }
 
   document.querySelectorAll('.bottom-nav-btn').forEach(btn=>{
-    btn.addEventListener('click', ()=>{
-      const view = btn.dataset.view;
-      const spine = document.querySelector('.spine-btn[data-view="'+view+'"]');
-      if(spine) spine.click();
-      else syncBottomNav(view);
+    btn.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      goToView(btn.dataset.view);
     });
   });
 
   document.querySelectorAll('.spine-btn').forEach(btn=>{
     btn.addEventListener('click', ()=>{
-      syncBottomNav(btn.dataset.view);
+      document.querySelectorAll('.bottom-nav-btn').forEach(b=>{
+        b.classList.toggle('active', b.dataset.view === btn.dataset.view);
+      });
     });
   });
 })();
