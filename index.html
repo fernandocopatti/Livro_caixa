@@ -871,7 +871,7 @@
   @media (max-width:880px){
     /* acima da bottom-nav */
     #privacy-toggle{
-      left:12px;bottom:78px;padding:8px 12px;font-size:12px;z-index:85;
+      left:12px;bottom:78px;padding:8px 12px;font-size:12px;z-index:200;
     }
   }
 
@@ -1277,6 +1277,7 @@
         <button class="btn ghost" id="bulk-clear-btn" style="padding:7px 16px;font-size:12.5px;">Limpar seleção</button>
       </div>
 
+      <div id="tx-count-banner" style="font-size:12.5px;color:var(--ink-dim);margin:0 0 10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);"></div>
       <div class="card">
         <div class="ledger-row head selectable">
           <span><input type="checkbox" id="select-all-chk" title="Selecionar todos os lançamentos filtrados"></span>
@@ -2187,6 +2188,52 @@ var APP_PIN_KEY = 'lc-app-pin-hash';
 var PROFILES_KEY = 'lc-profiles';
 var STORAGE_KEY_BASE = 'finance-data';
 var confirmCallback = null; // no topo — evita TDZ no iOS ao restaurar backup
+var PRIVACY_FLAG_KEY = 'lc-privacy-on';
+
+/* Privacidade no topo — não depende de state nem do resto do script */
+function privacyIsOn(){
+  try{
+    if(window.__privacyOn === true || window.__privacyOn === false) return window.__privacyOn;
+    if(typeof state !== 'undefined' && state && state.settings) return !!state.settings.hideAmounts;
+    return localStorage.getItem(PRIVACY_FLAG_KEY) === '1';
+  }catch(e){ return false; }
+}
+function privacyApplyUi(on){
+  try{
+    window.__privacyOn = !!on;
+    document.body.classList.toggle('privacy-on', !!on);
+    const btn = document.getElementById('privacy-toggle');
+    if(btn) btn.textContent = on ? '👁 Mostrar valores' : '👁 Ocultar valores';
+    const cfg = document.getElementById('cfg-hide-amounts');
+    if(cfg) cfg.checked = !!on;
+  }catch(e){}
+}
+function togglePrivacyBtn(){
+  try{
+    const next = !privacyIsOn();
+    window.__privacyOn = next;
+    try{ localStorage.setItem(PRIVACY_FLAG_KEY, next ? '1' : '0'); }catch(e){}
+    try{
+      if(typeof state !== 'undefined' && state){
+        if(!state.settings) state.settings = {};
+        state.settings.hideAmounts = next;
+        if(typeof saveState === 'function') saveState();
+      }
+    }catch(e){}
+    privacyApplyUi(next);
+    try{
+      if(typeof renderDashboard === 'function'){
+        const active = document.querySelector('.view.active');
+        if(active && active.id === 'view-dashboard') renderDashboard();
+        if(active && active.id === 'view-transactions' && typeof renderTransactions === 'function') renderTransactions(false);
+      }
+    }catch(e){}
+  }catch(e){
+    console.error(e);
+    alert('Erro ao alternar valores: '+(e.message||e));
+  }
+}
+window.togglePrivacyBtn = togglePrivacyBtn;
 
 /* Cliques de Config em captura: funcionam mesmo se algum erro JS ocorrer mais abaixo */
 document.addEventListener('click', function(ev){
@@ -2847,43 +2894,48 @@ function initials(name){
 }
 
 function fmtBRL(v){
-  if(state && state.settings && state.settings.hideAmounts){
+  if(privacyIsOn() || (state && state.settings && state.settings.hideAmounts) || window.__privacyOn){
     return 'R$ ••••';
   }
-  return (v||0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+  const n = Number(v);
+  return (isNaN(n) ? 0 : n).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
 }
 function isPrivacyOn(){
-  return !!(state && state.settings && state.settings.hideAmounts);
+  return privacyIsOn();
 }
 function setPrivacy(on, persist){
-  if(!state.settings) state.settings = {};
-  state.settings.hideAmounts = !!on;
-  document.body.classList.toggle('privacy-on', !!on);
-  const btn = document.getElementById('privacy-toggle');
-  if(btn) btn.textContent = on ? '👁 Mostrar valores' : '👁 Ocultar valores';
-  const cfg = document.getElementById('cfg-hide-amounts');
-  if(cfg) cfg.checked = !!on;
-  if(persist !== false) saveState();
-  // re-render visible views
   try{
-    const active = document.querySelector('.view.active');
-    if(active && active.id === 'view-dashboard') renderDashboard();
-    if(active && active.id === 'view-transactions') renderTransactions();
-    // painel de duplicatas guarda HTML estático — redesenha se estiver aberto
-    const dupCard = document.getElementById('dup-scan-card');
-    if(dupCard && dupCard.style.display !== 'none' && typeof renderDupScanResults === 'function'){
-      renderDupScanResults();
-    }
-  }catch(e){}
+    if(!state) return;
+    if(!state.settings) state.settings = {};
+    state.settings.hideAmounts = !!on;
+    window.__privacyOn = !!on;
+    try{ localStorage.setItem(PRIVACY_FLAG_KEY, on ? '1' : '0'); }catch(e){}
+    privacyApplyUi(!!on);
+    if(persist !== false && typeof saveState === 'function') saveState();
+    try{
+      const active = document.querySelector('.view.active');
+      if(active && active.id === 'view-dashboard' && typeof renderDashboard === 'function') renderDashboard();
+      if(active && active.id === 'view-transactions' && typeof renderTransactions === 'function') renderTransactions(false);
+      const dupCard = document.getElementById('dup-scan-card');
+      if(dupCard && dupCard.style.display !== 'none' && typeof renderDupScanResults === 'function'){
+        renderDupScanResults();
+      }
+    }catch(e){}
+  }catch(e){ console.error('setPrivacy', e); }
 }
 let privacyAppliedOnBoot = false;
 function applyPrivacyFromSettings(){
   if(!state.settings) state.settings = {};
-  // Só na primeira aplicação da sessão: se "iniciar oculto", força escondido
   if(!privacyAppliedOnBoot){
     privacyAppliedOnBoot = true;
     if(state.settings.hideOnOpen) state.settings.hideAmounts = true;
   }
+  // prioriza flag gravada no navegador
+  try{
+    const flag = localStorage.getItem(PRIVACY_FLAG_KEY);
+    if(flag === '1') state.settings.hideAmounts = true;
+    if(flag === '0') state.settings.hideAmounts = false;
+  }catch(e){}
   setPrivacy(!!state.settings.hideAmounts, false);
 }
 function fmtDate(iso){
@@ -5844,18 +5896,27 @@ function renderDashboard(){
 }
 
 function rowHTML(t, selectable){
-  const c = catById(t.category);
-  const tType = typeById(t.type);
-  const isInflow = tType.flowSign > 0;
-  return `
-  <div class="ledger-row${selectable?' selectable':''}" data-id="${t.id}">
-    ${selectable ? `<input type="checkbox" class="row-select-chk" data-select="${t.id}">` : ''}
+  try{
+    if(!t) return '';
+    const c = (typeof catById === 'function') ? catById(t.category) : {name:'Outros', color:'#888'};
+    const tType = (typeof typeById === 'function') ? typeById(t.type || 'despesa') : {flowSign:-1, color:'var(--warn)'};
+    const isInflow = (tType.flowSign || 0) > 0;
+    const id = t.id != null ? String(t.id) : '';
+    const desc = (t.desc != null ? String(t.desc) : '');
+    const amt = Number(t.amount);
+    return `
+  <div class="ledger-row${selectable?' selectable':''}" data-id="${escapeAttr(id)}">
+    ${selectable ? `<input type="checkbox" class="row-select-chk" data-select="${escapeAttr(id)}">` : ''}
     <span class="ledger-date">${fmtDate(t.date)}</span>
-    <span class="ledger-desc">${escapeHTML(t.desc)}${t.photo ? ' 📎' : ''}${t.transferId ? ` <span style="color:#5C8FD6;font-size:11px;">↔ ${t.transferLeg==='in'?'entrada':'saída'}</span>` : ''}${t.installment ? ` <span style="color:var(--gold);font-size:11px;">📅${t.installment.current}/${t.installment.total}</span>` : ''}${isTxLocked(t) ? ` <span style="color:var(--ink-faint);font-size:11px;" title="Período conferido">🔒</span>` : ''}${t.account ? `<span class="ledger-desc-sub">💳 ${escapeHTML(t.account)}</span>` : ''}${t.notes ? `<span class="ledger-desc-sub">${escapeHTML(t.notes)}</span>`:''}</span>
-    <span class="cat-tag cat-quick-wrap" data-cat-edit="${t.id}" title="Clique para mudar a categoria (também aprende a correção)"><span class="stamp" style="background:${c.color}">${initials(c.name)}</span>${c.name}</span>
-    <span class="ledger-amt" style="color:${tType.color};">${tType.flowSign===0 ? '↔' : (isInflow ? '+' : '−')} ${fmtBRL(t.amount)}</span>
-    <button class="row-del" data-del="${t.id}" title="${isTxDeleteProtected(t) ? 'Período conferido — exclusão bloqueada' : 'Excluir'}" ${isTxDeleteProtected(t)?'disabled style="opacity:.35;cursor:not-allowed;"':''}>✕</button>
+    <span class="ledger-desc">${escapeHTML(desc)}${t.photo ? ' 📎' : ''}${t.transferId ? ` <span style="color:#5C8FD6;font-size:11px;">↔ ${t.transferLeg==='in'?'entrada':'saída'}</span>` : ''}${t.installment ? ` <span style="color:var(--gold);font-size:11px;">📅${t.installment.current}/${t.installment.total}</span>` : ''}${(typeof isTxLocked==='function' && isTxLocked(t)) ? ` <span style="color:var(--ink-faint);font-size:11px;" title="Período conferido">🔒</span>` : ''}${t.account ? `<span class="ledger-desc-sub">💳 ${escapeHTML(String(t.account))}</span>` : ''}${t.notes ? `<span class="ledger-desc-sub">${escapeHTML(String(t.notes))}</span>`:''}</span>
+    <span class="cat-tag cat-quick-wrap" data-cat-edit="${escapeAttr(id)}" title="Clique para mudar a categoria"><span class="stamp" style="background:${c.color||'#888'}">${initials(c.name||'?')}</span>${escapeHTML(c.name||'Outros')}</span>
+    <span class="ledger-amt" style="color:${tType.color||'var(--ink)'};">${tType.flowSign===0 ? '↔' : (isInflow ? '+' : '−')} ${fmtBRL(isNaN(amt)?0:amt)}</span>
+    <button type="button" class="row-del" data-del="${escapeAttr(id)}" title="Excluir">✕</button>
   </div>`;
+  }catch(e){
+    console.warn('rowHTML', e, t);
+    return '<div class="ledger-row"><span class="ledger-desc">Item com erro</span></div>';
+  }
 }
 
 function escapeHTML(s){
@@ -6077,10 +6138,30 @@ function renderTransactions(resetPage){
 
   const container = document.getElementById('transactions-list');
   if(!container) return;
-  const totalAll = (state.transactions||[]).length;
+  const totalAll = (state && state.transactions) ? state.transactions.length : 0;
+  const banner = document.getElementById('tx-count-banner');
+  if(banner){
+    banner.innerHTML = totalAll
+      ? ('<strong style="color:var(--ink);">'+totalAll+'</strong> lançamentos salvos neste aparelho'
+        + (list.length !== totalAll ? ' · <strong style="color:var(--accent);">'+list.length+'</strong> no filtro atual' : '')
+        + ' · <a href="#" id="tx-force-show-all" style="color:var(--accent);">mostrar todos</a>')
+      : 'Nenhum lançamento salvo neste aparelho. Restaure um backup (GitHub) ou importe um arquivo.';
+    const link = document.getElementById('tx-force-show-all');
+    if(link){
+      link.onclick = function(e){
+        e.preventDefault();
+        try{ clearTransactionFilters(); }catch(err){}
+        try{
+          const m = document.getElementById('filter-month');
+          if(m) m.value = '';
+        }catch(err){}
+        renderTransactions(true);
+      };
+    }
+  }
   if(!list.length){
-    container.innerHTML = '<div class="empty-state">Nada neste filtro ('+totalAll+' no total no aparelho). Limpe o período ou toque em “Todo período”.</div>';
-    updateBulkBar();
+    container.innerHTML = '<div class="empty-state">Nada neste filtro ('+totalAll+' no total no aparelho). Toque em “mostrar todos” acima ou Limpar filtros.</div>';
+    try{ updateBulkBar(); }catch(e){}
     return;
   }
   const totalPages = Math.max(1, Math.ceil(list.length / TX_PAGE_SIZE));
@@ -6088,16 +6169,21 @@ function renderTransactions(resetPage){
   if(txListPage < 0) txListPage = 0;
   const start = txListPage * TX_PAGE_SIZE;
   const pageSlice = list.slice(start, start + TX_PAGE_SIZE);
+  let rowsHtml = '';
+  for(let i=0;i<pageSlice.length;i++){
+    try{ rowsHtml += rowHTML(pageSlice[i], true); }
+    catch(e){ console.warn(e); }
+  }
   const pager = totalPages > 1
     ? ('<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin:10px 0 14px;font-size:12.5px;color:var(--ink-dim);">'
-      + '<span>Mostrando '+(start+1)+'–'+(start+pageSlice.length)+' de '+list.length+(totalAll!==list.length?' (filtro; total '+totalAll+')':'')+'</span>'
+      + '<span>Mostrando '+(start+1)+'–'+(start+pageSlice.length)+' de '+list.length+'</span>'
       + '<span style="display:flex;gap:8px;">'
       + '<button type="button" class="btn ghost" style="padding:6px 12px;font-size:12px;" onclick="txListPage=Math.max(0,txListPage-1);renderTransactions(false);">← Anterior</button>'
       + '<button type="button" class="btn ghost" style="padding:6px 12px;font-size:12px;" onclick="txListPage=Math.min('+(totalPages-1)+',txListPage+1);renderTransactions(false);">Próxima →</button>'
       + '</span></div>')
-    : ('<div style="font-size:12px;color:var(--ink-faint);margin:0 0 10px;">'+list.length+' lançamento'+(list.length===1?'':'s')+(totalAll!==list.length?' no filtro (total '+totalAll+')':'')+'</div>');
-  container.innerHTML = pager + pageSlice.map(t=>rowHTML(t, true)).join('');
-  attachRowHandlers(container);
+    : '';
+  container.innerHTML = pager + rowsHtml;
+  try{ attachRowHandlers(container); }catch(e){ console.warn(e); }
   container.querySelectorAll('.row-select-chk').forEach(chk=>{
     chk.addEventListener('click', e=> e.stopPropagation());
     chk.addEventListener('change', ()=>{
@@ -6106,7 +6192,7 @@ function renderTransactions(resetPage){
       updateBulkBar();
     });
   });
-  updateBulkBar();
+  try{ updateBulkBar(); }catch(e){}
 }
 window.renderTransactions = renderTransactions;
 
@@ -10933,21 +11019,7 @@ document.getElementById('m-amount') && document.getElementById('m-amount').addEv
 
 
 
-function togglePrivacyBtn(){
-  try{
-    if(!state) state = { settings: {}, transactions: [] };
-    if(!state.settings) state.settings = {};
-    const next = !isPrivacyOn();
-    setPrivacy(next, true);
-    // feedback imediato no botão
-    const btn = document.getElementById('privacy-toggle');
-    if(btn) btn.textContent = next ? '👁 Mostrar valores' : '👁 Ocultar valores';
-  }catch(e){
-    console.error(e);
-    try{ alert('Erro ao alternar valores: '+(e.message||e)); }catch(err){}
-  }
-}
-window.togglePrivacyBtn = togglePrivacyBtn;
+// togglePrivacyBtn já definido no topo do script
 document.getElementById('privacy-toggle') && document.getElementById('privacy-toggle').addEventListener('click', (ev)=>{
   ev.preventDefault();
   ev.stopPropagation();
