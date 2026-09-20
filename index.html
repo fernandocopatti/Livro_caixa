@@ -879,6 +879,19 @@
 <body>
 
 <button type="button" id="privacy-toggle" onclick="togglePrivacyBtn()" title="Ocultar valores na tela (útil em público)">👁 Ocultar valores</button>
+<div id="pin-unlock" style="display:none;position:fixed;inset:0;z-index:3000;background:var(--bg);align-items:center;justify-content:center;padding:24px;">
+  <div class="auth-card" style="max-width:360px;">
+    <h1 style="font-size:20px;margin:0 0 8px;">Desbloquear</h1>
+    <p class="auth-sub" style="margin-bottom:14px;">Digite o PIN deste aparelho para continuar.</p>
+    <div class="field" style="margin-bottom:12px;">
+      <label>PIN</label>
+      <input type="password" id="pin-unlock-input" inputmode="numeric" maxlength="8" placeholder="••••" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();tryUnlockPin();}">
+    </div>
+    <button type="button" class="btn" id="pin-unlock-btn" onclick="tryUnlockPin()" style="width:100%;margin-bottom:8px;">Entrar</button>
+    <button type="button" class="btn ghost" id="pin-unlock-forgot" onclick="forgotPinUnlock()" style="width:100%;">Esqueci o PIN (sair da conta)</button>
+    <p id="pin-unlock-err" style="color:var(--warn);font-size:12px;margin:10px 0 0;display:none;"></p>
+  </div>
+</div>
 <div id="auth-gate">
   <div class="auth-card">
     <div class="auth-brand">
@@ -1564,6 +1577,27 @@
           </details>
           <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
             <button type="button" class="btn ghost" id="btn-logout" onclick="logoutAccount()" style="padding:8px 14px;">Sair da conta</button>
+          </div>
+          <div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);">
+            <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;">PIN / bloqueio local</div>
+            <p style="font-size:12px;color:var(--ink-dim);line-height:1.4;margin:0 0 10px;">
+              Mantém a conta Google salva neste aparelho. Com PIN, ao abrir o app você só digita o código (sem entrar no Google de novo). Biometria nativa pode ser ligada numa próxima versão.
+            </p>
+            <p id="pin-status" style="font-size:12px;color:var(--ink-faint);margin:0 0 8px;"></p>
+            <div class="form-grid">
+              <div class="field">
+                <label>Novo PIN (4–8 dígitos)</label>
+                <input type="password" id="cfg-pin-new" inputmode="numeric" maxlength="8" placeholder="••••" autocomplete="new-password">
+              </div>
+              <div class="field">
+                <label>Confirmar PIN</label>
+                <input type="password" id="cfg-pin-confirm" inputmode="numeric" maxlength="8" placeholder="••••" autocomplete="new-password">
+              </div>
+            </div>
+            <div class="btn-row" style="margin-top:10px;flex-wrap:wrap;gap:8px;">
+              <button type="button" class="btn secondary" id="cfg-pin-save" onclick="saveAppPinClick()" style="padding:8px 14px;">Salvar PIN</button>
+              <button type="button" class="btn ghost" id="cfg-pin-clear" onclick="clearAppPinClick()" style="padding:8px 14px;">Remover PIN</button>
+            </div>
           </div>
           <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);">
             <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;">Google Drive</div>
@@ -9142,10 +9176,39 @@ function buildBackupObject(){
   };
 }
 
-function getGistToken(){ try{ return localStorage.getItem(GIST_TOKEN_KEY) || ''; }catch(e){ return ''; } }
-function setGistToken(t){ try{ if(t) localStorage.setItem(GIST_TOKEN_KEY, t); else localStorage.removeItem(GIST_TOKEN_KEY); }catch(e){} }
-function getGistId(){ try{ return localStorage.getItem(GIST_ID_KEY) || ''; }catch(e){ return ''; } }
-function setGistId(id){ try{ if(id) localStorage.setItem(GIST_ID_KEY, id); else localStorage.removeItem(GIST_ID_KEY); }catch(e){} }
+function lsGet(key){
+  try{ return localStorage.getItem(key) || ''; }catch(e){ return ''; }
+}
+function lsSet(key, val){
+  try{
+    if(val === null || val === undefined || val === '') localStorage.removeItem(key);
+    else localStorage.setItem(key, String(val));
+  }catch(e){ console.warn('lsSet', key, e); }
+  // Capacitor Preferences (se o plugin existir) — sobrevive melhor em alguns aparelhos
+  try{
+    const Pref = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Preferences;
+    if(Pref){
+      if(val === null || val === undefined || val === '') Pref.remove({ key: key });
+      else Pref.set({ key: key, value: String(val) });
+    }
+  }catch(e){}
+}
+async function lsGetAsync(key){
+  let v = lsGet(key);
+  if(v) return v;
+  try{
+    const Pref = window.Capacitor && Capacitor.Plugins && Capacitor.Plugins.Preferences;
+    if(Pref){
+      const r = await Pref.get({ key: key });
+      if(r && r.value){ lsSet(key, r.value); return r.value; }
+    }
+  }catch(e){}
+  return '';
+}
+function getGistToken(){ return (lsGet(GIST_TOKEN_KEY) || '').trim(); }
+function setGistToken(t){ lsSet(GIST_TOKEN_KEY, (t||'').trim()); }
+function getGistId(){ return (lsGet(GIST_ID_KEY) || '').trim(); }
+function setGistId(id){ lsSet(GIST_ID_KEY, (id||'').trim()); }
 
 function updateGistStatus(msg){
   const el = document.getElementById('gist-status');
@@ -9156,8 +9219,9 @@ function refreshGistUI(){
   const gid = document.getElementById('gist-id');
   const chk = document.getElementById('gist-sync-on-exit');
   const dname = document.getElementById('gist-device-name');
-  if(tok && !tok.value) tok.value = getGistToken();
-  if(gid && !gid.value) gid.value = getGistId();
+  // sempre repõe o que está salvo (evita campo vazio após reabrir)
+  if(tok) tok.value = getGistToken();
+  if(gid) gid.value = getGistId();
   if(chk) chk.checked = getGistSyncOnExit();
   if(dname){
     // sempre mostra nome salvo ou sugestão
@@ -10285,16 +10349,53 @@ function setSavedGoogleClientId(id){
 }
 function loadAuthSession(){
   try{
-    const raw = localStorage.getItem(AUTH_SESSION_KEY);
+    const raw = lsGet(AUTH_SESSION_KEY);
     if(!raw) return null;
-    return JSON.parse(raw);
+    const u = JSON.parse(raw);
+    if(!u || typeof u !== 'object') return null;
+    if(!u.provider) return null;
+    return u;
   }catch(e){ return null; }
 }
 function saveAuthSession(user){
   try{
-    if(user) localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(user));
-    else localStorage.removeItem(AUTH_SESSION_KEY);
-  }catch(e){}
+    if(user){
+      const payload = {
+        provider: user.provider || 'local',
+        email: user.email || '',
+        name: user.name || '',
+        picture: user.picture || '',
+        sub: user.sub || '',
+        profileId: user.profileId || '',
+        savedAt: new Date().toISOString()
+      };
+      lsSet(AUTH_SESSION_KEY, JSON.stringify(payload));
+      // confirma gravação
+      const check = loadAuthSession();
+      if(!check) console.warn('Sessão não persistiu no storage');
+    } else {
+      lsSet(AUTH_SESSION_KEY, '');
+    }
+  }catch(e){ console.error('saveAuthSession', e); }
+}
+/* PIN local (opcional) — não envia nada à nuvem */
+const APP_PIN_KEY = 'lc-app-pin-hash';
+function hashPin(pin){
+  // hash simples (não é criptografia bancária; só evita PIN em texto puro)
+  let h = 2166136261;
+  const s = 'mci:'+String(pin);
+  for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return 'h'+(h>>>0).toString(16);
+}
+function hasAppPin(){ return !!lsGet(APP_PIN_KEY); }
+function setAppPin(pin){
+  if(!pin){ lsSet(APP_PIN_KEY, ''); return; }
+  lsSet(APP_PIN_KEY, hashPin(pin));
+}
+function checkAppPin(pin){
+  const saved = lsGet(APP_PIN_KEY);
+  if(!saved) return true;
+  return saved === hashPin(pin);
 }
 function hideAuthGate(){
   const g = document.getElementById('auth-gate');
@@ -11045,22 +11146,77 @@ function initDriveUI(){
 }
 
 
+async function continueInitAfterAuth(){
+  try{
+    runRecurringGeneration();
+    const tt = document.getElementById('type-toggle');
+    if(tt) tt.innerHTML = typeToggleHTML('despesa');
+    try{ toggleTransferFields('despesa'); }catch(e){}
+    try{ fillCategorySelects(); }catch(e){}
+    try{ fillAccountSuggestions(); }catch(e){}
+    try{ fillMonthFilter(); }catch(e){}
+    ensureSubscriptionObject();
+    initPaywallUI();
+    try{ renderDashboard(); }catch(e){}
+    try{ renderTransactions(); }catch(e){}
+    try{ updatePinStatusUI(); }catch(e){}
+    try{ refreshGistUI(); }catch(e){}
+    if(typeof FS_SUPPORTED !== 'undefined' && FS_SUPPORTED){
+      try{
+        const stored = await idbGetHandle();
+        hasStoredHandle = !!stored;
+      }catch(e){ hasStoredHandle = false; }
+    }
+    try{ registerPWA(); }catch(e){}
+    try{ maybeShowOnboarding(); }catch(e){}
+    setTimeout(()=>{ try{ checkReminders(); }catch(e){} }, 600);
+    setTimeout(()=>{ try{ touchVisitSnapshot(); }catch(e){} }, 2500);
+    try{ renderSyncBar(); }catch(e){}
+  }catch(err){
+    console.error('continueInitAfterAuth', err);
+  }
+}
 async function init(){
   try{
     initAuthUI();
-    const session = loadAuthSession();
+    // recupera token Gist de Preferences se localStorage estiver vazio
+    try{
+      const gt = await lsGetAsync(GIST_TOKEN_KEY);
+      const gi = await lsGetAsync(GIST_ID_KEY);
+      if(gt && !getGistToken()) setGistToken(gt);
+      if(gi && !getGistId()) setGistId(gi);
+    }catch(e){}
+    let session = loadAuthSession();
+    // tenta Preferences se não houver sessão no localStorage
+    if(!session){
+      try{
+        const raw = await lsGetAsync(AUTH_SESSION_KEY);
+        if(raw){ lsSet(AUTH_SESSION_KEY, raw); session = loadAuthSession(); }
+      }catch(e){}
+    }
     if(session && (session.provider === 'google' || session.provider === 'local')){
-      currentUser = session;
-      STORAGE_KEY = activeStorageKey();
-      await loadState();
-      if(!state.importPrefs) state.importPrefs = { lastAccountOfx:'', lastAccountPdf:'', lastAccountSheet:'', sheetMaps:{} };
-      if(!state.accounts) state.accounts = {};
-      if(!state.goals) state.goals = [];
-      if(!state.debts) state.debts = [];
-      hideAuthGate();
-      updateAuthConfigUI();
-      try{ applyPrivacyFromSettings(); }catch(e){}
-      setTimeout(renderGoogleButton, 500);
+      const finish = async ()=>{
+        currentUser = session;
+        STORAGE_KEY = activeStorageKey();
+        await loadState();
+        if(!state.importPrefs) state.importPrefs = { lastAccountOfx:'', lastAccountPdf:'', lastAccountSheet:'', sheetMaps:{} };
+        if(!state.accounts) state.accounts = {};
+        if(!state.goals) state.goals = [];
+        if(!state.debts) state.debts = [];
+        hideAuthGate();
+        hidePinUnlock();
+        updateAuthConfigUI();
+        try{ applyPrivacyFromSettings(); }catch(e){}
+        setTimeout(renderGoogleButton, 500);
+        await continueInitAfterAuth();
+      };
+      if(hasAppPin()){
+        window.__afterPinUnlock = finish;
+        hideAuthGate();
+        showPinUnlock();
+        return;
+      }
+      await finish();
     } else {
       // mostra gate; dados só carregam após login/continuar
       showAuthGate();
@@ -11068,32 +11224,10 @@ async function init(){
       updateAuthConfigUI();
       return; // não inicializa o resto até entrar
     }
-    runRecurringGeneration();
-    document.getElementById('type-toggle').innerHTML = typeToggleHTML('despesa');
-    toggleTransferFields('despesa');
-    fillCategorySelects();
-    fillAccountSuggestions();
-    fillMonthFilter();
-    ensureSubscriptionObject();
-    initPaywallUI();
-    renderDashboard();
-    renderTransactions();
-
-    if(FS_SUPPORTED){
-      try{
-        const stored = await idbGetHandle();
-        hasStoredHandle = !!stored;
-      }catch(e){ hasStoredHandle = false; }
-    }
-    registerPWA();
-    maybeShowOnboarding();
-    setTimeout(checkReminders, 600);
-    setTimeout(()=>{ try{ touchVisitSnapshot(); }catch(e){} }, 2500);
   }catch(err){
     console.error('Erro ao iniciar o app:', err);
     showToast('Algo não carregou direito ao abrir o app — veja o console para detalhes.');
   }
-  renderSyncBar();
 }
 
 /* Configurações: blocos recolhíveis ao clicar no título */
@@ -11494,14 +11628,97 @@ function gistSaveCredsClick(){
     const t = ((document.getElementById('gist-token')||{}).value || '').trim();
     const id = ((document.getElementById('gist-id')||{}).value || '').trim();
     const dn = ((document.getElementById('gist-device-name')||{}).value || '').trim();
+    if(t && !/^gh[pousr]_|^github_pat_/i.test(t) && t.length < 20){
+      showToast('Token parece inválido. Use um Personal Access Token do GitHub (ghp_… ou github_pat_…).');
+      return;
+    }
     setGistToken(t);
     setGistId(id);
     setDeviceName(dn);
     getOrCreateDeviceId();
+    // confirma gravação
+    const okTok = getGistToken() === t;
+    const okId = !id || getGistId() === id;
     refreshGistUI();
-    showToast(t ? 'Credenciais Gist salvas neste aparelho.' : 'Token removido.');
+    if(!okTok){
+      alert('Não consegui gravar o token neste aparelho (armazenamento bloqueado?).');
+      return;
+    }
+    showToast(t ? ('Token salvo'+(okId && id ? ' · Gist ID ok' : '')+'. Testando…') : 'Token removido.');
+    if(t) setTimeout(()=>{ try{ testGistConnection(); }catch(e){} }, 300);
   }catch(e){ console.error(e); alert('Erro ao salvar Gist: '+(e.message||e)); }
 }
+function saveAppPinClick(){
+  try{
+    const a = ((document.getElementById('cfg-pin-new')||{}).value || '').trim();
+    const b = ((document.getElementById('cfg-pin-confirm')||{}).value || '').trim();
+    if(!/^\d{4,8}$/.test(a)){ showToast('PIN deve ter 4 a 8 números.'); return; }
+    if(a !== b){ showToast('Confirmação diferente do PIN.'); return; }
+    setAppPin(a);
+    const n = document.getElementById('cfg-pin-new'); if(n) n.value='';
+    const c = document.getElementById('cfg-pin-confirm'); if(c) c.value='';
+    updatePinStatusUI();
+    showToast('PIN salvo. Na próxima abertura do app será pedido.');
+  }catch(e){ console.error(e); alert('Erro ao salvar PIN: '+(e.message||e)); }
+}
+function clearAppPinClick(){
+  try{
+    setAppPin('');
+    updatePinStatusUI();
+    showToast('PIN removido.');
+  }catch(e){ console.error(e); }
+}
+function updatePinStatusUI(){
+  const el = document.getElementById('pin-status');
+  if(!el) return;
+  el.textContent = hasAppPin()
+    ? 'PIN ativo — ao abrir o app você desbloqueia com o código (sessão Google permanece).'
+    : 'Nenhum PIN — a sessão salva entra direto (recomendado definir um PIN se outras pessoas usam o celular).';
+}
+function showPinUnlock(){
+  const box = document.getElementById('pin-unlock');
+  if(!box) return;
+  box.style.display = 'flex';
+  const inp = document.getElementById('pin-unlock-input');
+  if(inp){ inp.value=''; setTimeout(()=>inp.focus(), 200); }
+  const err = document.getElementById('pin-unlock-err');
+  if(err) err.style.display = 'none';
+}
+function hidePinUnlock(){
+  const box = document.getElementById('pin-unlock');
+  if(box) box.style.display = 'none';
+}
+function tryUnlockPin(){
+  try{
+    const pin = ((document.getElementById('pin-unlock-input')||{}).value || '').trim();
+    const err = document.getElementById('pin-unlock-err');
+    if(!checkAppPin(pin)){
+      if(err){ err.style.display='block'; err.textContent='PIN incorreto.'; }
+      return;
+    }
+    hidePinUnlock();
+    if(typeof window.__afterPinUnlock === 'function'){
+      const fn = window.__afterPinUnlock;
+      window.__afterPinUnlock = null;
+      fn();
+    }
+  }catch(e){ console.error(e); }
+}
+function forgotPinUnlock(){
+  try{
+    if(!confirm('Isso remove o PIN e encerra a sessão. Seus lançamentos continuam salvos no perfil. Continuar?')) return;
+    setAppPin('');
+    currentUser = null;
+    saveAuthSession(null);
+    hidePinUnlock();
+    showAuthGate();
+    showToast('Sessão encerrada. Entre de novo.');
+  }catch(e){ console.error(e); }
+}
+window.saveAppPinClick = saveAppPinClick;
+window.clearAppPinClick = clearAppPinClick;
+window.tryUnlockPin = tryUnlockPin;
+window.forgotPinUnlock = forgotPinUnlock;
 function gistTestConnClick(){
   try{
     const t = ((document.getElementById('gist-token')||{}).value || '').trim();
