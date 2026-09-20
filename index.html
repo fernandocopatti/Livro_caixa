@@ -2198,26 +2198,35 @@ var TX_PAGE_SIZE = 80;
 /* Privacidade no topo — não depende de state nem do resto do script */
 function privacyIsOn(){
   try{
-    if(window.__privacyOn === true || window.__privacyOn === false) return window.__privacyOn;
+    // localStorage primeiro (mais estável no iOS)
+    const flag = localStorage.getItem(PRIVACY_FLAG_KEY);
+    if(flag === '1') return true;
+    if(flag === '0') return false;
+    if(window.__privacyOn === true) return true;
+    if(window.__privacyOn === false) return false;
     if(typeof state !== 'undefined' && state && state.settings) return !!state.settings.hideAmounts;
-    return localStorage.getItem(PRIVACY_FLAG_KEY) === '1';
-  }catch(e){ return false; }
+    return false;
+  }catch(e){ return !!window.__privacyOn; }
 }
 function privacyApplyUi(on){
   try{
-    window.__privacyOn = !!on;
-    document.body.classList.toggle('privacy-on', !!on);
+    on = !!on;
+    window.__privacyOn = on;
+    document.body.classList.toggle('privacy-on', on);
     const btn = document.getElementById('privacy-toggle');
-    if(btn) btn.textContent = on ? '👁 Mostrar valores' : '👁 Ocultar valores';
+    if(btn){
+      btn.textContent = on ? '👁 Mostrar valores' : '👁 Ocultar valores';
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    }
     const cfg = document.getElementById('cfg-hide-amounts');
-    if(cfg) cfg.checked = !!on;
+    if(cfg) cfg.checked = on;
   }catch(e){}
 }
 function togglePrivacyBtn(){
   try{
     const next = !privacyIsOn();
-    window.__privacyOn = next;
     try{ localStorage.setItem(PRIVACY_FLAG_KEY, next ? '1' : '0'); }catch(e){}
+    window.__privacyOn = next;
     try{
       if(typeof state !== 'undefined' && state){
         if(!state.settings) state.settings = {};
@@ -2227,8 +2236,7 @@ function togglePrivacyBtn(){
     }catch(e){}
     privacyApplyUi(next);
     try{
-      if(typeof showToast === 'function') showToast(next ? 'Valores ocultos (R$ ••••)' : 'Valores visíveis');
-      else if(typeof renderDashboard !== 'function'){ /* silent */ }
+      if(typeof showToast === 'function') showToast(next ? 'Valores ocultos (R$ ••••)' : 'Valores visíveis de novo');
     }catch(e){}
     try{
       const active = document.querySelector('.view.active');
@@ -2300,11 +2308,15 @@ document.addEventListener('click', function(ev){
     if(id==='cfg-pin-save'){
       ev.preventDefault();
       try{
-        const a = ((document.getElementById('cfg-pin-new')||{}).value || '').trim();
-        const b = ((document.getElementById('cfg-pin-confirm')||{}).value || '').trim();
-        if(!/^\d{4,8}$/.test(a)){ alert('PIN deve ter 4 a 8 números.'); return; }
-        if(a !== b){ alert('Confirmação diferente do PIN.'); return; }
-        // hash simples + grava direto
+        // iOS às vezes coloca espaço/autofill — usa só os dígitos
+        const dig = (s)=> String(s||'').replace(/\D/g,'');
+        const a = dig((document.getElementById('cfg-pin-new')||{}).value);
+        const b = dig((document.getElementById('cfg-pin-confirm')||{}).value);
+        if(a.length < 4 || a.length > 8){
+          alert('PIN deve ter 4 a 8 números.\nVocê digitou '+a.length+' dígito(s) no primeiro campo'+(b.length!==a.length?' e '+b.length+' no segundo':'')+'.');
+          return;
+        }
+        if(a !== b){ alert('Confirmação diferente do PIN.\nDigite o mesmo código nos dois campos.'); return; }
         let h = 2166136261;
         const s = 'mci:'+a;
         for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
@@ -2315,7 +2327,7 @@ document.addEventListener('click', function(ev){
         const n = document.getElementById('cfg-pin-new'); if(n) n.value='';
         const c = document.getElementById('cfg-pin-confirm'); if(c) c.value='';
         if(typeof window.updatePinStatusUI === 'function') try{ window.updatePinStatusUI(); }catch(e){}
-        alert('PIN salvo. Feche a aba e abra de novo o site — deve pedir o PIN.');
+        alert('PIN salvo ('+a.length+' dígitos). Feche a aba e abra de novo — deve pedir o PIN.');
       }catch(err){ alert('Erro PIN: '+(err.message||err)); }
       return;
     }
@@ -2901,7 +2913,8 @@ function initials(name){
 }
 
 function fmtBRL(v){
-  if(privacyIsOn() || (state && state.settings && state.settings.hideAmounts) || window.__privacyOn){
+  // só uma fonte de verdade — evita ficar preso em R$ ••••
+  if(privacyIsOn()){
     return 'R$ ••••';
   }
   const n = Number(v);
@@ -11973,17 +11986,21 @@ function gistSaveCredsClick(){
 }
 function saveAppPinClick(){
   try{
-    const a = ((document.getElementById('cfg-pin-new')||{}).value || '').trim();
-    const b = ((document.getElementById('cfg-pin-confirm')||{}).value || '').trim();
-    if(!/^\d{4,8}$/.test(a)){ alert('PIN deve ter 4 a 8 números.'); return; }
-    if(a !== b){ alert('Confirmação diferente do PIN.'); return; }
+    const dig = (s)=> String(s||'').replace(/\D/g,'');
+    const a = dig((document.getElementById('cfg-pin-new')||{}).value);
+    const b = dig((document.getElementById('cfg-pin-confirm')||{}).value);
+    if(a.length < 4 || a.length > 8){
+      alert('PIN deve ter 4 a 8 números.\nVocê digitou '+a.length+' dígito(s) no 1º campo'+(b.length!==a.length?' e '+b.length+' no 2º':'')+'.');
+      return;
+    }
+    if(a !== b){ alert('Confirmação diferente do PIN.\nDigite o mesmo código nos dois campos.'); return; }
     setAppPin(a);
     if(!hasAppPin()){ alert('Não consegui gravar o PIN neste aparelho.'); return; }
     const n = document.getElementById('cfg-pin-new'); if(n) n.value='';
     const c = document.getElementById('cfg-pin-confirm'); if(c) c.value='';
     updatePinStatusUI();
-    showToast('PIN salvo. Na próxima abertura do app será pedido.');
-    alert('PIN salvo com sucesso.\nNa próxima vez que abrir o app, será pedido este código.');
+    showToast('PIN salvo.');
+    alert('PIN salvo ('+a.length+' dígitos).\nFeche a aba e abra de novo — deve pedir o código.');
   }catch(e){ console.error(e); alert('Erro ao salvar PIN: '+(e.message||e)); }
 }
 function clearAppPinClick(){
