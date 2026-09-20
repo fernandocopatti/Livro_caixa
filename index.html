@@ -860,11 +860,12 @@
 
   /* ---------- Privacidade (canto inferior esquerdo) ---------- */
   #privacy-toggle{
-    position:fixed;left:16px;bottom:20px;z-index:95;
+    position:fixed;left:16px;bottom:20px;z-index:250;
     border:1px solid var(--line);background:rgba(18,26,29,.92);color:var(--ink);
     border-radius:999px;padding:8px 14px;font-size:12.5px;cursor:pointer;
     display:flex;align-items:center;gap:6px;box-shadow:0 4px 16px rgba(0,0,0,.3);
     font-family:var(--font-body);backdrop-filter:blur(8px);
+    -webkit-tap-highlight-color:transparent;touch-action:manipulation;
   }
   #privacy-toggle:hover{background:var(--surface-2);}
   body.privacy-on #privacy-toggle{border-color:var(--accent);color:var(--accent);}
@@ -2222,11 +2223,13 @@ function togglePrivacyBtn(){
     }catch(e){}
     privacyApplyUi(next);
     try{
-      if(typeof renderDashboard === 'function'){
-        const active = document.querySelector('.view.active');
-        if(active && active.id === 'view-dashboard') renderDashboard();
-        if(active && active.id === 'view-transactions' && typeof renderTransactions === 'function') renderTransactions(false);
-      }
+      if(typeof showToast === 'function') showToast(next ? 'Valores ocultos (R$ ••••)' : 'Valores visíveis');
+      else if(typeof renderDashboard !== 'function'){ /* silent */ }
+    }catch(e){}
+    try{
+      const active = document.querySelector('.view.active');
+      if(active && active.id === 'view-dashboard' && typeof renderDashboard === 'function') renderDashboard();
+      if(active && active.id === 'view-transactions' && typeof renderTransactions === 'function') renderTransactions(false);
     }catch(e){}
   }catch(e){
     console.error(e);
@@ -6052,10 +6055,24 @@ function updateBulkBar(){
 var txListPage = 0;
 var TX_PAGE_SIZE = 80;
 function renderTransactions(resetPage){
+  try{
   if(resetPage) txListPage = 0;
-  fillMonthFilter();
-  fillTypeFilter();
-  fillAccountSuggestions();
+  // banner cedo — mesmo se o resto falhar o usuário vê o total
+  try{
+    const bannerEarly = document.getElementById('tx-count-banner');
+    const nEarly = (state && Array.isArray(state.transactions)) ? state.transactions.length : 0;
+    if(bannerEarly){
+      bannerEarly.innerHTML = nEarly
+        ? ('<strong style="color:var(--ink);">'+nEarly+'</strong> lançamentos na memória'
+          + ' · <a href="#" id="tx-scan-storage" style="color:var(--accent);">procurar backups neste navegador</a>')
+        : ('Nenhum lançamento na memória · <a href="#" id="tx-scan-storage" style="color:var(--accent);">procurar backups neste navegador</a>');
+      const sc = document.getElementById('tx-scan-storage');
+      if(sc) sc.onclick = function(e){ e.preventDefault(); scanAndOfferLocalBackups(); };
+    }
+  }catch(e){}
+  try{ fillMonthFilter(); }catch(e){ console.warn(e); }
+  try{ fillTypeFilter(); }catch(e){ console.warn(e); }
+  try{ fillAccountSuggestions(); }catch(e){ console.warn(e); }
   const monthEl = document.getElementById('filter-month');
   const fromEl = document.getElementById('filter-from');
   const toEl = document.getElementById('filter-to');
@@ -6193,8 +6210,50 @@ function renderTransactions(resetPage){
     });
   });
   try{ updateBulkBar(); }catch(e){}
+  }catch(err){
+    console.error('renderTransactions', err);
+    const container = document.getElementById('transactions-list');
+    if(container) container.innerHTML = '<div class="empty-state">Erro ao montar a lista: '+(err.message||err)+'</div>';
+    const banner = document.getElementById('tx-count-banner');
+    if(banner) banner.textContent = 'Erro na lista — toque em “procurar backups neste navegador”.';
+  }
 }
 window.renderTransactions = renderTransactions;
+
+function scanAndOfferLocalBackups(){
+  try{
+    const found = [];
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(!k || k.indexOf(STORAGE_KEY_BASE) !== 0) continue;
+      try{
+        const raw = localStorage.getItem(k);
+        if(!raw || raw.length < 20) continue;
+        const p = JSON.parse(raw);
+        const n = Array.isArray(p.transactions) ? p.transactions.length : 0;
+        if(n > 0) found.push({ key:k, count:n, bytes: raw.length });
+      }catch(e){}
+    }
+    found.sort((a,b)=> b.count - a.count);
+    if(!found.length){
+      alert('Não achei nenhum backup com lançamentos neste navegador.\n\nVá em Config → GitHub → Sincronizar → Trazer este (backup do iPhone).');
+      return;
+    }
+    const lines = found.map((f,i)=> (i+1)+') '+f.count+' lanç. · chave: '+f.key.replace(STORAGE_KEY_BASE,'').slice(0,40)+' · '+(Math.round(f.bytes/1024))+' KB').join('\n');
+    const pick = prompt('Encontrei dados salvos neste navegador:\n\n'+lines+'\n\nDigite o número para CARREGAR nesse perfil (substitui a lista atual):','1');
+    const idx = parseInt(pick,10)-1;
+    if(isNaN(idx) || idx < 0 || idx >= found.length) return;
+    const raw = localStorage.getItem(found[idx].key);
+    const parsed = JSON.parse(raw);
+    applyImportedBackup(parsed);
+    alert('Carregados '+found[idx].count+' lançamentos da chave local.\nAbra Lançamentos de novo se a lista não atualizar.');
+    try{ goToView('transactions'); }catch(e){ renderTransactions(true); }
+  }catch(e){
+    console.error(e);
+    alert('Falha ao procurar: '+(e.message||e));
+  }
+}
+window.scanAndOfferLocalBackups = scanAndOfferLocalBackups;
 
 document.getElementById('select-all-chk').addEventListener('change', (e)=>{
   if(e.target.checked) currentTxList.forEach(t=>selectedIds.add(t.id));
@@ -11555,10 +11614,11 @@ function goToView(view){
     document.querySelectorAll('.view').forEach(v=> v.classList.remove('active'));
     const el = document.getElementById('view-'+view);
     if(el) el.classList.add('active');
+    else { console.warn('view não encontrada', view); }
 
     // dispara a mesma lógica de conteúdo do menu lateral
     if(view==='dashboard'){ try{ renderDashboard(); }catch(e){ console.warn(e); } }
-    if(view==='transactions'){ try{ renderTransactions(); }catch(e){ console.warn(e); } }
+    if(view==='transactions'){ try{ renderTransactions(true); }catch(e){ console.warn(e); alert('Erro ao abrir lançamentos: '+(e.message||e)); } }
     if(view==='import'){
       try{
         const p = state.importPrefs || {};
