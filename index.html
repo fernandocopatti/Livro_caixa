@@ -1583,7 +1583,8 @@
           <div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);">
             <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;">PIN / bloqueio local</div>
             <p style="font-size:12px;color:var(--ink-dim);line-height:1.4;margin:0 0 10px;">
-              Mantém a conta Google salva neste aparelho. Com PIN, ao abrir o app você só digita o código (sem entrar no Google de novo). Biometria nativa pode ser ligada numa próxima versão.
+              Mantém a conta Google salva neste aparelho. Com PIN, ao abrir o app você só digita o código (sem entrar no Google de novo).
+              <strong>No iPhone:</strong> precisa manter o mesmo navegador (Safari ou Chrome) e não usar aba anônima.
             </p>
             <p id="pin-status" style="font-size:12px;color:var(--ink-faint);margin:0 0 8px;"></p>
             <div class="form-grid">
@@ -1605,7 +1606,8 @@
             <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;">Google Drive</div>
             <p style="font-size:12.5px;color:var(--ink-dim);line-height:1.45;margin:0 0 10px;">
               Envia ou recupera o backup JSON no seu Drive (arquivo <strong>Livro-Caixa-backup.json</strong>).
-              Ative a API Google Drive no mesmo projeto do Client ID.
+              <strong>Não dá para conectar ao Drive sem o Google Cloud Console</strong> — o Google exige um Client ID OAuth.
+              Alternativa prática (sem Cloud Console): use o <strong>GitHub Gist</strong> acima, ou <strong>Exportar backup</strong> e salve o arquivo no app Drive manualmente.
             </p>
             <div id="drive-status" style="font-size:12px;color:var(--ink-faint);margin-bottom:10px;">Drive não conectado.</div>
             <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
@@ -5986,24 +5988,30 @@ function updateBulkBar(){
   }
 }
 
-function renderTransactions(){
+var txListPage = 0;
+var TX_PAGE_SIZE = 80;
+function renderTransactions(resetPage){
+  if(resetPage) txListPage = 0;
   fillMonthFilter();
   fillTypeFilter();
   fillAccountSuggestions();
-  const month = document.getElementById('filter-month').value;
-  const from = document.getElementById('filter-from').value;
-  const to = document.getElementById('filter-to').value;
-  const type = document.getElementById('filter-type').value;
-  const cat = document.getElementById('filter-category').value;
+  const monthEl = document.getElementById('filter-month');
+  const fromEl = document.getElementById('filter-from');
+  const toEl = document.getElementById('filter-to');
+  const month = monthEl ? monthEl.value : '';
+  const from = fromEl ? fromEl.value : '';
+  const to = toEl ? toEl.value : '';
+  const type = (document.getElementById('filter-type')||{}).value || '';
+  const cat = (document.getElementById('filter-category')||{}).value || '';
   const subFilter = (document.getElementById('filter-subcategory')||{}).value || '';
-  const source = document.getElementById('filter-source').value;
+  const source = (document.getElementById('filter-source')||{}).value || '';
   const importedMode = (document.getElementById('filter-imported')||{}).value || '';
   const importedDate = (document.getElementById('filter-imported-date')||{}).value || '';
-  const account = document.getElementById('filter-account').value;
+  const account = (document.getElementById('filter-account')||{}).value || '';
   const tagFilter = (document.getElementById('filter-tag')||{}).value || '';
-  const search = document.getElementById('filter-search').value.trim().toLowerCase();
+  const search = ((document.getElementById('filter-search')||{}).value || '').trim().toLowerCase();
 
-  let list = state.transactions.slice();
+  let list = (state && state.transactions) ? state.transactions.slice() : [];
   // Se há mês selecionado e NÃO há intervalo manual, filtra pelo mês.
   // (from/to só têm prioridade quando o usuário preencheu explicitamente)
   if(month && !from && !to){
@@ -6068,8 +6076,27 @@ function renderTransactions(){
   }
 
   const container = document.getElementById('transactions-list');
-  container.innerHTML = list.length ? list.map(t=>rowHTML(t, true)).join('') :
-    '<div class="empty-state">Nada neste filtro. Limpe o período ou a conta, ou amplie as datas.</div>';
+  if(!container) return;
+  const totalAll = (state.transactions||[]).length;
+  if(!list.length){
+    container.innerHTML = '<div class="empty-state">Nada neste filtro ('+totalAll+' no total no aparelho). Limpe o período ou toque em “Todo período”.</div>';
+    updateBulkBar();
+    return;
+  }
+  const totalPages = Math.max(1, Math.ceil(list.length / TX_PAGE_SIZE));
+  if(txListPage >= totalPages) txListPage = totalPages - 1;
+  if(txListPage < 0) txListPage = 0;
+  const start = txListPage * TX_PAGE_SIZE;
+  const pageSlice = list.slice(start, start + TX_PAGE_SIZE);
+  const pager = totalPages > 1
+    ? ('<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;margin:10px 0 14px;font-size:12.5px;color:var(--ink-dim);">'
+      + '<span>Mostrando '+(start+1)+'–'+(start+pageSlice.length)+' de '+list.length+(totalAll!==list.length?' (filtro; total '+totalAll+')':'')+'</span>'
+      + '<span style="display:flex;gap:8px;">'
+      + '<button type="button" class="btn ghost" style="padding:6px 12px;font-size:12px;" onclick="txListPage=Math.max(0,txListPage-1);renderTransactions(false);">← Anterior</button>'
+      + '<button type="button" class="btn ghost" style="padding:6px 12px;font-size:12px;" onclick="txListPage=Math.min('+(totalPages-1)+',txListPage+1);renderTransactions(false);">Próxima →</button>'
+      + '</span></div>')
+    : ('<div style="font-size:12px;color:var(--ink-faint);margin:0 0 10px;">'+list.length+' lançamento'+(list.length===1?'':'s')+(totalAll!==list.length?' no filtro (total '+totalAll+')':'')+'</div>');
+  container.innerHTML = pager + pageSlice.map(t=>rowHTML(t, true)).join('');
   attachRowHandlers(container);
   container.querySelectorAll('.row-select-chk').forEach(chk=>{
     chk.addEventListener('click', e=> e.stopPropagation());
@@ -6081,6 +6108,7 @@ function renderTransactions(){
   });
   updateBulkBar();
 }
+window.renderTransactions = renderTransactions;
 
 document.getElementById('select-all-chk').addEventListener('change', (e)=>{
   if(e.target.checked) currentTxList.forEach(t=>selectedIds.add(t.id));
@@ -9745,7 +9773,23 @@ async function gistSyncSmart(){
 }
 
 
+function clearTransactionFilters(){
+  const ids = ['filter-month','filter-from','filter-to','filter-type','filter-category','filter-subcategory','filter-source','filter-imported','filter-imported-date','filter-account','filter-search','filter-amount-min','filter-amount-max','filter-tag'];
+  ids.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    if(el.tagName === 'SELECT' || el.tagName === 'INPUT') el.value = '';
+  });
+  txListPage = 0;
+}
 function applyImportedBackup(parsed){
+  // aceita backup aninhado { state: { transactions } } ou direto
+  if(parsed && !Array.isArray(parsed.transactions) && parsed.state && Array.isArray(parsed.state.transactions)){
+    parsed = parsed.state;
+  }
+  if(parsed && !Array.isArray(parsed.transactions) && Array.isArray(parsed.data && parsed.data.transactions)){
+    parsed = parsed.data;
+  }
   normalizeLoadedState(parsed);
   // grava na hora (sem debounce) — senão fechar a aba perde os dados
   try{
@@ -9760,14 +9804,17 @@ function applyImportedBackup(parsed){
     throw e;
   }
   try{ saveState(); }catch(e){}
+  try{ clearTransactionFilters(); }catch(e){}
   try{ document.getElementById('type-toggle').innerHTML = typeToggleHTML('despesa'); }catch(e){}
   try{ fillCategorySelects(); }catch(e){}
   try{ fillAccountSuggestions(); }catch(e){}
+  try{ fillMonthFilter(); }catch(e){}
   try{ renderDashboard(); }catch(e){}
-  try{ renderTransactions(); }catch(e){}
+  try{ renderTransactions(true); }catch(e){}
   try{ renderCategoriesView(); }catch(e){}
   try{ renderRecurringList(); }catch(e){}
   try{ renderTypesList(); }catch(e){}
+  try{ if(typeof goToView === 'function') goToView('transactions'); }catch(e){}
 }
 
 document.getElementById('export-backup-btn').addEventListener('click', ()=>{
@@ -10888,14 +10935,22 @@ document.getElementById('m-amount') && document.getElementById('m-amount').addEv
 
 function togglePrivacyBtn(){
   try{
-    setPrivacy(!isPrivacyOn(), true);
+    if(!state) state = { settings: {}, transactions: [] };
+    if(!state.settings) state.settings = {};
+    const next = !isPrivacyOn();
+    setPrivacy(next, true);
+    // feedback imediato no botão
+    const btn = document.getElementById('privacy-toggle');
+    if(btn) btn.textContent = next ? '👁 Mostrar valores' : '👁 Ocultar valores';
   }catch(e){
     console.error(e);
     try{ alert('Erro ao alternar valores: '+(e.message||e)); }catch(err){}
   }
 }
 window.togglePrivacyBtn = togglePrivacyBtn;
-document.getElementById('privacy-toggle') && document.getElementById('privacy-toggle').addEventListener('click', ()=>{
+document.getElementById('privacy-toggle') && document.getElementById('privacy-toggle').addEventListener('click', (ev)=>{
+  ev.preventDefault();
+  ev.stopPropagation();
   togglePrivacyBtn();
 });
 
@@ -11807,9 +11862,11 @@ function clearAppPinClick(){
 function updatePinStatusUI(){
   const el = document.getElementById('pin-status');
   if(!el) return;
-  el.textContent = hasAppPin()
-    ? 'PIN ativo — ao abrir o app você desbloqueia com o código (sessão Google permanece).'
-    : 'Nenhum PIN — a sessão salva entra direto (recomendado definir um PIN se outras pessoas usam o celular).';
+  let on = false;
+  try{ on = !!(localStorage.getItem(APP_PIN_KEY)); }catch(e){}
+  el.textContent = on
+    ? 'PIN ativo neste navegador — ao reabrir esta URL deve pedir o código.'
+    : 'Nenhum PIN gravado neste navegador. Após salvar, feche a aba e abra de novo (mesmo Safari/Chrome, sem aba anônima).';
 }
 function showPinUnlock(){
   const box = document.getElementById('pin-unlock');
