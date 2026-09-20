@@ -1559,7 +1559,7 @@
               <label>Google OAuth Client ID (Web)</label>
               <input type="text" id="cfg-google-client-id" placeholder="xxx.apps.googleusercontent.com">
             </div>
-            <button type="button" class="btn secondary" id="cfg-save-google-client" style="padding:8px 14px;">Salvar Client ID</button>
+            <button type="button" class="btn secondary" id="cfg-save-google-client" data-action="save-google-client" onclick="saveGoogleClientClick()" style="padding:8px 14px;">Salvar Client ID</button>
             <p style="font-size:11.5px;color:var(--ink-faint);margin:8px 0 0;line-height:1.4;">Só altere se souber o que está fazendo. O app já vem com o Client ID padrão.</p>
           </details>
           <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
@@ -1712,7 +1712,7 @@
           <div class="field"><label>Já guardado (R$)</label><input type="number" id="new-goal-current" step="0.01" min="0" value="0"></div>
           <div class="field"><label>Prazo (opcional)</label><input type="date" id="new-goal-deadline"></div>
         </div>
-        <div class="btn-row" style="margin-top:10px;"><button type="button" class="btn secondary" id="new-goal-btn" style="padding:8px 16px;">Adicionar objetivo</button></div>
+        <div class="btn-row" style="margin-top:10px;"><button type="button" class="btn secondary" id="new-goal-btn" data-action="save-goal" onclick="saveNewGoalClick()" style="padding:8px 16px;">Adicionar objetivo</button></div>
       </div>
 
       <div class="card" style="margin-bottom:18px;" id="debts-config-card">
@@ -1725,7 +1725,7 @@
           <div class="field"><label>Parcela mensal (R$)</label><input type="number" id="new-debt-installment" step="0.01" min="0"></div>
           <div class="field"><label>Vence todo dia</label><input type="number" id="new-debt-dueday" min="1" max="28" placeholder="10"></div>
         </div>
-        <div class="btn-row" style="margin-top:10px;"><button type="button" class="btn secondary" id="new-debt-btn" style="padding:8px 16px;">Adicionar dívida</button></div>
+        <div class="btn-row" style="margin-top:10px;"><button type="button" class="btn secondary" id="new-debt-btn" data-action="save-debt" onclick="saveNewDebtClick()" style="padding:8px 16px;">Adicionar dívida</button></div>
       </div>
 
       <div class="card" style="margin-bottom:18px;" id="reminders-config-card">
@@ -1861,11 +1861,11 @@
           Nos dois aparelhos: <strong>mesmo token</strong> + <strong>mesmo Gist ID</strong>. O nome aparece no backup para saber de qual dispositivo veio.
         </p>
         <div class="btn-row" style="margin-top:8px;flex-wrap:wrap;gap:8px;">
-          <button type="button" class="btn secondary" id="gist-save-creds" style="padding:8px 14px;">Salvar token / ID / aparelho</button>
-          <button type="button" class="btn" id="gist-sync-smart" style="padding:8px 14px;">Sincronizar (comparar)</button>
-          <button type="button" class="btn ghost" id="gist-test-conn" style="padding:8px 14px;">Testar conexão</button>
-          <button type="button" class="btn secondary" id="gist-upload" style="padding:8px 14px;">Enviar backup ao GitHub</button>
-          <button type="button" class="btn secondary" id="gist-download" style="padding:8px 14px;">Baixar do GitHub e restaurar</button>
+          <button type="button" class="btn secondary" id="gist-save-creds" data-action="gist-save" onclick="gistSaveCredsClick()" style="padding:8px 14px;">Salvar token / ID / aparelho</button>
+          <button type="button" class="btn" id="gist-sync-smart" data-action="gist-sync" onclick="gistSyncSmartClick()" style="padding:8px 14px;">Sincronizar (comparar)</button>
+          <button type="button" class="btn ghost" id="gist-test-conn" data-action="gist-test" onclick="gistTestConnClick()" style="padding:8px 14px;">Testar conexão</button>
+          <button type="button" class="btn secondary" id="gist-upload" data-action="gist-upload" onclick="gistUploadClick()" style="padding:8px 14px;">Enviar backup ao GitHub</button>
+          <button type="button" class="btn secondary" id="gist-download" data-action="gist-download" onclick="gistDownloadClick()" style="padding:8px 14px;">Baixar do GitHub e restaurar</button>
         </div>
         <div id="gist-compare-box" style="display:none;margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);font-size:13px;color:var(--ink-dim);line-height:1.5;"></div>
         <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;margin-top:14px;">
@@ -2135,6 +2135,42 @@
 /* Client ID Google — definido cedo para evitar erro "before initialization" no navegador */
 window.GOOGLE_WEB_CLIENT_ID = '366921253291-47ra3dkdid71dr2kvr8a3ac4v7b77t5s.apps.googleusercontent.com';
 var GOOGLE_WEB_CLIENT_ID = window.GOOGLE_WEB_CLIENT_ID;
+
+/* Cliques de Config em captura: funcionam mesmo se algum erro JS ocorrer mais abaixo */
+document.addEventListener('click', function(ev){
+  try{
+    const el = ev.target && ev.target.closest ? ev.target.closest('button, a, [data-action]') : null;
+    if(!el) return;
+    const id = el.id || '';
+    const act = el.getAttribute('data-action') || '';
+    const run = (name, fn)=>{
+      try{
+        if(typeof window[name] === 'function'){ window[name](); return true; }
+        if(typeof fn === 'function'){ fn(); return true; }
+      }catch(err){ console.error(name, err); try{ alert('Erro em '+name+': '+(err.message||err)); }catch(e){} }
+      return false;
+    };
+    if(id==='btn-reload-app' || act==='reload-app'){ ev.preventDefault(); run('reloadAppClick', function(){ location.reload(); }); return; }
+    if(id==='cfg-save-closed-until' || act==='save-closed'){ ev.preventDefault(); run('saveClosedUntilClick'); return; }
+    if(id==='cfg-clear-closed-until' || act==='clear-closed'){ ev.preventDefault(); run('clearClosedUntilClick'); return; }
+    if(id==='reduction-save-btn' || act==='save-reduction'){ ev.preventDefault(); run('saveReductionClick'); return; }
+    if(id==='new-limit-btn' || act==='save-limit'){ ev.preventDefault(); run('saveNewLimitClick'); return; }
+    if(id==='new-account-btn' || act==='save-account'){ ev.preventDefault(); run('saveNewAccountClick'); return; }
+    if(id==='ir-save-params' || act==='save-ir'){ ev.preventDefault(); run('saveIrParamsClick'); return; }
+    if(id==='export-backup-btn' || act==='export-backup'){ ev.preventDefault(); run('exportBackupClick'); return; }
+    if(id==='import-backup-btn' || act==='import-backup'){ ev.preventDefault(); run('importBackupClick'); return; }
+    if(id==='btn-logout' || act==='logout'){ ev.preventDefault(); run('logoutAccount'); return; }
+    if(id==='privacy-toggle' || act==='privacy'){ ev.preventDefault(); run('togglePrivacyBtn'); return; }
+    if(id==='gist-save-creds' || act==='gist-save'){ ev.preventDefault(); run('gistSaveCredsClick'); return; }
+    if(id==='gist-sync-smart' || act==='gist-sync'){ ev.preventDefault(); run('gistSyncSmartClick'); return; }
+    if(id==='gist-test-conn' || act==='gist-test'){ ev.preventDefault(); run('gistTestConnClick'); return; }
+    if(id==='gist-upload' || act==='gist-upload'){ ev.preventDefault(); run('gistUploadClick'); return; }
+    if(id==='gist-download' || act==='gist-download'){ ev.preventDefault(); run('gistDownloadClick'); return; }
+    if(id==='cfg-save-google-client' || act==='save-google-client'){ ev.preventDefault(); run('saveGoogleClientClick'); return; }
+    if(id==='new-goal-btn' || act==='save-goal'){ ev.preventDefault(); run('saveNewGoalClick'); return; }
+    if(id==='new-debt-btn' || act==='save-debt'){ ev.preventDefault(); run('saveNewDebtClick'); return; }
+  }catch(e){ console.error('config click bridge', e); }
+}, true);
 
 /* ============================================================
    ESTADO E ARMAZENAMENTO
@@ -11115,11 +11151,16 @@ async function init(){
     if(!view) return;
     // cards diretos e dentro de .view-head / .dash-cols
     const cards = view.querySelectorAll('.card');
-    const openIds = new Set(['auth-config-card','pro-config-card','github-gist-card']);
+    // deixa abertos os blocos mais usados (backup, metas, gist, conta)
+    const openIds = new Set(['auth-config-card','pro-config-card','github-gist-card','lock-config-card','limits-section','accounts-config-card']);
+    // também abre card que contém export de backup
     cards.forEach(card => {
-      // não dobrar cards minúsculos sem conteúdo útil
+      if(card.querySelector('#export-backup-btn, #reduction-save-btn, #monthly-goal-input')) openIds.add(card.id || '');
+    });
+    cards.forEach(card => {
       if(card.children.length < 1) return;
-      foldCard(card, openIds.has(card.id));
+      const forceOpen = openIds.has(card.id) || !!card.querySelector('#export-backup-btn, #reduction-save-btn, #monthly-goal-input, #gist-save-creds, #cfg-save-closed-until');
+      foldCard(card, forceOpen);
     });
   }
 
@@ -11447,6 +11488,123 @@ window.saveNewAccountClick = saveNewAccountClick;
 window.saveIrParamsClick = saveIrParamsClick;
 window.exportBackupClick = exportBackupClick;
 window.importBackupClick = importBackupClick;
+
+function gistSaveCredsClick(){
+  try{
+    const t = ((document.getElementById('gist-token')||{}).value || '').trim();
+    const id = ((document.getElementById('gist-id')||{}).value || '').trim();
+    const dn = ((document.getElementById('gist-device-name')||{}).value || '').trim();
+    setGistToken(t);
+    setGistId(id);
+    setDeviceName(dn);
+    getOrCreateDeviceId();
+    refreshGistUI();
+    showToast(t ? 'Credenciais Gist salvas neste aparelho.' : 'Token removido.');
+  }catch(e){ console.error(e); alert('Erro ao salvar Gist: '+(e.message||e)); }
+}
+function gistTestConnClick(){
+  try{
+    const t = ((document.getElementById('gist-token')||{}).value || '').trim();
+    const id = ((document.getElementById('gist-id')||{}).value || '').trim();
+    const dn = ((document.getElementById('gist-device-name')||{}).value || '').trim();
+    if(t) setGistToken(t);
+    if(id) setGistId(id);
+    if(dn) setDeviceName(dn);
+    testGistConnection();
+  }catch(e){ console.error(e); alert('Erro ao testar: '+(e.message||e)); }
+}
+function gistSyncSmartClick(){
+  try{
+    const t = ((document.getElementById('gist-token')||{}).value || '').trim();
+    const id = ((document.getElementById('gist-id')||{}).value || '').trim();
+    const dn = ((document.getElementById('gist-device-name')||{}).value || '').trim();
+    if(t) setGistToken(t);
+    if(id) setGistId(id);
+    if(dn) setDeviceName(dn);
+    gistSyncSmart();
+  }catch(e){ console.error(e); alert('Erro ao sincronizar: '+(e.message||e)); }
+}
+async function gistUploadClick(){
+  try{
+    const t = ((document.getElementById('gist-token')||{}).value || '').trim() || getGistToken();
+    if(t) setGistToken(t);
+    const id = ((document.getElementById('gist-id')||{}).value || '').trim();
+    if(id) setGistId(id);
+    if(!getGistToken()){ showToast('Cole o token GitHub e salve.'); return; }
+    await uploadBackupToGist();
+  }catch(err){
+    console.error(err);
+    const em = (typeof explainGistFetchError==='function') ? explainGistFetchError(err) : (err.message||err);
+    try{ updateGistStatus('Erro: '+em); }catch(e){}
+    showToast('Falha ao enviar: '+em);
+  }
+}
+async function gistDownloadClick(){
+  try{
+    const t = ((document.getElementById('gist-token')||{}).value || '').trim() || getGistToken();
+    if(t) setGistToken(t);
+    const id = ((document.getElementById('gist-id')||{}).value || '').trim();
+    if(id) setGistId(id);
+    if(!getGistToken()){ showToast('Cole o token GitHub e salve.'); return; }
+    if(!getGistId()){ showToast('Informe o Gist ID.'); return; }
+    const parsed = await downloadBackupFromGist();
+    if(parsed && typeof applyImportedBackup === 'function'){
+      applyImportedBackup(parsed);
+    } else if(parsed){
+      showToast('Backup baixado.');
+    }
+  }catch(err){
+    console.error(err);
+    const em = (typeof explainGistFetchError==='function') ? explainGistFetchError(err) : (err.message||err);
+    showToast('Falha ao baixar: '+em);
+  }
+}
+function saveGoogleClientClick(){
+  try{
+    const id = ((document.getElementById('cfg-google-client-id')||{}).value || '').trim();
+    setSavedGoogleClientId(id);
+    showToast(id ? 'Client ID salvo.' : 'Client ID limpo.');
+  }catch(e){ console.error(e); }
+}
+function saveNewGoalClick(){
+  try{
+    if(typeof requirePro === 'function' && !requirePro('Metas financeiras')) return;
+    const name = ((document.getElementById('new-goal-name')||{}).value || '').trim();
+    const target = parseFloat((document.getElementById('new-goal-target')||{}).value);
+    const current = parseFloat((document.getElementById('new-goal-current')||{}).value) || 0;
+    const deadline = ((document.getElementById('new-goal-deadline')||{}).value) || null;
+    if(!name || !target || target<=0){ showToast('Informe nome e meta.'); return; }
+    state.goals = state.goals || [];
+    state.goals.push({ id: uid(), name, target, current, deadline });
+    saveState();
+    try{ renderGoalsConfig(); }catch(e){}
+    showToast('Objetivo adicionado.');
+  }catch(e){ console.error(e); alert('Erro: '+(e.message||e)); }
+}
+function saveNewDebtClick(){
+  try{
+    const name = ((document.getElementById('new-debt-name')||{}).value || '').trim();
+    const total = parseFloat((document.getElementById('new-debt-total')||{}).value);
+    const remaining = parseFloat((document.getElementById('new-debt-remaining')||{}).value);
+    const installment = parseFloat((document.getElementById('new-debt-installment')||{}).value);
+    const dueDay = parseInt((document.getElementById('new-debt-dueday')||{}).value, 10);
+    if(!name){ showToast('Informe o nome da dívida.'); return; }
+    state.debts = state.debts || [];
+    state.debts.push({ id: uid(), name, total: total||0, remaining: remaining||total||0, installment: installment||0, dueDay: dueDay||null });
+    saveState();
+    try{ renderDebtsConfig(); }catch(e){}
+    showToast('Dívida adicionada.');
+  }catch(e){ console.error(e); alert('Erro: '+(e.message||e)); }
+}
+window.gistSaveCredsClick = gistSaveCredsClick;
+window.gistTestConnClick = gistTestConnClick;
+window.gistSyncSmartClick = gistSyncSmartClick;
+window.gistUploadClick = gistUploadClick;
+window.gistDownloadClick = gistDownloadClick;
+window.saveGoogleClientClick = saveGoogleClientClick;
+window.saveNewGoalClick = saveNewGoalClick;
+window.saveNewDebtClick = saveNewDebtClick;
+
 function saveMonthlyGoalClick(){
   try{
     const g = parseFloat((document.getElementById('monthly-goal-input')||{}).value);
