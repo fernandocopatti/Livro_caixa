@@ -2190,6 +2190,10 @@ var PROFILES_KEY = 'lc-profiles';
 var STORAGE_KEY_BASE = 'finance-data';
 var confirmCallback = null; // no topo — evita TDZ no iOS ao restaurar backup
 var PRIVACY_FLAG_KEY = 'lc-privacy-on';
+var currentTxList = [];
+var selectedIds = new Set();
+var txListPage = 0;
+var TX_PAGE_SIZE = 80;
 
 /* Privacidade no topo — não depende de state nem do resto do script */
 function privacyIsOn(){
@@ -6032,8 +6036,7 @@ function attachRowHandlers(container){
 /* ============================================================
    LANÇAMENTOS (lista completa com filtros + seleção em massa)
    ============================================================ */
-let selectedIds = new Set();
-let currentTxList = [];
+// selectedIds / currentTxList já no topo (var) — evita TDZ no iOS
 
 function updateBulkBar(){
   const bar = document.getElementById('bulk-actions-bar');
@@ -6052,8 +6055,7 @@ function updateBulkBar(){
   }
 }
 
-var txListPage = 0;
-var TX_PAGE_SIZE = 80;
+// txListPage / TX_PAGE_SIZE já no topo
 function renderTransactions(resetPage){
   try{
   if(resetPage) txListPage = 0;
@@ -6130,7 +6132,7 @@ function renderTransactions(resetPage){
   if(amax != null && !isNaN(amax)) list = list.filter(t=> Number(t.amount) <= amax);
   list.sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt));
   currentTxList = list;
-  selectedIds = new Set();
+  selectedIds = new Set(); // limpa seleção ao filtrar
 
   // resumo dos filtros
   const sumEl = document.getElementById('filter-summary');
