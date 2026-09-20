@@ -2219,6 +2219,55 @@ document.addEventListener('click', function(ev){
     if(id==='cfg-save-google-client' || act==='save-google-client'){ ev.preventDefault(); run('saveGoogleClientClick'); return; }
     if(id==='new-goal-btn' || act==='save-goal'){ ev.preventDefault(); run('saveNewGoalClick'); return; }
     if(id==='new-debt-btn' || act==='save-debt'){ ev.preventDefault(); run('saveNewDebtClick'); return; }
+    // Modal confirmar / cancelar — tratado aqui (não depende do resto do script)
+    if(id==='confirm-modal-yes'){
+      ev.preventDefault(); ev.stopPropagation();
+      try{
+        const bg = document.getElementById('confirm-modal-bg');
+        if(bg) bg.classList.remove('active');
+        const cb = window.confirmCallback;
+        window.confirmCallback = null;
+        if(typeof cb === 'function') cb();
+        else if(typeof window.confirmModalYesClick === 'function') window.confirmModalYesClick();
+      }catch(err){ console.error(err); alert('Erro ao confirmar: '+(err.message||err)); }
+      return;
+    }
+    if(id==='confirm-modal-no'){
+      ev.preventDefault(); ev.stopPropagation();
+      try{
+        const bg = document.getElementById('confirm-modal-bg');
+        if(bg) bg.classList.remove('active');
+        window.confirmCallback = null;
+      }catch(err){}
+      return;
+    }
+    if(id==='cfg-pin-save'){
+      ev.preventDefault();
+      try{
+        const a = ((document.getElementById('cfg-pin-new')||{}).value || '').trim();
+        const b = ((document.getElementById('cfg-pin-confirm')||{}).value || '').trim();
+        if(!/^\d{4,8}$/.test(a)){ alert('PIN deve ter 4 a 8 números.'); return; }
+        if(a !== b){ alert('Confirmação diferente do PIN.'); return; }
+        // hash simples + grava direto
+        let h = 2166136261;
+        const s = 'mci:'+a;
+        for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+        const hash = 'h'+(h>>>0).toString(16);
+        localStorage.setItem(APP_PIN_KEY, hash);
+        const check = localStorage.getItem(APP_PIN_KEY);
+        if(check !== hash){ alert('Não foi possível gravar o PIN neste navegador.'); return; }
+        const n = document.getElementById('cfg-pin-new'); if(n) n.value='';
+        const c = document.getElementById('cfg-pin-confirm'); if(c) c.value='';
+        if(typeof window.updatePinStatusUI === 'function') try{ window.updatePinStatusUI(); }catch(e){}
+        alert('PIN salvo. Feche a aba e abra de novo o site — deve pedir o PIN.');
+      }catch(err){ alert('Erro PIN: '+(err.message||err)); }
+      return;
+    }
+    if(id==='cfg-pin-clear'){
+      ev.preventDefault();
+      try{ localStorage.removeItem(APP_PIN_KEY); alert('PIN removido.'); if(typeof window.updatePinStatusUI==='function') window.updatePinStatusUI(); }catch(err){}
+      return;
+    }
   }catch(e){ console.error('config click bridge', e); }
 }, true);
 
@@ -3189,29 +3238,29 @@ function confirmModalNoClick(){
 window.confirmModalYesClick = confirmModalYesClick;
 window.confirmModalNoClick = confirmModalNoClick;
 function askConfirm(title, text, onYes){
+  // Preferência: confirm nativo (funciona no iOS Safari/Chrome). Modal só se nativo falhar.
+  try{
+    if(window.confirm((title||'Confirmar')+'\n\n'+(text||''))){
+      if(typeof onYes === 'function') onYes();
+    }
+    return;
+  }catch(e){
+    console.error('askConfirm native', e);
+  }
   try{
     window.confirmCallback = onYes;
     confirmCallback = onYes;
     const modal = document.getElementById('confirm-modal-bg');
     const tEl = document.getElementById('confirm-modal-title');
     const xEl = document.getElementById('confirm-modal-text');
-    if(!modal || !tEl || !xEl){
-      if(window.confirm((title||'Confirmar')+'\n\n'+(text||''))){
-        confirmModalYesClick();
-      } else {
-        confirmModalNoClick();
-      }
+    if(modal && tEl && xEl){
+      tEl.textContent = title || 'Confirmar';
+      xEl.textContent = text || '';
+      modal.classList.add('active');
       return;
     }
-    tEl.textContent = title || 'Confirmar';
-    xEl.textContent = text || '';
-    modal.classList.add('active');
-  }catch(e){
-    console.error('askConfirm', e);
-    if(window.confirm((title||'Confirmar')+'\n\n'+(text||''))){
-      if(typeof onYes === 'function') onYes();
-    }
-  }
+  }catch(e2){ console.error('askConfirm modal', e2); }
+  if(typeof onYes === 'function') onYes();
 }
 // listeners de backup (além do onclick)
 document.getElementById('confirm-modal-yes') && document.getElementById('confirm-modal-yes').addEventListener('click', function(ev){
@@ -9654,18 +9703,21 @@ async function gistSyncSmart(){
             showToast('Backup inválido');
             return;
           }
-          askConfirm(
-            'Trazer backup',
-            'Substituir os dados deste aparelho pelo backup de “'+(d.deviceName||'?')+'” ('+(d.txCount!=null?d.txCount:parsed.transactions.length)+' lançamentos)?',
-            ()=>{
-              applyImportedBackup(parsed);
-              setLastLocalExportAt(parsed.exportedAt || new Date().toISOString());
-              updateGistStatus('Restaurado de '+ (d.deviceName||'') +' · '+parsed.transactions.length+' lanç.');
-              showGistCompareBox('');
-              showToast('Backup de '+(d.deviceName||'aparelho')+' aplicado.');
-              refreshGistUI();
-            }
-          );
+          const msg = "Substituir os dados deste aparelho pelo backup de \"" + (d.deviceName||"?") + "\" (" + (d.txCount!=null?d.txCount:parsed.transactions.length) + " lancamentos)?";
+          // confirm nativo no iOS é mais confiável que o modal custom
+          if(!window.confirm('Trazer backup\n\n'+msg)) return;
+          try{
+            applyImportedBackup(parsed);
+            setLastLocalExportAt(parsed.exportedAt || new Date().toISOString());
+            updateGistStatus('Restaurado de '+ (d.deviceName||'') +' · '+parsed.transactions.length+' lanç.');
+            showGistCompareBox('');
+            showToast('Backup de '+(d.deviceName||'aparelho')+' aplicado.');
+            refreshGistUI();
+            alert('Backup aplicado: '+parsed.transactions.length+' lançamentos.');
+          }catch(applyErr){
+            console.error(applyErr);
+            alert('Erro ao aplicar backup: '+(applyErr.message||applyErr));
+          }
         }catch(err){
           showToast('Falha: '+explainGistFetchError(err));
         }
@@ -9695,7 +9747,19 @@ async function gistSyncSmart(){
 
 function applyImportedBackup(parsed){
   normalizeLoadedState(parsed);
-  saveState();
+  // grava na hora (sem debounce) — senão fechar a aba perde os dados
+  try{
+    clearTimeout(saveTimer);
+    STORAGE_KEY = activeStorageKey();
+    const payload = JSON.stringify(state);
+    window.localStorage.setItem(STORAGE_KEY, payload);
+    const check = window.localStorage.getItem(STORAGE_KEY);
+    if(!check || check.length < 20) throw new Error('localStorage não reteve os dados');
+  }catch(e){
+    console.error('applyImportedBackup save', e);
+    throw e;
+  }
+  try{ saveState(); }catch(e){}
   try{ document.getElementById('type-toggle').innerHTML = typeToggleHTML('despesa'); }catch(e){}
   try{ fillCategorySelects(); }catch(e){}
   try{ fillAccountSuggestions(); }catch(e){}
@@ -11260,7 +11324,10 @@ async function init(){
         setTimeout(renderGoogleButton, 500);
         await continueInitAfterAuth();
       };
-      if(hasAppPin()){
+      // PIN: lê direto do localStorage (não depende de função que possa não ter carregado)
+      let pinOn = false;
+      try{ pinOn = !!(localStorage.getItem(APP_PIN_KEY) || (typeof hasAppPin==='function' && hasAppPin())); }catch(e){}
+      if(pinOn){
         window.__afterPinUnlock = finish;
         hideAuthGate();
         showPinUnlock();
