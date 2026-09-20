@@ -452,11 +452,12 @@
   }
   .modal h3{font-family:var(--font-display);margin:0 0 16px;font-size:19px;}
   .toast{
-    position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+    position:fixed;bottom:96px;left:50%;transform:translateX(-50%);
     background:var(--surface-3);border:1px solid var(--line);color:var(--ink);
-    padding:11px 14px 11px 20px;border-radius:30px;font-size:13px;
-    display:flex;align-items:center;gap:12px;
-    opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;z-index:100;
+    padding:12px 16px;border-radius:14px;font-size:13.5px;
+    display:flex;align-items:center;gap:12px;max-width:min(92vw,420px);
+    opacity:0;pointer-events:none;transition:opacity .25s, transform .25s;
+    z-index:5000;box-shadow:0 8px 28px rgba(0,0,0,.45);
   }
   .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);pointer-events:auto;}
   .toast-action{
@@ -2166,9 +2167,22 @@
 <div class="toast" id="toast"><span id="toast-msg"></span><button id="toast-action" class="toast-action" style="display:none;"></button></div>
 
 <script>
-/* Client ID Google — definido cedo para evitar erro "before initialization" no navegador */
+/* Constantes no topo (var) — evita "Cannot access before initialization" no iOS/Safari */
 window.GOOGLE_WEB_CLIENT_ID = '366921253291-47ra3dkdid71dr2kvr8a3ac4v7b77t5s.apps.googleusercontent.com';
 var GOOGLE_WEB_CLIENT_ID = window.GOOGLE_WEB_CLIENT_ID;
+var GIST_TOKEN_KEY = 'lc-gist-token';
+var GIST_ID_KEY = 'lc-gist-id';
+var GIST_FILENAME = 'livro-caixa-backup.json';
+var GIST_MANIFEST = 'devices-manifest.json';
+var GIST_SYNC_ON_EXIT_KEY = 'lc-gist-sync-on-exit';
+var GIST_DEVICE_ID_KEY = 'lc-device-id';
+var GIST_DEVICE_NAME_KEY = 'lc-device-name';
+var GIST_LAST_LOCAL_EXPORT_KEY = 'lc-last-local-export-at';
+var AUTH_SESSION_KEY = 'lc-auth-session';
+var AUTH_CLIENT_ID_KEY = 'lc-google-client-id';
+var APP_PIN_KEY = 'lc-app-pin-hash';
+var PROFILES_KEY = 'lc-profiles';
+var STORAGE_KEY_BASE = 'finance-data';
 
 /* Cliques de Config em captura: funcionam mesmo se algum erro JS ocorrer mais abaixo */
 document.addEventListener('click', function(ev){
@@ -2456,13 +2470,11 @@ function initPaywallUI(){
   updateProUI();
 }
 
-const STORAGE_KEY_BASE = 'finance-data';
-const AUTH_SESSION_KEY = 'lc-auth-session';
-const AUTH_CLIENT_ID_KEY = 'lc-google-client-id';
+// STORAGE_KEY_BASE, AUTH_SESSION_KEY, AUTH_CLIENT_ID_KEY já no topo (var)
 
 let currentUser = null; // { provider:'google'|'local', email?, name?, picture?, sub? }
 
-const PROFILES_KEY = 'lc-profiles';
+// PROFILES_KEY já no topo
 
 function storageKeyForUser(user){
   if(user && user.provider === 'google' && user.email){
@@ -9026,10 +9038,7 @@ document.getElementById('cfg-btn-import-sheet').addEventListener('click', ()=>{
 /* ============================================================
    BACKUP COMPLETO (JSON) + GitHub Gist
    ============================================================ */
-const GIST_TOKEN_KEY = 'lc-gist-token';
-const GIST_ID_KEY = 'lc-gist-id';
-const GIST_FILENAME = 'livro-caixa-backup.json';
-const GIST_MANIFEST = 'devices-manifest.json';
+// GIST_* keys já definidas no topo do script (var)
 function gistDeviceFileName(deviceId, deviceName){
   const id = String(deviceId||'unknown').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,40);
   const nm = String(deviceName||'aparelho').replace(/[^a-zA-Z0-9_-]/g,'').slice(0,24) || 'aparelho';
@@ -9037,7 +9046,7 @@ function gistDeviceFileName(deviceId, deviceName){
 }
 
 
-const GIST_SYNC_ON_EXIT_KEY = 'lc-gist-sync-on-exit';
+// GIST_SYNC_ON_EXIT_KEY já no topo
 let gistDirty = true;
 let gistSyncInFlight = false;
 let lastGistSyncAt = 0;
@@ -9100,9 +9109,7 @@ function setupGistSyncOnExit(){
 }
 
 
-const GIST_DEVICE_ID_KEY = 'lc-device-id';
-const GIST_DEVICE_NAME_KEY = 'lc-device-name';
-const GIST_LAST_LOCAL_EXPORT_KEY = 'lc-last-local-export-at';
+// GIST_DEVICE_* / GIST_LAST_* já no topo
 
 function getOrCreateDeviceId(){
   try{
@@ -10379,7 +10386,7 @@ function saveAuthSession(user){
   }catch(e){ console.error('saveAuthSession', e); }
 }
 /* PIN local (opcional) — não envia nada à nuvem */
-const APP_PIN_KEY = 'lc-app-pin-hash';
+// APP_PIN_KEY já no topo
 function hashPin(pin){
   // hash simples (não é criptografia bancária; só evita PIN em texto puro)
   let h = 2166136261;
@@ -11652,13 +11659,15 @@ function saveAppPinClick(){
   try{
     const a = ((document.getElementById('cfg-pin-new')||{}).value || '').trim();
     const b = ((document.getElementById('cfg-pin-confirm')||{}).value || '').trim();
-    if(!/^\d{4,8}$/.test(a)){ showToast('PIN deve ter 4 a 8 números.'); return; }
-    if(a !== b){ showToast('Confirmação diferente do PIN.'); return; }
+    if(!/^\d{4,8}$/.test(a)){ alert('PIN deve ter 4 a 8 números.'); return; }
+    if(a !== b){ alert('Confirmação diferente do PIN.'); return; }
     setAppPin(a);
+    if(!hasAppPin()){ alert('Não consegui gravar o PIN neste aparelho.'); return; }
     const n = document.getElementById('cfg-pin-new'); if(n) n.value='';
     const c = document.getElementById('cfg-pin-confirm'); if(c) c.value='';
     updatePinStatusUI();
     showToast('PIN salvo. Na próxima abertura do app será pedido.');
+    alert('PIN salvo com sucesso.\nNa próxima vez que abrir o app, será pedido este código.');
   }catch(e){ console.error(e); alert('Erro ao salvar PIN: '+(e.message||e)); }
 }
 function clearAppPinClick(){
