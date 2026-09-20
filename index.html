@@ -2184,6 +2184,7 @@ var AUTH_CLIENT_ID_KEY = 'lc-google-client-id';
 var APP_PIN_KEY = 'lc-app-pin-hash';
 var PROFILES_KEY = 'lc-profiles';
 var STORAGE_KEY_BASE = 'finance-data';
+var confirmCallback = null; // no topo — evita TDZ no iOS ao restaurar backup
 
 /* Cliques de Config em captura: funcionam mesmo se algum erro JS ocorrer mais abaixo */
 document.addEventListener('click', function(ev){
@@ -3166,24 +3167,48 @@ function fillAccountSuggestions(){
 /* ============================================================
    MODAL DE CONFIRMAÇÃO GENÉRICO (evita depender de confirm() do navegador)
    ============================================================ */
-let confirmCallback = null;
+// confirmCallback declarado no topo do script (var)
 function askConfirm(title, text, onYes){
-  document.getElementById('confirm-modal-title').textContent = title;
-  document.getElementById('confirm-modal-text').textContent = text;
-  confirmCallback = onYes;
-  document.getElementById('confirm-modal-bg').classList.add('active');
+  try{
+    const modal = document.getElementById('confirm-modal-bg');
+    const tEl = document.getElementById('confirm-modal-title');
+    const xEl = document.getElementById('confirm-modal-text');
+    if(!modal || !tEl || !xEl){
+      if(window.confirm((title||'Confirmar')+'\n\n'+(text||''))){
+        if(typeof onYes === 'function') onYes();
+      }
+      return;
+    }
+    tEl.textContent = title || 'Confirmar';
+    xEl.textContent = text || '';
+    window.confirmCallback = onYes;
+    confirmCallback = onYes;
+    modal.classList.add('active');
+  }catch(e){
+    console.error('askConfirm', e);
+    if(window.confirm((title||'Confirmar')+'\n\n'+(text||''))){
+      if(typeof onYes === 'function') onYes();
+    }
+  }
 }
-document.getElementById('confirm-modal-yes').addEventListener('click', ()=>{
+document.getElementById('confirm-modal-yes') && document.getElementById('confirm-modal-yes').addEventListener('click', ()=>{
   document.getElementById('confirm-modal-bg').classList.remove('active');
-  const cb = confirmCallback; confirmCallback = null;
+  const cb = window.confirmCallback || confirmCallback;
+  window.confirmCallback = null;
+  confirmCallback = null;
   if(cb) cb();
 });
-document.getElementById('confirm-modal-no').addEventListener('click', ()=>{
+document.getElementById('confirm-modal-no') && document.getElementById('confirm-modal-no').addEventListener('click', ()=>{
   document.getElementById('confirm-modal-bg').classList.remove('active');
+  window.confirmCallback = null;
   confirmCallback = null;
 });
-document.getElementById('confirm-modal-bg').addEventListener('click', (e)=>{
-  if(e.target.id==='confirm-modal-bg'){ document.getElementById('confirm-modal-bg').classList.remove('active'); confirmCallback = null; }
+document.getElementById('confirm-modal-bg') && document.getElementById('confirm-modal-bg').addEventListener('click', (e)=>{
+  if(e.target.id==='confirm-modal-bg'){
+    document.getElementById('confirm-modal-bg').classList.remove('active');
+    window.confirmCallback = null;
+    confirmCallback = null;
+  }
 });
 
 /* ============================================================
