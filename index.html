@@ -443,13 +443,13 @@
 
   /* ---------- Modal ---------- */
   .modal-bg{
-    position:fixed;inset:0;background:rgba(8,12,13,.6);
-    display:none;align-items:center;justify-content:center;z-index:50;padding:20px;
+    position:fixed;inset:0;background:rgba(8,12,13,.72);
+    display:none;align-items:center;justify-content:center;z-index:5500;padding:20px;
   }
   .modal-bg.active{display:flex;}
   .modal{
     background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
-    padding:24px;width:100%;max-width:420px;
+    padding:24px;width:100%;max-width:420px;position:relative;z-index:5501;
   }
   .modal h3{font-family:var(--font-display);margin:0 0 16px;font-size:19px;}
   .toast{
@@ -2008,13 +2008,13 @@
   </div>
 </div>
 
-<div class="modal-bg" id="confirm-modal-bg">
-  <div class="modal">
+<div class="modal-bg" id="confirm-modal-bg" style="z-index:6000;">
+  <div class="modal" onclick="event.stopPropagation()">
     <h3 id="confirm-modal-title">Confirmar</h3>
     <p id="confirm-modal-text" style="color:var(--ink-dim);font-size:13.5px;line-height:1.5;margin:0 0 18px;"></p>
     <div class="btn-row">
-      <button class="btn warn" id="confirm-modal-yes">Confirmar</button>
-      <button class="btn ghost" id="confirm-modal-no">Cancelar</button>
+      <button type="button" class="btn warn" id="confirm-modal-yes" onclick="confirmModalYesClick()">Confirmar</button>
+      <button type="button" class="btn ghost" id="confirm-modal-no" onclick="confirmModalNoClick()">Cancelar</button>
     </div>
   </div>
 </div>
@@ -3168,21 +3168,43 @@ function fillAccountSuggestions(){
    MODAL DE CONFIRMAÇÃO GENÉRICO (evita depender de confirm() do navegador)
    ============================================================ */
 // confirmCallback declarado no topo do script (var)
+function confirmModalYesClick(){
+  try{
+    const bg = document.getElementById('confirm-modal-bg');
+    if(bg) bg.classList.remove('active');
+    const cb = window.confirmCallback || confirmCallback;
+    window.confirmCallback = null;
+    confirmCallback = null;
+    if(typeof cb === 'function') cb();
+  }catch(e){ console.error('confirmModalYes', e); alert('Erro ao confirmar: '+(e.message||e)); }
+}
+function confirmModalNoClick(){
+  try{
+    const bg = document.getElementById('confirm-modal-bg');
+    if(bg) bg.classList.remove('active');
+    window.confirmCallback = null;
+    confirmCallback = null;
+  }catch(e){}
+}
+window.confirmModalYesClick = confirmModalYesClick;
+window.confirmModalNoClick = confirmModalNoClick;
 function askConfirm(title, text, onYes){
   try{
+    window.confirmCallback = onYes;
+    confirmCallback = onYes;
     const modal = document.getElementById('confirm-modal-bg');
     const tEl = document.getElementById('confirm-modal-title');
     const xEl = document.getElementById('confirm-modal-text');
     if(!modal || !tEl || !xEl){
       if(window.confirm((title||'Confirmar')+'\n\n'+(text||''))){
-        if(typeof onYes === 'function') onYes();
+        confirmModalYesClick();
+      } else {
+        confirmModalNoClick();
       }
       return;
     }
     tEl.textContent = title || 'Confirmar';
     xEl.textContent = text || '';
-    window.confirmCallback = onYes;
-    confirmCallback = onYes;
     modal.classList.add('active');
   }catch(e){
     console.error('askConfirm', e);
@@ -3191,24 +3213,19 @@ function askConfirm(title, text, onYes){
     }
   }
 }
-document.getElementById('confirm-modal-yes') && document.getElementById('confirm-modal-yes').addEventListener('click', ()=>{
-  document.getElementById('confirm-modal-bg').classList.remove('active');
-  const cb = window.confirmCallback || confirmCallback;
-  window.confirmCallback = null;
-  confirmCallback = null;
-  if(cb) cb();
+// listeners de backup (além do onclick)
+document.getElementById('confirm-modal-yes') && document.getElementById('confirm-modal-yes').addEventListener('click', function(ev){
+  ev.preventDefault();
+  ev.stopPropagation();
+  confirmModalYesClick();
 });
-document.getElementById('confirm-modal-no') && document.getElementById('confirm-modal-no').addEventListener('click', ()=>{
-  document.getElementById('confirm-modal-bg').classList.remove('active');
-  window.confirmCallback = null;
-  confirmCallback = null;
+document.getElementById('confirm-modal-no') && document.getElementById('confirm-modal-no').addEventListener('click', function(ev){
+  ev.preventDefault();
+  ev.stopPropagation();
+  confirmModalNoClick();
 });
 document.getElementById('confirm-modal-bg') && document.getElementById('confirm-modal-bg').addEventListener('click', (e)=>{
-  if(e.target.id==='confirm-modal-bg'){
-    document.getElementById('confirm-modal-bg').classList.remove('active');
-    window.confirmCallback = null;
-    confirmCallback = null;
-  }
+  if(e.target.id==='confirm-modal-bg') confirmModalNoClick();
 });
 
 /* ============================================================
