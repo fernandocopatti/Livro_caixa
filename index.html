@@ -2206,6 +2206,7 @@ var TX_PAGE_SIZE = 80;
 var gistDirty = true;
 var gistSyncInFlight = false;
 var lastGistSyncAt = 0;
+var editingId = null;
 
 /* Privacidade no topo — não depende de state nem do resto do script */
 function privacyIsOn(){ return false; }
@@ -2285,28 +2286,36 @@ document.addEventListener('click', function(ev){
     }
     if(id==='cfg-pin-save'){
       ev.preventDefault();
-      try{
-        // iOS às vezes coloca espaço/autofill — usa só os dígitos
-        const dig = (s)=> String(s||'').replace(/\D/g,'');
-        const a = dig((document.getElementById('cfg-pin-new')||{}).value);
-        const b = dig((document.getElementById('cfg-pin-confirm')||{}).value);
-        if(a.length < 4 || a.length > 8){
-          alert('PIN deve ter 4 a 8 números.\nVocê digitou '+a.length+' dígito(s) no primeiro campo'+(b.length!==a.length?' e '+b.length+' no segundo':'')+'.');
-          return;
-        }
-        if(a !== b){ alert('Confirmação diferente do PIN.\nDigite o mesmo código nos dois campos.'); return; }
-        let h = 2166136261;
-        const s = 'mci:'+a;
-        for(let i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
-        const hash = 'h'+(h>>>0).toString(16);
-        localStorage.setItem(APP_PIN_KEY, hash);
-        const check = localStorage.getItem(APP_PIN_KEY);
-        if(check !== hash){ alert('Não foi possível gravar o PIN neste navegador.'); return; }
-        const n = document.getElementById('cfg-pin-new'); if(n) n.value='';
-        const c = document.getElementById('cfg-pin-confirm'); if(c) c.value='';
-        if(typeof window.updatePinStatusUI === 'function') try{ window.updatePinStatusUI(); }catch(e){}
-        alert('PIN salvo ('+a.length+' dígitos). Feche a aba e abra de novo — deve pedir o PIN.');
-      }catch(err){ alert('Erro PIN: '+(err.message||err)); }
+      // iOS: valor do input às vezes só “fecha” depois do blur — lê com atraso
+      setTimeout(function(){
+        try{
+          const dig = function(s){ return String(s||'').replace(/\D/g,''); };
+          var elA = document.getElementById('cfg-pin-new');
+          var elB = document.getElementById('cfg-pin-confirm');
+          var a = dig(elA && elA.value);
+          var b = dig(elB && elB.value);
+          if(!a && typeof prompt === 'function'){
+            var p1 = prompt('Digite o PIN (4 a 8 números):','');
+            a = dig(p1);
+            if(a) b = dig(prompt('Confirme o mesmo PIN:','')||'');
+          }
+          if(a.length < 4 || a.length > 8){
+            alert('PIN deve ter 4 a 8 números.\nLidos: '+a.length+' dígito(s) no 1º e '+b.length+' no 2º.\nDica: digite e toque em Salvar (ou use o prompt se os campos falharem).');
+            return;
+          }
+          if(a !== b){ alert('Confirmação diferente do PIN.'); return; }
+          var h = 2166136261;
+          var s = 'mci:'+a;
+          for(var i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+          var hash = 'h'+(h>>>0).toString(16);
+          localStorage.setItem(APP_PIN_KEY, hash);
+          if(localStorage.getItem(APP_PIN_KEY) !== hash){ alert('Não foi possível gravar o PIN.'); return; }
+          if(elA) elA.value='';
+          if(elB) elB.value='';
+          if(typeof window.updatePinStatusUI === 'function') try{ window.updatePinStatusUI(); }catch(e){}
+          alert('PIN salvo ('+a.length+' dígitos). Feche e abra o site de novo.');
+        }catch(err){ alert('Erro PIN: '+(err.message||err)); }
+      }, 80);
       return;
     }
     if(id==='cfg-pin-clear'){
@@ -6419,7 +6428,6 @@ document.getElementById('filter-clear-btn').addEventListener('click', ()=>{
 /* ============================================================
    MODAL DE EDIÇÃO
    ============================================================ */
-let editingId = null;
 function openEditModal(id){
   try{
     if(!id || !state || !Array.isArray(state.transactions)) return;
@@ -11984,23 +11992,31 @@ function gistSaveCredsClick(){
   }catch(e){ console.error(e); alert('Erro ao salvar Gist: '+(e.message||e)); }
 }
 function saveAppPinClick(){
-  try{
-    const dig = (s)=> String(s||'').replace(/\D/g,'');
-    const a = dig((document.getElementById('cfg-pin-new')||{}).value);
-    const b = dig((document.getElementById('cfg-pin-confirm')||{}).value);
-    if(a.length < 4 || a.length > 8){
-      alert('PIN deve ter 4 a 8 números.\nVocê digitou '+a.length+' dígito(s) no 1º campo'+(b.length!==a.length?' e '+b.length+' no 2º':'')+'.');
-      return;
-    }
-    if(a !== b){ alert('Confirmação diferente do PIN.\nDigite o mesmo código nos dois campos.'); return; }
-    setAppPin(a);
-    if(!hasAppPin()){ alert('Não consegui gravar o PIN neste aparelho.'); return; }
-    const n = document.getElementById('cfg-pin-new'); if(n) n.value='';
-    const c = document.getElementById('cfg-pin-confirm'); if(c) c.value='';
-    updatePinStatusUI();
-    showToast('PIN salvo.');
-    alert('PIN salvo ('+a.length+' dígitos).\nFeche a aba e abra de novo — deve pedir o código.');
-  }catch(e){ console.error(e); alert('Erro ao salvar PIN: '+(e.message||e)); }
+  // iOS: aguarda o blur do campo
+  setTimeout(function(){
+    try{
+      const dig = (s)=> String(s||'').replace(/\D/g,'');
+      let a = dig((document.getElementById('cfg-pin-new')||{}).value);
+      let b = dig((document.getElementById('cfg-pin-confirm')||{}).value);
+      if(!a){
+        const p1 = prompt('Digite o PIN (4 a 8 números):','');
+        a = dig(p1);
+        if(a) b = dig(prompt('Confirme o mesmo PIN:','')||'');
+      }
+      if(a.length < 4 || a.length > 8){
+        alert('PIN deve ter 4 a 8 números.\nLidos: '+a.length+' no 1º e '+b.length+' no 2º.');
+        return;
+      }
+      if(a !== b){ alert('Confirmação diferente do PIN.'); return; }
+      setAppPin(a);
+      if(!hasAppPin()){ alert('Não consegui gravar o PIN neste aparelho.'); return; }
+      const n = document.getElementById('cfg-pin-new'); if(n) n.value='';
+      const c = document.getElementById('cfg-pin-confirm'); if(c) c.value='';
+      updatePinStatusUI();
+      showToast('PIN salvo.');
+      alert('PIN salvo ('+a.length+' dígitos).\nFeche a aba e abra de novo.');
+    }catch(e){ console.error(e); alert('Erro ao salvar PIN: '+(e.message||e)); }
+  }, 80);
 }
 function clearAppPinClick(){
   try{
