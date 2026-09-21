@@ -2067,9 +2067,9 @@
       </label>
     </div>
     <div class="btn-row">
-      <button class="btn" id="m-save">Salvar</button>
-      <button class="btn secondary" id="m-duplicate" title="Criar uma cópia deste lançamento">Duplicar</button>
-      <button class="btn ghost" id="m-cancel">Cancelar</button>
+      <button type="button" class="btn" id="m-save" onclick="saveEditModalClick()">Salvar</button>
+      <button type="button" class="btn secondary" id="m-duplicate" onclick="duplicateEditModalClick()" title="Criar uma cópia deste lançamento">Duplicar</button>
+      <button type="button" class="btn ghost" id="m-cancel" onclick="cancelEditModalClick()">Cancelar</button>
     </div>
   </div>
 </div>
@@ -2244,6 +2244,9 @@ document.addEventListener('click', function(ev){
       return false;
     };
     if(id==='btn-reload-app' || act==='reload-app'){ ev.preventDefault(); run('reloadAppClick', function(){ location.reload(); }); return; }
+    if(id==='m-save'){ ev.preventDefault(); run('saveEditModalClick'); return; }
+    if(id==='m-cancel'){ ev.preventDefault(); run('cancelEditModalClick'); return; }
+    if(id==='m-duplicate'){ ev.preventDefault(); run('duplicateEditModalClick'); return; }
     if(id==='cfg-save-closed-until' || act==='save-closed'){ ev.preventDefault(); run('saveClosedUntilClick'); return; }
     if(id==='cfg-clear-closed-until' || act==='clear-closed'){ ev.preventDefault(); run('clearClosedUntilClick'); return; }
     if(id==='reduction-save-btn' || act==='save-reduction'){ ev.preventDefault(); run('saveReductionClick'); return; }
@@ -6479,101 +6482,125 @@ document.getElementById('m-type-toggle').addEventListener('click', (e)=>{
   if(!btn) return;
   setActiveTypeButton(document.getElementById('m-type-toggle'), btn.dataset.type);
 });
-document.getElementById('m-cancel').addEventListener('click', ()=>{
-  document.getElementById('modal-bg').classList.remove('active');
-  editingId = null;
-});
-document.getElementById('modal-bg').addEventListener('click', (e)=>{
-  if(e.target.id==='modal-bg'){ document.getElementById('modal-bg').classList.remove('active'); editingId=null; }
+function cancelEditModalClick(){
+  try{
+    const modal = document.getElementById('modal-bg');
+    if(modal) modal.classList.remove('active');
+    editingId = null;
+  }catch(e){ console.error(e); }
+}
+function saveEditModalClick(){
+  try{
+    const t = state.transactions.find(x=> String(x.id) === String(editingId));
+    if(!t){ showToast('Lançamento não encontrado.'); return; }
+    const prevCategory = t.category;
+    t.date = document.getElementById('m-date').value || t.date;
+    const amtRaw = (document.getElementById('m-amount')||{}).value;
+    const amt = parseFloat(String(amtRaw||'').replace(',','.'));
+    if(!isNaN(amt)) t.amount = amt;
+    t.desc = document.getElementById('m-desc').value || t.desc;
+    const newCategory = document.getElementById('m-category').value || t.category;
+    t.category = newCategory;
+    const accountVal = ((document.getElementById('m-account')||{}).value || '').trim();
+    if(accountVal) t.account = accountVal; else delete t.account;
+    t.type = getActiveType(document.getElementById('m-type-toggle'));
+
+    const doLearn = !!(document.getElementById('m-learn')||{}).checked;
+    const doLearnAmt = !!(document.getElementById('m-learn-amount')||{}).checked;
+    let learnedKw = null;
+    if(doLearn && t.desc && t.category){
+      learnedKw = learnCategory(t.desc, t.category, {
+        asManual: true,
+        force: true,
+        maxAmount: doLearnAmt ? t.amount : null
+      });
+    }
+
+    const sameDescOthers = (newCategory && newCategory !== prevCategory)
+      ? findSameDescriptionTx(t, { sameType: true, onlyDifferentCategory: true, newCategory })
+      : [];
+
+    const parts = (typeof readSplitParts === 'function') ? readSplitParts() : [];
+    if(parts.length >= 2){
+      const sum = parts.reduce((s,p)=>s+p.amount,0);
+      if(Math.abs(sum - t.amount) > 0.05){
+        showToast('A soma das partes do split deve fechar o valor total.');
+        return;
+      }
+      const groupId = t.splitGroupId || uid();
+      state.transactions = state.transactions.filter(x=>x.id !== t.id);
+      parts.forEach((p,i)=>{
+        state.transactions.push({
+          id: uid(),
+          date: t.date,
+          desc: t.desc + (parts.length>1 ? ` (${i+1}/${parts.length})` : ''),
+          amount: p.amount,
+          category: p.category,
+          type: t.type,
+          source: t.source || 'manual',
+          notes: t.notes || '',
+          account: t.account,
+          photo: t.photo,
+          tags: t.tags || [],
+          splitGroupId: groupId,
+          createdAt: t.createdAt || new Date().toISOString()
+        });
+      });
+      showToast('Despesa dividida em '+parts.length+' partes.');
+    } else {
+      delete t.splits;
+      if(learnedKw) showToast('Lançamento atualizado · aprendeu “'+learnedKw+'”'+(doLearnAmt?' até R$ '+Number(t.amount).toFixed(2):'')+'.');
+      else showToast('Lançamento atualizado.');
+    }
+
+    saveState();
+    document.getElementById('modal-bg').classList.remove('active');
+    editingId = null;
+    fillAccountSuggestions();
+    renderDashboard();
+    renderTransactions(false);
+
+    if(sameDescOthers && sameDescOthers.length){
+      askConfirm(
+        'Mesma descrição',
+        'Há '+sameDescOthers.length+' outro(s) com a mesma descrição. Aplicar a categoria neles também?',
+        ()=>{
+          sameDescOthers.forEach(x=>{ x.category = newCategory; });
+          saveState();
+          renderDashboard();
+          renderTransactions(false);
+          showToast('Categoria aplicada em '+(sameDescOthers.length+1)+' lançamentos.');
+        }
+      );
+    }
+  }catch(err){
+    console.error(err);
+    alert('Erro ao salvar: '+(err.message||err));
+  }
+}
+function duplicateEditModalClick(){
+  try{
+    if(!editingId){ showToast('Nada para duplicar.'); return; }
+    const id = editingId;
+    document.getElementById('modal-bg').classList.remove('active');
+    editingId = null;
+    if(typeof cloneTransaction === 'function') cloneTransaction(id);
+    else showToast('Função de duplicar indisponível.');
+  }catch(e){
+    console.error(e);
+    alert('Erro ao duplicar: '+(e.message||e));
+  }
+}
+window.cancelEditModalClick = cancelEditModalClick;
+window.saveEditModalClick = saveEditModalClick;
+window.duplicateEditModalClick = duplicateEditModalClick;
+document.getElementById('modal-bg') && document.getElementById('modal-bg').addEventListener('click', (e)=>{
+  if(e.target.id==='modal-bg') cancelEditModalClick();
 });
 document.querySelectorAll('#modal-bg .modal input, #modal-bg .modal select').forEach(el=>{
   el.addEventListener('keydown', (e)=>{
-    if(e.key === 'Enter'){ e.preventDefault(); document.getElementById('m-save').click(); }
+    if(e.key === 'Enter'){ e.preventDefault(); saveEditModalClick(); }
   });
-});
-document.getElementById('m-save').addEventListener('click', ()=>{
-  const t = state.transactions.find(x=>x.id===editingId);
-  if(!t) return;
-  const prevCategory = t.category;
-  t.date = document.getElementById('m-date').value || t.date;
-  t.amount = parseFloat(document.getElementById('m-amount').value) || t.amount;
-  t.desc = document.getElementById('m-desc').value || t.desc;
-  const newCategory = document.getElementById('m-category').value || t.category;
-  t.category = newCategory;
-  const accountVal = document.getElementById('m-account').value.trim();
-  if(accountVal) t.account = accountVal; else delete t.account;
-  t.type = getActiveType(document.getElementById('m-type-toggle'));
-
-  const doLearn = !!(document.getElementById('m-learn')||{}).checked;
-  const doLearnAmt = !!(document.getElementById('m-learn-amount')||{}).checked;
-  let learnedKw = null;
-  if(doLearn && t.desc && t.category){
-    learnedKw = learnCategory(t.desc, t.category, {
-      asManual: true,
-      force: true,
-      maxAmount: doLearnAmt ? t.amount : null
-    });
-  }
-
-  const sameDescOthers = (newCategory && newCategory !== prevCategory)
-    ? findSameDescriptionTx(t, { sameType: true, onlyDifferentCategory: true, newCategory })
-    : [];
-
-  // split de despesa
-  const parts = readSplitParts();
-  if(parts.length >= 2){
-    const sum = parts.reduce((s,p)=>s+p.amount,0);
-    if(Math.abs(sum - t.amount) > 0.05){
-      showToast('A soma das partes do split deve fechar o valor total.');
-      return;
-    }
-    const groupId = t.splitGroupId || uid();
-    // remove original
-    state.transactions = state.transactions.filter(x=>x.id !== t.id);
-    parts.forEach((p,i)=>{
-      state.transactions.push({
-        id: uid(),
-        date: t.date,
-        desc: t.desc + (parts.length>1 ? ` (${i+1}/${parts.length})` : ''),
-        amount: p.amount,
-        category: p.category,
-        type: t.type,
-        source: t.source || 'manual',
-        notes: t.notes || '',
-        account: t.account,
-        photo: t.photo,
-        tags: t.tags || [],
-        splitGroupId: groupId,
-        createdAt: t.createdAt || new Date().toISOString()
-      });
-    });
-    showToast('Despesa dividida em '+parts.length+' partes.');
-  } else {
-    delete t.splits;
-    if(learnedKw) showToast('Lançamento atualizado · aprendeu “'+learnedKw+'”'+(doLearnAmt?' até R$ '+Number(t.amount).toFixed(2):'')+'.');
-    else showToast('Lançamento atualizado.');
-  }
-
-  saveState();
-  document.getElementById('modal-bg').classList.remove('active');
-  editingId = null;
-  fillAccountSuggestions();
-  renderDashboard();
-  renderTransactions();
-
-  if(sameDescOthers && sameDescOthers.length){
-    askConfirm(
-      'Mesma descrição',
-      'Há '+sameDescOthers.length+' outro(s) com a mesma descrição. Aplicar a categoria neles também?',
-      ()=>{
-        sameDescOthers.forEach(x=>{ x.category = newCategory; });
-        saveState();
-        renderDashboard();
-        renderTransactions();
-        showToast('Categoria aplicada em '+(sameDescOthers.length+1)+' lançamentos.');
-      }
-    );
-  }
 });
 
 /* ============================================================
@@ -10456,13 +10483,7 @@ document.getElementById('dup-scan-close').addEventListener('click', ()=>{
 document.getElementById('dup-scan-rerun').addEventListener('click', renderDupScanResults);
 document.getElementById('dup-scan-delete-extras').addEventListener('click', deleteDupExtras);
 
-document.getElementById('m-duplicate').addEventListener('click', ()=>{
-  if(!editingId) return;
-  const id = editingId;
-  document.getElementById('modal-bg').classList.remove('active');
-  editingId = null;
-  cloneTransaction(id);
-});
+// m-duplicate: usa duplicateEditModalClick (onclick + window)
 
 
 document.getElementById('new-account-btn').addEventListener('click', ()=>{
