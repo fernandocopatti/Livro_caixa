@@ -881,8 +881,8 @@
 </head>
 <body>
 
-<button type="button" id="privacy-toggle" onclick="togglePrivacyBtn()" title="Ocultar valores na tela (útil em público)">👁 Ocultar valores</button>
-<div id="pin-unlock" style="display:none;position:fixed;inset:0;z-index:3000;background:var(--bg);align-items:center;justify-content:center;padding:24px;">
+<!-- privacy-toggle removido -->
+<div id="pin-unlock" style="display:none !important;position:fixed;inset:0;z-index:3000;background:var(--bg);align-items:center;justify-content:center;padding:24px;">
   <div class="auth-card" style="max-width:360px;">
     <h1 style="font-size:20px;margin:0 0 8px;">Desbloquear</h1>
     <p class="auth-sub" style="margin-bottom:14px;">Digite o PIN deste aparelho para continuar.</p>
@@ -941,6 +941,13 @@
         <input type="hidden" id="auth-local-name" value="">
       </div>
     </details>
+
+    <div style="margin:16px 0 8px;padding-top:14px;border-top:1px dashed var(--line);">
+      <button type="button" class="btn secondary" id="auth-reload-app" onclick="location.reload()" style="width:100%;">Recarregar app</button>
+      <p style="font-size:11.5px;color:var(--ink-faint);margin:8px 0 0;line-height:1.4;text-align:center;">
+        Atualiza a página (como F5). Não apaga lançamentos salvos neste navegador.
+      </p>
+    </div>
 
     <p class="auth-note">
       Dados ficam neste aparelho. Exporte backup com frequência. Client ID Google fica em Configurações, se precisar alterar.
@@ -1582,28 +1589,6 @@
           <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
             <button type="button" class="btn ghost" id="btn-logout" onclick="logoutAccount()" style="padding:8px 14px;">Sair da conta</button>
           </div>
-          <div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);">
-            <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;">PIN / bloqueio local</div>
-            <p style="font-size:12px;color:var(--ink-dim);line-height:1.4;margin:0 0 10px;">
-              Mantém a conta Google salva neste aparelho. Com PIN, ao abrir o app você só digita o código (sem entrar no Google de novo).
-              <strong>No iPhone:</strong> precisa manter o mesmo navegador (Safari ou Chrome) e não usar aba anônima.
-            </p>
-            <p id="pin-status" style="font-size:12px;color:var(--ink-faint);margin:0 0 8px;"></p>
-            <div class="form-grid">
-              <div class="field">
-                <label>Novo PIN (4–8 dígitos)</label>
-                <input type="text" id="cfg-pin-new" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="4 a 8 números" autocomplete="off" autocapitalize="off" spellcheck="false">
-              </div>
-              <div class="field">
-                <label>Confirmar PIN</label>
-                <input type="text" id="cfg-pin-confirm" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="repita o PIN" autocomplete="off" autocapitalize="off" spellcheck="false">
-              </div>
-            </div>
-            <div class="btn-row" style="margin-top:10px;flex-wrap:wrap;gap:8px;">
-              <button type="button" class="btn secondary" id="cfg-pin-save" onclick="saveAppPinClick()" style="padding:8px 14px;">Salvar PIN</button>
-              <button type="button" class="btn ghost" id="cfg-pin-clear" onclick="clearAppPinClick()" style="padding:8px 14px;">Remover PIN</button>
-            </div>
-          </div>
           <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);">
             <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;">Google Drive</div>
             <p style="font-size:12.5px;color:var(--ink-dim);line-height:1.45;margin:0 0 10px;">
@@ -1645,10 +1630,10 @@
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="privacy-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Privacidade dos valores</div>
           <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;margin-bottom:8px;">
-            <input type="checkbox" id="cfg-hide-amounts"> Ocultar valores agora
+            <!-- cfg-hide-amounts removido -->
           </label>
           <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;">
-            <input type="checkbox" id="cfg-hide-on-open"> Iniciar com valores ocultos
+            <!-- cfg-hide-on-open removido -->
           </label>
           <p style="font-size:11.5px;color:var(--ink-faint);margin:10px 0 0;line-height:1.45;">
             Também pode usar o botão 👁 no canto inferior esquerdo. Útil ao abrir o app em público.
@@ -2199,18 +2184,8 @@ var gistSyncInFlight = false;
 var lastGistSyncAt = 0;
 
 /* Privacidade no topo — não depende de state nem do resto do script */
-function privacyIsOn(){
-  try{
-    // localStorage primeiro (mais estável no iOS)
-    const flag = localStorage.getItem(PRIVACY_FLAG_KEY);
-    if(flag === '1') return true;
-    if(flag === '0') return false;
-    if(window.__privacyOn === true) return true;
-    if(window.__privacyOn === false) return false;
-    if(typeof state !== 'undefined' && state && state.settings) return !!state.settings.hideAmounts;
-    return false;
-  }catch(e){ return !!window.__privacyOn; }
-}
+function privacyIsOn(){ return false; }
+
 function privacyApplyUi(on){
   try{
     on = !!on;
@@ -2225,33 +2200,8 @@ function privacyApplyUi(on){
     if(cfg) cfg.checked = on;
   }catch(e){}
 }
-function togglePrivacyBtn(){
-  try{
-    const next = !privacyIsOn();
-    // grava nas 3 camadas ao mesmo tempo
-    try{ localStorage.setItem(PRIVACY_FLAG_KEY, next ? '1' : '0'); }catch(e){}
-    window.__privacyOn = next;
-    try{
-      if(typeof state !== 'undefined' && state){
-        if(!state.settings) state.settings = {};
-        state.settings.hideAmounts = next;
-      }
-    }catch(e){}
-    privacyApplyUi(next);
-    try{ if(typeof saveState === 'function') saveState(); }catch(e){}
-    try{
-      if(typeof showToast === 'function') showToast(next ? 'Valores ocultos (R$ ••••)' : 'Valores visíveis de novo');
-    }catch(e){}
-    // força redesenho completo da lista
-    try{
-      if(typeof renderTransactions === 'function') renderTransactions(false);
-      if(typeof renderDashboard === 'function') renderDashboard();
-    }catch(e){}
-  }catch(e){
-    console.error(e);
-    alert('Erro ao alternar valores: '+(e.message||e));
-  }
-}
+function togglePrivacyBtn(){ /* recurso removido */ }
+
 window.togglePrivacyBtn = togglePrivacyBtn;
 
 /* Cliques de Config em captura: funcionam mesmo se algum erro JS ocorrer mais abaixo */
@@ -2917,10 +2867,7 @@ function initials(name){
 }
 
 function fmtBRL(v){
-  // só uma fonte de verdade — evita ficar preso em R$ ••••
-  if(privacyIsOn()){
-    return 'R$ ••••';
-  }
+  // privacidade removida — sempre mostra valores reais
   const n = Number(v);
   return (isNaN(n) ? 0 : n).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
 }
@@ -2950,17 +2897,11 @@ function setPrivacy(on, persist){
 let privacyAppliedOnBoot = false;
 function applyPrivacyFromSettings(){
   if(!state.settings) state.settings = {};
-  if(!privacyAppliedOnBoot){
-    privacyAppliedOnBoot = true;
-    if(state.settings.hideOnOpen) state.settings.hideAmounts = true;
-  }
-  // prioriza flag gravada no navegador
-  try{
-    const flag = localStorage.getItem(PRIVACY_FLAG_KEY);
-    if(flag === '1') state.settings.hideAmounts = true;
-    if(flag === '0') state.settings.hideAmounts = false;
-  }catch(e){}
-  setPrivacy(!!state.settings.hideAmounts, false);
+  state.settings.hideAmounts = false;
+  state.settings.hideOnOpen = false;
+  try{ localStorage.setItem(PRIVACY_FLAG_KEY, '0'); }catch(e){}
+  window.__privacyOn = false;
+  try{ document.body.classList.remove('privacy-on'); }catch(e){}
 }
 function fmtDate(iso){
   if(!iso) return '';
@@ -11529,14 +11470,7 @@ async function init(){
         await continueInitAfterAuth();
       };
       // PIN: lê direto do localStorage (não depende de função que possa não ter carregado)
-      let pinOn = false;
-      try{ pinOn = !!(localStorage.getItem(APP_PIN_KEY) || (typeof hasAppPin==='function' && hasAppPin())); }catch(e){}
-      if(pinOn){
-        window.__afterPinUnlock = finish;
-        hideAuthGate();
-        showPinUnlock();
-        return;
-      }
+      // PIN desativado por enquanto
       await finish();
     } else {
       // mostra gate; dados só carregam após login/continuar
