@@ -228,9 +228,14 @@
   }
   .row-select-chk{width:15px;height:15px;cursor:pointer;accent-color:var(--accent);}
   .bulk-bar{
-    display:flex;align-items:center;gap:12px;
+    display:flex;align-items:center;flex-wrap:wrap;gap:8px;
     background:rgba(217,124,87,.08);border:1px solid var(--warn-dim);border-radius:8px;
-    padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--ink);
+    padding:10px 12px;margin-bottom:14px;font-size:12.5px;color:var(--ink);
+  }
+  .bulk-bar select,.bulk-bar input{max-width:100%;}
+  @media (max-width:880px){
+    .bulk-bar{gap:8px;}
+    .bulk-bar .btn{padding:7px 10px;font-size:12px;}
   }
   .ledger-date{font-family:var(--font-mono);color:var(--ink-faint);font-size:12.5px;}
   .ledger-desc{color:var(--ink);min-width:0;}
@@ -444,12 +449,19 @@
   /* ---------- Modal ---------- */
   .modal-bg{
     position:fixed;inset:0;background:rgba(8,12,13,.72);
-    display:none;align-items:center;justify-content:center;z-index:5600;padding:20px;
+    display:none;align-items:flex-start;justify-content:center;z-index:5600;
+    padding:16px;overflow-y:auto;-webkit-overflow-scrolling:touch;
   }
   .modal-bg.active{display:flex;}
   .modal{
     background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
     padding:24px;width:100%;max-width:420px;position:relative;z-index:5501;
+    max-height:none;margin:12px auto 40px;
+    overflow:visible;
+  }
+  @media (max-width:880px){
+    .modal-bg{padding:10px 10px 90px;}
+    .modal{padding:18px 16px 20px;margin:8px auto 24px;}
   }
   .modal h3{font-family:var(--font-display);margin:0 0 16px;font-size:19px;}
   .toast{
@@ -2596,7 +2608,11 @@ function storageKeyForUser(user){
   if(user && user.provider === 'local' && user.profileId){
     return STORAGE_KEY_BASE + '::local::' + user.profileId;
   }
-  return STORAGE_KEY_BASE;
+  // legado: chave própria (não mistura com conta Google)
+  if(user && user.provider === 'local'){
+    return STORAGE_KEY_BASE + '::legacy';
+  }
+  return STORAGE_KEY_BASE + '::legacy';
 }
 function activeStorageKey(){
   return storageKeyForUser(currentUser);
@@ -2772,6 +2788,65 @@ async function loadState(){
 }
 
 let saveTimer = null;
+
+function compactStateForStorage(src){
+  try{
+    const s = src || state;
+    const out = {
+      transactions: (s.transactions||[]).map(tx=>{
+        const c = Object.assign({}, tx);
+        // fotos base64 estouram a cota do navegador (~5MB)
+        if(c.photo && String(c.photo).length > 8000){
+          c.photo = '';
+          c.photoStripped = true;
+        }
+        // notas OCR gigantes: mantém só resumo curto na gravação local
+        if(c.notes && String(c.notes).length > 2000){
+          c.notes = String(c.notes).slice(0,2000)+'…';
+        }
+        return c;
+      }),
+      categories: s.categories,
+      categoryRules: s.categoryRules,
+      recurringTemplates: s.recurringTemplates,
+      settings: s.settings,
+      accountLimits: s.accountLimits,
+      accounts: s.accounts,
+      goals: s.goals,
+      debts: s.debts,
+      importPrefs: s.importPrefs,
+      transactionTypes: s.transactionTypes
+    };
+    return out;
+  }catch(e){
+    return src || state;
+  }
+}
+function persistStateNow(){
+  STORAGE_KEY = activeStorageKey();
+  const payload = JSON.stringify(compactStateForStorage(state));
+  if(STORAGE_MODE === 'local'){
+    try{
+      window.localStorage.setItem(STORAGE_KEY, payload);
+      return true;
+    }catch(e){
+      // tenta sem fotos nenhuma
+      try{
+        const stripped = compactStateForStorage(state);
+        stripped.transactions = (stripped.transactions||[]).map(tx=>{ const x=Object.assign({},tx); delete x.photo; return x; });
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stripped));
+        showToast('Espaço cheio: salvei sem fotos dos cupons.');
+        return true;
+      }catch(e2){
+        console.error(e2);
+        showToast('Sem espaço no navegador (cota). Exporte backup JSON ou apague fotos antigas.');
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 function saveState(){
   try{ markGistDirty(); }catch(e){}
   clearTimeout(saveTimer);
@@ -2786,7 +2861,9 @@ function saveState(){
       }
     } else if(STORAGE_MODE === 'local'){
       try{
-        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        if(!persistStateNow()){
+          /* toast já mostrado */
+        }
       }catch(e){
         console.error('Erro ao salvar localmente:', e);
         showToast('Erro ao salvar localmente: ' + (e && e.message ? e.message : 'motivo desconhecido'));
@@ -5912,7 +5989,7 @@ function rowHTML(t, selectable){
   <div class="ledger-row${selectable?' selectable':''}" data-id="${escapeAttr(id)}">
     ${selectable ? `<input type="checkbox" class="row-select-chk" data-select="${escapeAttr(id)}">` : ''}
     <span class="ledger-date">${fmtDate(t.date)}</span>
-    <span class="ledger-desc">${escapeHTML(desc)}${t.photo ? ' 📎' : ''}${t.transferId ? ` <span style="color:#5C8FD6;font-size:11px;">↔ ${t.transferLeg==='in'?'entrada':'saída'}</span>` : ''}${t.installment ? ` <span style="color:var(--gold);font-size:11px;">📅${t.installment.current}/${t.installment.total}</span>` : ''}${(typeof isTxLocked==='function' && isTxLocked(t)) ? ` <span style="color:var(--ink-faint);font-size:11px;" title="Período conferido">🔒</span>` : ''}${t.account ? `<span class="ledger-desc-sub">💳 ${escapeHTML(String(t.account))}</span>` : ''}${t.notes ? `<span class="ledger-desc-sub">${escapeHTML(String(t.notes))}</span>`:''}</span>
+    <span class="ledger-desc">${escapeHTML(desc)}${t.photo ? ' 📎' : ''}${t.transferId ? ` <span style="color:#5C8FD6;font-size:11px;">↔ ${t.transferLeg==='in'?'entrada':'saída'}</span>` : ''}${t.installment ? ` <span style="color:var(--gold);font-size:11px;">📅${t.installment.current}/${t.installment.total}</span>` : ''}${(typeof isTxLocked==='function' && isTxLocked(t)) ? ` <span style="color:var(--ink-faint);font-size:11px;" title="Período conferido">🔒</span>` : ''}${t.account ? `<span class="ledger-desc-sub">💳 ${escapeHTML(String(t.account))}</span>` : ''}${(t.notes && !String(t.notes).startsWith('Produtos (OCR)')) ? `<span class="ledger-desc-sub">${escapeHTML(String(t.notes).split('\n')[0].slice(0,80))}${String(t.notes).length>80?'…':''}</span>`:''}</span>
     <span class="cat-tag cat-quick-wrap" data-cat-edit="${escapeAttr(id)}" title="Clique para mudar a categoria"><span class="stamp" style="background:${c.color||'#888'}">${initials(c.name||'?')}</span>${escapeHTML(c.name||'Outros')}</span>
     <span class="ledger-amt" style="color:${tType.color||'var(--ink)'};">${tType.flowSign===0 ? '↔' : (isInflow ? '+' : '−')} ${fmtBRL(isNaN(amt)?0:amt)}</span>
     <button type="button" class="row-del" data-del="${escapeAttr(id)}" title="Excluir">✕</button>
@@ -9981,10 +10058,9 @@ function applyImportedBackup(parsed){
   try{
     clearTimeout(saveTimer);
     STORAGE_KEY = activeStorageKey();
-    const payload = JSON.stringify(state);
-    window.localStorage.setItem(STORAGE_KEY, payload);
-    const check = window.localStorage.getItem(STORAGE_KEY);
-    if(!check || check.length < 20) throw new Error('localStorage não reteve os dados');
+    if(!persistStateNow()){
+      throw new Error('Sem espaço no navegador (cota excedida). Tente exportar/importar JSON ou limpar fotos de cupons.');
+    }
   }catch(e){
     console.error('applyImportedBackup save', e);
     throw e;
