@@ -10991,15 +10991,51 @@ async function loginWithGoogleNative(){
 
     // —— Navegador: Google Identity Services ——
     if(typeof google !== 'undefined' && google.accounts && google.accounts.id){
+      const origin = (typeof location !== 'undefined' && location.origin) ? location.origin : '';
       google.accounts.id.initialize({
         client_id: webClientId,
         callback: handleGoogleCredential,
-        auto_select: false
+        auto_select: false,
+        ux_mode: 'popup',
+        cancel_on_tap_outside: true
       });
-      // Dispara o seletor de conta (One Tap / prompt)
+      // Tenta One Tap; se bloquear, usa o botão oficial do Google
       google.accounts.id.prompt((notification)=>{
-        if(notification && notification.isNotDisplayed && notification.isNotDisplayed()){
-          alert('Popup Google bloqueado ou Client ID sem origem autorizada.\nNo Google Cloud, em Client ID Web, adicione a origem deste site (ex.: http://localhost).');
+        const notShown = notification && (
+          (notification.isNotDisplayed && notification.isNotDisplayed()) ||
+          (notification.isSkippedMoment && notification.isSkippedMoment())
+        );
+        if(notShown){
+          const wrap = document.getElementById('google-btn-wrap');
+          if(wrap){
+            wrap.innerHTML = '';
+            try{
+              google.accounts.id.renderButton(wrap, {
+                type: 'standard',
+                theme: 'outline',
+                size: 'large',
+                text: 'signin_with',
+                shape: 'rectangular',
+                width: 320
+              });
+              const hint = document.getElementById('google-click-hint');
+              if(hint){
+                hint.style.display = 'block';
+                hint.textContent = 'Use o botão Google abaixo. Se não aparecer, autorize a origem no Cloud Console.';
+              }
+            }catch(err){ console.warn(err); }
+          }
+          alert(
+            'Login Google precisa da origem autorizada no Cloud Console.\n\n'+
+            'Origem deste site:\n'+origin+'\n\n'+
+            '1) Abra console.cloud.google.com → APIs e serviços → Credenciais\n'+
+            '2) Client ID tipo “Aplicativo da Web”\n'+
+            '3) Em “Origens JavaScript autorizadas” adicione exatamente:\n'+
+            '   '+origin+'\n'+
+            '   (se for GitHub Pages, também: https://fernandocopatti.github.io)\n'+
+            '4) Salve e aguarde 1–5 minutos\n'+
+            '5) Recarregue este site e tente de novo'
+          );
         }
       });
       return;
