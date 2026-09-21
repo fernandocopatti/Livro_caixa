@@ -1622,9 +1622,9 @@
             </p>
             <div id="drive-status" style="font-size:12px;color:var(--ink-faint);margin-bottom:10px;">Drive não conectado.</div>
             <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
-              <button type="button" class="btn" id="btn-drive-connect" style="padding:8px 14px;">Conectar Drive</button>
-              <button type="button" class="btn secondary" id="btn-drive-upload" style="padding:8px 14px;">Salvar no Drive</button>
-              <button type="button" class="btn secondary" id="btn-drive-download" style="padding:8px 14px;">Restaurar do Drive</button>
+              <button type="button" class="btn" id="btn-drive-connect" onclick="driveConnectClick()" style="padding:8px 14px;">Conectar Drive</button>
+              <button type="button" class="btn secondary" id="btn-drive-upload" onclick="driveUploadClick()" style="padding:8px 14px;">Salvar no Drive</button>
+              <button type="button" class="btn secondary" id="btn-drive-download" onclick="driveDownloadClick()" style="padding:8px 14px;">Restaurar do Drive</button>
             </div>
           </div>
           <p style="font-size:11.5px;color:var(--ink-faint);margin:10px 0 0;line-height:1.45;">
@@ -2247,6 +2247,9 @@ document.addEventListener('click', function(ev){
     if(id==='m-save'){ ev.preventDefault(); run('saveEditModalClick'); return; }
     if(id==='m-cancel'){ ev.preventDefault(); run('cancelEditModalClick'); return; }
     if(id==='m-duplicate'){ ev.preventDefault(); run('duplicateEditModalClick'); return; }
+    if(id==='btn-drive-connect'){ ev.preventDefault(); run('driveConnectClick'); return; }
+    if(id==='btn-drive-upload'){ ev.preventDefault(); run('driveUploadClick'); return; }
+    if(id==='btn-drive-download'){ ev.preventDefault(); run('driveDownloadClick'); return; }
     if(id==='cfg-save-closed-until' || act==='save-closed'){ ev.preventDefault(); run('saveClosedUntilClick'); return; }
     if(id==='cfg-clear-closed-until' || act==='clear-closed'){ ev.preventDefault(); run('clearClosedUntilClick'); return; }
     if(id==='reduction-save-btn' || act==='save-reduction'){ ev.preventDefault(); run('saveReductionClick'); return; }
@@ -11244,12 +11247,12 @@ function initAuthUI(){
 
 
 /* ---------- Google Drive backup ---------- */
-const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-const DRIVE_FILE_NAME = 'Livro-Caixa-backup.json';
-const DRIVE_TOKEN_KEY = 'lc-drive-token';
-const DRIVE_FILE_ID_KEY = 'lc-drive-file-id';
-let driveAccessToken = null;
-let driveTokenClient = null;
+var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+var DRIVE_FILE_NAME = 'Livro-Caixa-backup.json';
+var DRIVE_TOKEN_KEY = 'lc-drive-token';
+var DRIVE_FILE_ID_KEY = 'lc-drive-file-id';
+var driveAccessToken = null;
+var driveTokenClient = null;
 
 function setDriveStatus(msg){
   const el = document.getElementById('drive-status');
@@ -11306,7 +11309,7 @@ function requestDriveAccess(){
         setDriveStatus('Drive conectado.');
         resolve(resp.access_token);
       };
-      driveTokenClient.requestAccessToken({ prompt: '' });
+      driveTokenClient.requestAccessToken({ prompt: 'consent' });
     }catch(e){ reject(e); }
   });
 }
@@ -11415,15 +11418,72 @@ async function downloadBackupFromDrive(){
   if(!res.ok) throw new Error('Falha ao baixar o arquivo.');
   const parsed = await res.json();
   if(!parsed || !Array.isArray(parsed.transactions)) throw new Error('Arquivo do Drive não parece um backup válido.');
-  normalizeLoadedState(parsed);
-  saveState();
-  fillCategorySelects();
-  fillAccountSuggestions();
-  renderDashboard();
-  renderTransactions();
-  renderCategories();
+  if(typeof applyImportedBackup === 'function') applyImportedBackup(parsed);
+  else {
+    normalizeLoadedState(parsed);
+    saveState();
+    try{ fillCategorySelects(); }catch(e){}
+    try{ fillAccountSuggestions(); }catch(e){}
+    try{ renderDashboard(); }catch(e){}
+    try{ renderTransactions(true); }catch(e){}
+  }
   setDriveStatus('Restaurado do Drive · '+ (file.modifiedTime ? new Date(file.modifiedTime).toLocaleString('pt-BR') : 'ok'));
 }
+
+
+async function driveConnectClick(){
+  try{
+    if(typeof requirePro === 'function' && !requirePro('Backup no Google Drive')) return;
+    setDriveStatus('Conectando ao Google Drive…');
+    await requestDriveAccess();
+    const file = await findDriveBackupFile();
+    setDriveStatus(file
+      ? ('Conectado · backup encontrado (atualizado '+new Date(file.modifiedTime).toLocaleString('pt-BR')+')')
+      : 'Conectado · nenhum backup ainda (use Salvar no Drive)');
+    showToast('Google Drive conectado.');
+  }catch(e){
+    console.error(e);
+    setDriveStatus('Falha: '+(e.message||e));
+    alert('Drive: '+(e.message||e)+'\n\nVerifique: Client ID Web, Drive API ativa e origem HTTPS do app no Google Cloud Console.');
+  }
+}
+async function driveUploadClick(){
+  try{
+    if(typeof requirePro === 'function' && !requirePro('Backup no Google Drive')) return;
+    await uploadBackupToDrive();
+    showToast('Backup salvo no Google Drive.');
+  }catch(e){
+    console.error(e);
+    setDriveStatus('Falha: '+(e.message||e));
+    alert('Erro ao salvar no Drive: '+(e.message||e));
+  }
+}
+function driveDownloadClick(){
+  try{
+    if(typeof requirePro === 'function' && !requirePro('Backup no Google Drive')) return;
+    const go = async ()=>{
+      try{
+        await downloadBackupFromDrive();
+        showToast('Backup restaurado do Drive.');
+      }catch(e){
+        console.error(e);
+        setDriveStatus('Falha: '+(e.message||e));
+        alert('Erro ao restaurar do Drive: '+(e.message||e));
+      }
+    };
+    if(typeof askConfirm === 'function'){
+      askConfirm('Restaurar do Drive', 'Isso substitui os dados atuais deste perfil pelos do arquivo no Google Drive. Continuar?', go);
+    } else if(confirm('Restaurar do Drive e substituir dados atuais?')){
+      go();
+    }
+  }catch(e){
+    console.error(e);
+    alert('Erro Drive: '+(e.message||e));
+  }
+}
+window.driveConnectClick = driveConnectClick;
+window.driveUploadClick = driveUploadClick;
+window.driveDownloadClick = driveDownloadClick;
 
 function initDriveUI(){
   const connectBtn = document.getElementById('btn-drive-connect');
@@ -11636,6 +11696,8 @@ async function init(){
   }
 
   window.reinitConfigFolders = run;
+  try{ if(typeof initDriveUI === 'function') initDriveUI(); }catch(e){}
+
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
   else run();
 })();
@@ -11675,6 +11737,7 @@ function goToView(view){
         }
       }catch(e){}
       try{ updatePinStatusUI(); }catch(e){}
+      try{ if(typeof initDriveUI === 'function') initDriveUI(); }catch(e){}
       try{ refreshGistUI(); }catch(e){}
       try{ renderRecurringList(); }catch(e){}
       try{ renderTypesList(); }catch(e){}
