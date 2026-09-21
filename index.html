@@ -444,7 +444,7 @@
   /* ---------- Modal ---------- */
   .modal-bg{
     position:fixed;inset:0;background:rgba(8,12,13,.72);
-    display:none;align-items:center;justify-content:center;z-index:5500;padding:20px;
+    display:none;align-items:center;justify-content:center;z-index:5600;padding:20px;
   }
   .modal-bg.active{display:flex;}
   .modal{
@@ -882,13 +882,13 @@
 <body>
 
 <!-- privacy-toggle removido -->
-<div id="pin-unlock" style="display:none !important;position:fixed;inset:0;z-index:3000;background:var(--bg);align-items:center;justify-content:center;padding:24px;">
+<div id="pin-unlock" style="display:none;position:fixed;inset:0;z-index:3000;background:var(--bg);align-items:center;justify-content:center;padding:24px;">
   <div class="auth-card" style="max-width:360px;">
     <h1 style="font-size:20px;margin:0 0 8px;">Desbloquear</h1>
     <p class="auth-sub" style="margin-bottom:14px;">Digite o PIN deste aparelho para continuar.</p>
     <div class="field" style="margin-bottom:12px;">
       <label>PIN</label>
-      <input type="password" id="pin-unlock-input" inputmode="numeric" maxlength="8" placeholder="••••" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();tryUnlockPin();}">
+      <input type="text" id="pin-unlock-input" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="PIN" autocomplete="off" autocapitalize="off" spellcheck="false" onkeydown="if(event.key==='Enter'){event.preventDefault();tryUnlockPin();}">
     </div>
     <button type="button" class="btn" id="pin-unlock-btn" onclick="tryUnlockPin()" style="width:100%;margin-bottom:8px;">Entrar</button>
     <button type="button" class="btn ghost" id="pin-unlock-forgot" onclick="forgotPinUnlock()" style="width:100%;">Esqueci o PIN (sair da conta)</button>
@@ -1589,6 +1589,30 @@
           <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
             <button type="button" class="btn ghost" id="btn-logout" onclick="logoutAccount()" style="padding:8px 14px;">Sair da conta</button>
           </div>
+
+          <div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--line);">
+            <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;">PIN / bloqueio local</div>
+            <p style="font-size:12px;color:var(--ink-dim);line-height:1.4;margin:0 0 10px;">
+              Com PIN ativo, ao abrir o app você digita o código (a conta Google continua salva).
+              Use o mesmo navegador, sem aba anônima.
+            </p>
+            <p id="pin-status" style="font-size:12px;color:var(--ink-faint);margin:0 0 8px;"></p>
+            <div class="form-grid">
+              <div class="field">
+                <label>Novo PIN (4–8 dígitos)</label>
+                <input type="text" id="cfg-pin-new" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="4 a 8 números" autocomplete="off" autocapitalize="off" spellcheck="false">
+              </div>
+              <div class="field">
+                <label>Confirmar PIN</label>
+                <input type="text" id="cfg-pin-confirm" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="repita o PIN" autocomplete="off" autocapitalize="off" spellcheck="false">
+              </div>
+            </div>
+            <div class="btn-row" style="margin-top:10px;flex-wrap:wrap;gap:8px;">
+              <button type="button" class="btn secondary" id="cfg-pin-save" onclick="saveAppPinClick()" style="padding:8px 14px;">Salvar PIN</button>
+              <button type="button" class="btn ghost" id="cfg-pin-clear" onclick="clearAppPinClick()" style="padding:8px 14px;">Remover PIN</button>
+            </div>
+          </div>
+
           <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);">
             <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;">Google Drive</div>
             <p style="font-size:12.5px;color:var(--ink-dim);line-height:1.45;margin:0 0 10px;">
@@ -5931,10 +5955,12 @@ function attachRowHandlers(container){
       }
     });
   });
+  // clique na linha → abre edição (delegação no container também abaixo)
   container.querySelectorAll('.ledger-row[data-id]').forEach(row=>{
+    row.style.cursor = 'pointer';
     row.addEventListener('click', (e)=>{
-      if(e.target.classList.contains('row-select-chk')) return;
-      if(e.target.closest('[data-cat-edit]')) return;
+      if(e.target.closest('input,button,a,[data-del],[data-cat-edit],.row-select-chk')) return;
+      e.preventDefault();
       openEditModal(row.dataset.id);
     });
   });
@@ -6395,33 +6421,51 @@ document.getElementById('filter-clear-btn').addEventListener('click', ()=>{
    ============================================================ */
 let editingId = null;
 function openEditModal(id){
-  const t = state.transactions.find(x=>x.id===id);
-  if(!t) return;
-  editingId = id;
-  document.getElementById('m-date').value = t.date;
-  document.getElementById('m-amount').value = t.amount;
-  document.getElementById('m-desc').value = t.desc;
-  document.getElementById('m-account').value = t.account || '';
-  const mLearn = document.getElementById('m-learn');
-  const mLearnAmt = document.getElementById('m-learn-amount');
-  if(mLearn) mLearn.checked = true;
-  if(mLearnAmt) mLearnAmt.checked = false;
-  document.getElementById('m-type-toggle').innerHTML = typeToggleHTML(t.type || 'despesa');
-  document.getElementById('m-category').innerHTML = categoryOptionsHTML(t.category);
-  if(t.photo){
-    document.getElementById('m-photo-img').src = t.photo;
-    document.getElementById('m-photo-field').style.display = '';
-  } else {
-    document.getElementById('m-photo-field').style.display = 'none';
+  try{
+    if(!id || !state || !Array.isArray(state.transactions)) return;
+    const t = state.transactions.find(x=> String(x.id) === String(id));
+    if(!t){ showToast('Lançamento não encontrado.'); return; }
+    editingId = t.id;
+    const setVal = (i,v)=>{ const el=document.getElementById(i); if(el) el.value = v; };
+    setVal('m-date', t.date || '');
+    setVal('m-amount', t.amount != null ? t.amount : '');
+    setVal('m-desc', t.desc || '');
+    setVal('m-account', t.account || '');
+    const mLearn = document.getElementById('m-learn');
+    const mLearnAmt = document.getElementById('m-learn-amount');
+    if(mLearn) mLearn.checked = true;
+    if(mLearnAmt) mLearnAmt.checked = false;
+    const mType = document.getElementById('m-type-toggle');
+    if(mType) mType.innerHTML = typeToggleHTML(t.type || 'despesa');
+    const mCat = document.getElementById('m-category');
+    if(mCat) mCat.innerHTML = categoryOptionsHTML(t.category);
+    const photoField = document.getElementById('m-photo-field');
+    const photoImg = document.getElementById('m-photo-img');
+    if(t.photo && photoImg && photoField){
+      photoImg.src = t.photo;
+      photoField.style.display = '';
+    } else if(photoField) {
+      photoField.style.display = 'none';
+    }
+    const splitWrap = document.getElementById('m-split-wrap');
+    if(splitWrap){
+      const isExp = typeById(t.type||'despesa').countsAsExpense;
+      splitWrap.style.display = isExp ? '' : 'none';
+      if(isExp && typeof setupSplitRows === 'function') setupSplitRows(t.amount, t.splits || []);
+    }
+    const modal = document.getElementById('modal-bg');
+    if(modal){
+      modal.classList.add('active');
+      modal.style.zIndex = '5600';
+    } else {
+      alert('Modal de edição não encontrado.');
+    }
+  }catch(err){
+    console.error('openEditModal', err);
+    alert('Erro ao abrir lançamento: '+(err.message||err));
   }
-  const splitWrap = document.getElementById('m-split-wrap');
-  if(splitWrap){
-    const isExp = typeById(t.type||'despesa').countsAsExpense;
-    splitWrap.style.display = isExp ? '' : 'none';
-    if(isExp) setupSplitRows(t.amount, t.splits || []);
-  }
-  document.getElementById('modal-bg').classList.add('active');
 }
+window.openEditModal = openEditModal;
 document.getElementById('m-type-toggle').addEventListener('click', (e)=>{
   const btn = e.target.closest('.type-btn');
   if(!btn) return;
@@ -10654,13 +10698,15 @@ function hashPin(pin){
 }
 function hasAppPin(){ return !!lsGet(APP_PIN_KEY); }
 function setAppPin(pin){
-  if(!pin){ lsSet(APP_PIN_KEY, ''); return; }
-  lsSet(APP_PIN_KEY, hashPin(pin));
+  const digits = String(pin||'').replace(/\D/g,'');
+  if(!digits){ lsSet(APP_PIN_KEY, ''); return; }
+  lsSet(APP_PIN_KEY, hashPin(digits));
 }
 function checkAppPin(pin){
   const saved = lsGet(APP_PIN_KEY);
   if(!saved) return true;
-  return saved === hashPin(pin);
+  const digits = String(pin||'').replace(/\D/g,'');
+  return saved === hashPin(digits);
 }
 function hideAuthGate(){
   const g = document.getElementById('auth-gate');
@@ -11469,8 +11515,14 @@ async function init(){
         setTimeout(renderGoogleButton, 500);
         await continueInitAfterAuth();
       };
-      // PIN: lê direto do localStorage (não depende de função que possa não ter carregado)
-      // PIN desativado por enquanto
+      let pinOn = false;
+      try{ pinOn = !!(localStorage.getItem(APP_PIN_KEY)); }catch(e){}
+      if(pinOn){
+        window.__afterPinUnlock = finish;
+        hideAuthGate();
+        showPinUnlock();
+        return;
+      }
       await finish();
     } else {
       // mostra gate; dados só carregam após login/continuar
@@ -11489,18 +11541,19 @@ async function init(){
 (function initConfigFolders(){
   function foldCard(card, openByDefault){
     if(!card || card.dataset.foldDone === '1') return;
-    card.dataset.foldDone = '1';
-    card.classList.add('cfg-fold');
-    if(openByDefault) card.classList.add('open');
 
     // título: .panel-title ou primeiro bloco de título
     let titleEl = card.querySelector(':scope > .panel-title');
     if(!titleEl){
       const kids = Array.from(card.children);
-      titleEl = kids.find(el => el.tagName === 'DIV' && /font-weight:\s*600|panel-title/i.test(el.getAttribute('style')||'') || el.classList.contains('panel-title'));
+      titleEl = kids.find(el => el.tagName === 'DIV' && (/font-weight:\s*600|panel-title/i.test(el.getAttribute('style')||'') || el.classList.contains('panel-title')));
       if(!titleEl && kids[0] && kids[0].tagName === 'DIV') titleEl = kids[0];
     }
+    // só aplica fold se achou título — senão deixa o card normal
     if(!titleEl) return;
+    card.dataset.foldDone = '1';
+    card.classList.add('cfg-fold');
+    if(openByDefault) card.classList.add('open');
 
     const head = document.createElement('div');
     head.className = 'cfg-head';
@@ -11553,6 +11606,7 @@ async function init(){
     });
   }
 
+  window.reinitConfigFolders = run;
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
   else run();
 })();
@@ -11584,6 +11638,14 @@ function goToView(view){
     }
     if(view==='categories'){ try{ renderCategoriesView(); }catch(e){ try{ renderCategories(); }catch(err){} } }
     if(view==='config'){
+      try{
+        // reaplicar pastas se ainda não existirem
+        const viewEl = document.getElementById('view-config');
+        if(viewEl && !viewEl.querySelector('.cfg-fold')){
+          if(typeof window.reinitConfigFolders === 'function') window.reinitConfigFolders();
+        }
+      }catch(e){}
+      try{ updatePinStatusUI(); }catch(e){}
       try{ refreshGistUI(); }catch(e){}
       try{ renderRecurringList(); }catch(e){}
       try{ renderTypesList(); }catch(e){}
@@ -11971,8 +12033,12 @@ function hidePinUnlock(){
 }
 function tryUnlockPin(){
   try{
-    const pin = ((document.getElementById('pin-unlock-input')||{}).value || '').trim();
+    const pin = String(((document.getElementById('pin-unlock-input')||{}).value || '')).replace(/\D/g,'');
     const err = document.getElementById('pin-unlock-err');
+    if(!pin){
+      if(err){ err.style.display='block'; err.textContent='Digite o PIN (só números).'; }
+      return;
+    }
     if(!checkAppPin(pin)){
       if(err){ err.style.display='block'; err.textContent='PIN incorreto.'; }
       return;
@@ -11983,8 +12049,9 @@ function tryUnlockPin(){
       window.__afterPinUnlock = null;
       fn();
     }
-  }catch(e){ console.error(e); }
+  }catch(e){ console.error(e); alert('Erro no PIN: '+(e.message||e)); }
 }
+window.tryUnlockPin = tryUnlockPin;
 function forgotPinUnlock(){
   try{
     if(!confirm('Isso remove o PIN e encerra a sessão. Seus lançamentos continuam salvos no perfil. Continuar?')) return;
