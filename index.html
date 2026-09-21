@@ -1592,11 +1592,11 @@
             <div class="form-grid">
               <div class="field">
                 <label>Novo PIN (4–8 dígitos)</label>
-                <input type="password" id="cfg-pin-new" inputmode="numeric" maxlength="8" placeholder="••••" autocomplete="new-password">
+                <input type="text" id="cfg-pin-new" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="4 a 8 números" autocomplete="off" autocapitalize="off" spellcheck="false">
               </div>
               <div class="field">
                 <label>Confirmar PIN</label>
-                <input type="password" id="cfg-pin-confirm" inputmode="numeric" maxlength="8" placeholder="••••" autocomplete="new-password">
+                <input type="text" id="cfg-pin-confirm" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="repita o PIN" autocomplete="off" autocapitalize="off" spellcheck="false">
               </div>
             </div>
             <div class="btn-row" style="margin-top:10px;flex-wrap:wrap;gap:8px;">
@@ -2194,6 +2194,9 @@ var currentTxList = [];
 var selectedIds = new Set();
 var txListPage = 0;
 var TX_PAGE_SIZE = 80;
+var gistDirty = true;
+var gistSyncInFlight = false;
+var lastGistSyncAt = 0;
 
 /* Privacidade no topo — não depende de state nem do resto do script */
 function privacyIsOn(){
@@ -2225,23 +2228,24 @@ function privacyApplyUi(on){
 function togglePrivacyBtn(){
   try{
     const next = !privacyIsOn();
+    // grava nas 3 camadas ao mesmo tempo
     try{ localStorage.setItem(PRIVACY_FLAG_KEY, next ? '1' : '0'); }catch(e){}
     window.__privacyOn = next;
     try{
       if(typeof state !== 'undefined' && state){
         if(!state.settings) state.settings = {};
         state.settings.hideAmounts = next;
-        if(typeof saveState === 'function') saveState();
       }
     }catch(e){}
     privacyApplyUi(next);
+    try{ if(typeof saveState === 'function') saveState(); }catch(e){}
     try{
       if(typeof showToast === 'function') showToast(next ? 'Valores ocultos (R$ ••••)' : 'Valores visíveis de novo');
     }catch(e){}
+    // força redesenho completo da lista
     try{
-      const active = document.querySelector('.view.active');
-      if(active && active.id === 'view-dashboard' && typeof renderDashboard === 'function') renderDashboard();
-      if(active && active.id === 'view-transactions' && typeof renderTransactions === 'function') renderTransactions(false);
+      if(typeof renderTransactions === 'function') renderTransactions(false);
+      if(typeof renderDashboard === 'function') renderDashboard();
     }catch(e){}
   }catch(e){
     console.error(e);
@@ -9327,9 +9331,8 @@ function gistDeviceFileName(deviceId, deviceName){
 
 
 // GIST_SYNC_ON_EXIT_KEY já no topo
-let gistDirty = true;
-let gistSyncInFlight = false;
-let lastGistSyncAt = 0;
+// gistDirty / gistSyncInFlight já no topo (var)
+// lastGistSyncAt ja no topo
 
 function getGistSyncOnExit(){
   try{ return localStorage.getItem(GIST_SYNC_ON_EXIT_KEY) === '1'; }catch(e){ return false; }
