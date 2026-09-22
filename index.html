@@ -11433,15 +11433,17 @@ function saveDriveToken(accessToken, expiresIn){
 }
 
 function ensureDriveTokenClient(){
-  const clientId = getSavedGoogleClientId();
+  const clientId = String(getSavedGoogleClientId() || GOOGLE_WEB_CLIENT_ID || '').trim();
   if(!clientId) throw new Error('Configure o Google Client ID primeiro.');
   if(typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2){
-    throw new Error('Biblioteca Google ainda não carregou. Use HTTPS e recarregue.');
+    throw new Error('Biblioteca Google ainda não carregou. Use HTTPS e recarregue a página.');
   }
+  // scope em string literal — evita "Missing required parameter: scope"
+  const scope = 'https://www.googleapis.com/auth/drive.file';
   driveTokenClient = google.accounts.oauth2.initTokenClient({
     client_id: clientId,
-    scope: DRIVE_SCOPE,
-    callback: ()=>{}
+    scope: scope,
+    callback: function(){}
   });
   return driveTokenClient;
 }
@@ -11451,14 +11453,22 @@ function requestDriveAccess(){
     try{
       const cached = loadDriveToken();
       if(cached){ driveAccessToken = cached; resolve(cached); return; }
+      const scope = 'https://www.googleapis.com/auth/drive.file';
       ensureDriveTokenClient();
-      driveTokenClient.callback = (resp)=>{
+      if(!driveTokenClient){
+        reject(new Error('Não foi possível iniciar o cliente OAuth do Google.'));
+        return;
+      }
+      driveTokenClient.callback = function(resp){
+        if(!resp){ reject(new Error('Resposta vazia do Google.')); return; }
         if(resp.error){ reject(new Error(resp.error)); return; }
+        if(!resp.access_token){ reject(new Error('Google não devolveu access_token.')); return; }
         saveDriveToken(resp.access_token, resp.expires_in);
         setDriveStatus('Drive conectado.');
         resolve(resp.access_token);
       };
-      driveTokenClient.requestAccessToken({ prompt: 'consent' });
+      // reenvia scope no pedido (alguns navegadores exigem)
+      driveTokenClient.requestAccessToken({ prompt: 'consent', scope: scope });
     }catch(e){ reject(e); }
   });
 }
