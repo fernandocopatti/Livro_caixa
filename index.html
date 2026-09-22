@@ -1298,9 +1298,13 @@
       </div>
 
       <div id="tx-count-banner" style="font-size:12.5px;color:var(--ink-dim);margin:0 0 10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);"></div>
+      <div class="btn-row" style="margin:0 0 12px;flex-wrap:wrap;gap:8px;">
+        <button type="button" class="btn secondary" id="btn-select-all-tx" onclick="selectAllFilteredTx()" style="padding:8px 12px;font-size:12.5px;">Selecionar todos (filtro)</button>
+        <button type="button" class="btn ghost" id="btn-deselect-all-tx" onclick="deselectAllTx()" style="padding:8px 12px;font-size:12.5px;">Desmarcar todos</button>
+      </div>
       <div class="card">
         <div class="ledger-row head selectable">
-          <span><input type="checkbox" id="select-all-chk" title="Selecionar todos os lançamentos filtrados"></span>
+          <span><input type="checkbox" id="select-all-chk" title="Selecionar todos os lançamentos filtrados" onclick="toggleSelectAllChk(event)"></span>
           <span>Data</span><span>Descrição</span><span>Categoria</span><span style="text-align:right;">Valor</span><span></span>
         </div>
         <div class="ledger" id="transactions-list"></div>
@@ -1589,15 +1593,6 @@
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="auth-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Conta / perfil</div>
           <div id="auth-config-user" style="font-size:13px;color:var(--ink-dim);margin-bottom:10px;">Não identificado</div>
-          <details style="margin-bottom:10px;">
-            <summary style="cursor:pointer;color:var(--ink-dim);font-size:12.5px;">Avançado: Google Client ID Web</summary>
-            <div class="field" style="margin:10px 0 8px;">
-              <label>Google OAuth Client ID (Web)</label>
-              <input type="text" id="cfg-google-client-id" placeholder="xxx.apps.googleusercontent.com">
-            </div>
-            <button type="button" class="btn secondary" id="cfg-save-google-client" data-action="save-google-client" onclick="saveGoogleClientClick()" style="padding:8px 14px;">Salvar Client ID</button>
-            <p style="font-size:11.5px;color:var(--ink-faint);margin:8px 0 0;line-height:1.4;">Só altere se souber o que está fazendo. O app já vem com o Client ID padrão.</p>
-          </details>
           <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
             <button type="button" class="btn ghost" id="btn-logout" onclick="logoutAccount()" style="padding:8px 14px;">Sair da conta</button>
           </div>
@@ -1626,23 +1621,30 @@
           </div>
 
           <div style="margin-top:16px;padding-top:14px;border-top:1px dashed var(--line);">
-            <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;">Google Drive</div>
+            <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;">Google (login e Drive)</div>
             <p style="font-size:12.5px;color:var(--ink-dim);line-height:1.45;margin:0 0 10px;">
-              Envia ou recupera o backup JSON no seu Drive (arquivo <strong>Livro-Caixa-backup.json</strong>).
-              <strong>Não dá para conectar ao Drive sem o Google Cloud Console</strong> — o Google exige um Client ID OAuth.
-              Alternativa prática (sem Cloud Console): use o <strong>GitHub Gist</strong> acima, ou <strong>Exportar backup</strong> e salve o arquivo no app Drive manualmente.
+              Mesmo projeto do Google Cloud: login com a conta e backup no Drive
+              (arquivo <strong>Livro-Caixa-backup.json</strong>). Sem Cloud Console, use o <strong>GitHub Gist</strong> ou exporte o JSON.
             </p>
+            <div class="field" style="margin:0 0 10px;">
+              <label>Client ID Web (OAuth)</label>
+              <input type="text" id="cfg-google-client-id" placeholder="xxx.apps.googleusercontent.com" autocomplete="off">
+            </div>
+            <div class="btn-row" style="margin:0 0 12px;flex-wrap:wrap;gap:8px;">
+              <button type="button" class="btn secondary" id="cfg-save-google-client" data-action="save-google-client" onclick="saveGoogleClientClick()" style="padding:8px 14px;">Salvar Client ID</button>
+            </div>
             <div id="drive-status" style="font-size:12px;color:var(--ink-faint);margin-bottom:10px;">Drive não conectado.</div>
-            <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
+            <div class="btn-row" style="margin-top:0;flex-wrap:wrap;gap:8px;">
               <button type="button" class="btn" id="btn-drive-connect" onclick="driveConnectClick()" style="padding:8px 14px;">Conectar Drive</button>
               <button type="button" class="btn secondary" id="btn-drive-upload" onclick="driveUploadClick()" style="padding:8px 14px;">Salvar no Drive</button>
               <button type="button" class="btn secondary" id="btn-drive-download" onclick="driveDownloadClick()" style="padding:8px 14px;">Restaurar do Drive</button>
             </div>
+            <p style="font-size:11.5px;color:var(--ink-faint);margin:10px 0 0;line-height:1.45;">
+              Em <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" style="color:var(--accent);">Google Cloud Console</a>:
+              Client ID tipo Web, ative a <strong>Drive API</strong> e autorize a origem
+              <strong>https://fernandocopatti.github.io</strong>.
+            </p>
           </div>
-          <p style="font-size:11.5px;color:var(--ink-faint);margin:10px 0 0;line-height:1.45;">
-            Crie um Client ID em <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener" style="color:var(--accent);">Google Cloud Console</a>
-            (tipo “Aplicativo da Web”). Ative também a <strong>Google Drive API</strong>. Em origens JavaScript autorizadas, use a URL HTTPS do app.
-          </p>
         </div>
 
         <!-- Assinatura Pro -->
@@ -2304,36 +2306,7 @@ document.addEventListener('click', function(ev){
     }
     if(id==='cfg-pin-save'){
       ev.preventDefault();
-      // iOS: valor do input às vezes só “fecha” depois do blur — lê com atraso
-      setTimeout(function(){
-        try{
-          const dig = function(s){ return String(s||'').replace(/\D/g,''); };
-          var elA = document.getElementById('cfg-pin-new');
-          var elB = document.getElementById('cfg-pin-confirm');
-          var a = dig(elA && elA.value);
-          var b = dig(elB && elB.value);
-          if(!a && typeof prompt === 'function'){
-            var p1 = prompt('Digite o PIN (4 a 8 números):','');
-            a = dig(p1);
-            if(a) b = dig(prompt('Confirme o mesmo PIN:','')||'');
-          }
-          if(a.length < 4 || a.length > 8){
-            alert('PIN deve ter 4 a 8 números.\nLidos: '+a.length+' dígito(s) no 1º e '+b.length+' no 2º.\nDica: digite e toque em Salvar (ou use o prompt se os campos falharem).');
-            return;
-          }
-          if(a !== b){ alert('Confirmação diferente do PIN.'); return; }
-          var h = 2166136261;
-          var s = 'mci:'+a;
-          for(var i=0;i<s.length;i++){ h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
-          var hash = 'h'+(h>>>0).toString(16);
-          localStorage.setItem(APP_PIN_KEY, hash);
-          if(localStorage.getItem(APP_PIN_KEY) !== hash){ alert('Não foi possível gravar o PIN.'); return; }
-          if(elA) elA.value='';
-          if(elB) elB.value='';
-          if(typeof window.updatePinStatusUI === 'function') try{ window.updatePinStatusUI(); }catch(e){}
-          alert('PIN salvo ('+a.length+' dígitos). Feche e abra o site de novo.');
-        }catch(err){ alert('Erro PIN: '+(err.message||err)); }
-      }, 80);
+      try{ if(typeof saveAppPinClick === 'function') saveAppPinClick(); }catch(err){}
       return;
     }
     if(id==='cfg-pin-clear'){
@@ -6357,7 +6330,41 @@ function scanAndOfferLocalBackups(){
 }
 window.scanAndOfferLocalBackups = scanAndOfferLocalBackups;
 
-document.getElementById('select-all-chk').addEventListener('change', (e)=>{
+
+function selectAllFilteredTx(){
+  try{
+    selectedIds = new Set();
+    (currentTxList || []).forEach(t=> selectedIds.add(t.id));
+    document.querySelectorAll('#transactions-list .row-select-chk').forEach(chk=>{
+      chk.checked = selectedIds.has(chk.dataset.select);
+    });
+    const allChk = document.getElementById('select-all-chk');
+    if(allChk) allChk.checked = (currentTxList||[]).length > 0;
+    updateBulkBar();
+    showToast((currentTxList||[]).length + ' selecionado(s) no filtro atual.');
+  }catch(e){ console.error(e); }
+}
+function deselectAllTx(){
+  try{
+    selectedIds = new Set();
+    document.querySelectorAll('#transactions-list .row-select-chk').forEach(chk=>{ chk.checked = false; });
+    const allChk = document.getElementById('select-all-chk');
+    if(allChk){ allChk.checked = false; allChk.indeterminate = false; }
+    updateBulkBar();
+  }catch(e){ console.error(e); }
+}
+function toggleSelectAllChk(ev){
+  try{
+    const on = !!(ev && ev.target && ev.target.checked);
+    if(on) selectAllFilteredTx();
+    else deselectAllTx();
+  }catch(e){ console.error(e); }
+}
+window.selectAllFilteredTx = selectAllFilteredTx;
+window.deselectAllTx = deselectAllTx;
+window.toggleSelectAllChk = toggleSelectAllChk;
+
+document.getElementById('select-all-chk') && document.getElementById('select-all-chk').addEventListener('change', (e)=>{
   if(e.target.checked) currentTxList.forEach(t=>selectedIds.add(t.id));
   else selectedIds.clear();
   document.querySelectorAll('#transactions-list .row-select-chk').forEach(chk=>{
@@ -10785,7 +10792,11 @@ function parseJwtPayload(token){
   }catch(e){ return null; }
 }
 function getSavedGoogleClientId(){
-  try{ return localStorage.getItem(AUTH_CLIENT_ID_KEY) || ''; }catch(e){ return ''; }
+  try{
+    const saved = localStorage.getItem(AUTH_CLIENT_ID_KEY);
+    if(saved && String(saved).trim()) return String(saved).trim();
+  }catch(e){}
+  return (typeof GOOGLE_WEB_CLIENT_ID !== 'undefined' && GOOGLE_WEB_CLIENT_ID) ? GOOGLE_WEB_CLIENT_ID : '';
 }
 function setSavedGoogleClientId(id){
   try{ localStorage.setItem(AUTH_CLIENT_ID_KEY, id || ''); }catch(e){}
@@ -12214,31 +12225,31 @@ function gistSaveCredsClick(){
   }catch(e){ console.error(e); alert('Erro ao salvar Gist: '+(e.message||e)); }
 }
 function saveAppPinClick(){
-  // iOS: aguarda o blur do campo
-  setTimeout(function(){
-    try{
-      const dig = (s)=> String(s||'').replace(/\D/g,'');
-      let a = dig((document.getElementById('cfg-pin-new')||{}).value);
-      let b = dig((document.getElementById('cfg-pin-confirm')||{}).value);
-      if(!a){
-        const p1 = prompt('Digite o PIN (4 a 8 números):','');
-        a = dig(p1);
-        if(a) b = dig(prompt('Confirme o mesmo PIN:','')||'');
-      }
-      if(a.length < 4 || a.length > 8){
-        alert('PIN deve ter 4 a 8 números.\nLidos: '+a.length+' no 1º e '+b.length+' no 2º.');
-        return;
-      }
-      if(a !== b){ alert('Confirmação diferente do PIN.'); return; }
-      setAppPin(a);
-      if(!hasAppPin()){ alert('Não consegui gravar o PIN neste aparelho.'); return; }
-      const n = document.getElementById('cfg-pin-new'); if(n) n.value='';
-      const c = document.getElementById('cfg-pin-confirm'); if(c) c.value='';
-      updatePinStatusUI();
-      showToast('PIN salvo.');
-      alert('PIN salvo ('+a.length+' dígitos).\nFeche a aba e abra de novo.');
-    }catch(e){ console.error(e); alert('Erro ao salvar PIN: '+(e.message||e)); }
-  }, 80);
+  try{
+    // força blur para o iOS gravar o valor do teclado
+    try{ if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); }catch(e){}
+    const dig = (s)=> String(s||'').replace(/\D/g,'');
+    const elA = document.getElementById('cfg-pin-new');
+    const elB = document.getElementById('cfg-pin-confirm');
+    // lê após um tick curto (sem prompt)
+    setTimeout(function(){
+      try{
+        let a = dig(elA && elA.value);
+        let b = dig(elB && elB.value);
+        if(a.length < 4 || a.length > 8){
+          alert('PIN deve ter 4 a 8 números.\nDigitado: '+a.length+' no 1º campo e '+b.length+' no 2º.\nToque fora do campo e depois em Salvar PIN.');
+          return;
+        }
+        if(a !== b){ alert('Os dois campos precisam ser iguais.'); return; }
+        setAppPin(a);
+        if(!hasAppPin()){ alert('Não consegui gravar o PIN neste aparelho.'); return; }
+        if(elA) elA.value='';
+        if(elB) elB.value='';
+        updatePinStatusUI();
+        showToast('PIN salvo ('+a.length+' dígitos).');
+      }catch(e){ console.error(e); alert('Erro ao salvar PIN: '+(e.message||e)); }
+    }, 30);
+  }catch(e){ console.error(e); alert('Erro ao salvar PIN: '+(e.message||e)); }
 }
 function clearAppPinClick(){
   try{
