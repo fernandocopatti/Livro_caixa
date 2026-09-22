@@ -3149,7 +3149,23 @@ function updateClosedUntilUI(){
       : 'Nenhuma trava ativa — exclusão e reclassificação em massa liberadas.';
   }
 }
-function monthKey(iso){ return iso ? iso.slice(0,7) : ''; }
+function monthKey(iso){
+  if(!iso) return '';
+  const s = String(iso).trim();
+  // YYYY-MM-DD
+  if(/^\d{4}-\d{2}/.test(s)) return s.slice(0,7);
+  // DD/MM/YYYY or DD-MM-YYYY
+  let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if(m) return m[3]+'-'+String(m[2]).padStart(2,'0');
+  // DD/MM/YY
+  m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$/);
+  if(m){
+    const yy = parseInt(m[3],10);
+    const yyyy = yy >= 70 ? (1900+yy) : (2000+yy);
+    return yyyy+'-'+String(m[2]).padStart(2,'0');
+  }
+  return s.slice(0,7);
+}
 function monthLabel(key){
   const [y,m] = key.split('-');
   const names = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
@@ -6178,8 +6194,16 @@ function renderTransactions(resetPage){
       return String(t.date || '').startsWith(month);
     });
   } else if(from || to){
-    if(from) list = list.filter(t=> t.date >= from);
-    if(to) list = list.filter(t=> t.date <= to);
+    const toISO = (d)=>{
+      if(!d) return '';
+      const s = String(d).trim();
+      if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+      let m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+      if(m) return m[3]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0');
+      return s;
+    };
+    if(from) list = list.filter(t=> toISO(t.date) >= from);
+    if(to) list = list.filter(t=> toISO(t.date) <= to);
   }
   if(type) list = list.filter(t=> (t.type||'despesa')===type);
   if(cat) list = list.filter(t=> t.category===cat || (t.items||[]).some(it=>it.category===cat));
@@ -6199,7 +6223,7 @@ function renderTransactions(resetPage){
   if(account === '__none__') list = list.filter(t=> !(t.account && String(t.account).trim()));
   else if(account) list = list.filter(t=>t.account===account);
   if(tagFilter) list = list.filter(t=> (t.tags||[]).includes(tagFilter));
-  if(search) list = list.filter(t=>t.desc.toLowerCase().includes(search));
+  if(search) list = list.filter(t=> String(t.desc||'').toLowerCase().includes(search) || String(t.account||'').toLowerCase().includes(search) || String(t.notes||'').toLowerCase().includes(search));
   const aminRaw = (document.getElementById('filter-amount-min')||{}).value;
   const amaxRaw = (document.getElementById('filter-amount-max')||{}).value;
   const amin = aminRaw !== '' && aminRaw != null ? Number(aminRaw) : null;
@@ -6472,41 +6496,43 @@ document.getElementById('filter-imported') && document.getElementById('filter-im
   renderTransactions();
 });
 
-['filter-month','filter-type','filter-category','filter-subcategory','filter-source','filter-imported','filter-imported-date','filter-account','filter-tag','filter-from','filter-to','filter-amount-min','filter-amount-max'].forEach(id=>{
-  document.getElementById(id).addEventListener('change', ()=>{
-    // se escolher mês, limpa período customizado; se escolher período, o mês é ignorado na filtragem
-    if(id === 'filter-month' && document.getElementById('filter-month').value){
-      document.getElementById('filter-from').value = '';
-      document.getElementById('filter-to').value = '';
+// Delegação: filtros sempre funcionam (mesmo se algum id faltar)
+(function wireTransactionFilters(){
+  const panel = document.querySelector('.filter-panel') || document.getElementById('view-transactions');
+  if(!panel) return;
+  const apply = function(){
+    try{ renderTransactions(true); }catch(e){ console.error(e); }
+  };
+  panel.addEventListener('change', function(ev){
+    const el = ev.target;
+    if(!el || !el.id || el.id.indexOf('filter-') !== 0) return;
+    if(el.id === 'filter-month' && el.value){
+      const f = document.getElementById('filter-from'); if(f) f.value = '';
+      const t = document.getElementById('filter-to'); if(t) t.value = '';
     }
-    if((id === 'filter-from' || id === 'filter-to') && (document.getElementById('filter-from').value || document.getElementById('filter-to').value)){
-      document.getElementById('filter-month').value = '';
+    if((el.id === 'filter-from' || el.id === 'filter-to') && (document.getElementById('filter-from')||{}).value){
+      const m = document.getElementById('filter-month'); if(m) m.value = '';
     }
-    renderTransactions();
+    if(el.id === 'filter-to' && (document.getElementById('filter-to')||{}).value){
+      const m = document.getElementById('filter-month'); if(m) m.value = '';
+    }
+    apply();
   });
-});
-document.getElementById('filter-search').addEventListener('input', renderTransactions);
-document.getElementById('filter-amount-min') && document.getElementById('filter-amount-min').addEventListener('input', renderTransactions);
-document.getElementById('filter-amount-max') && document.getElementById('filter-amount-max').addEventListener('input', renderTransactions);
-document.getElementById('filter-clear-btn').addEventListener('click', ()=>{
-  document.getElementById('filter-month').value = '';
-  document.getElementById('filter-from').value = '';
-  document.getElementById('filter-to').value = '';
-  document.getElementById('filter-type').value = '';
-  document.getElementById('filter-category').value = '';
-  document.getElementById('filter-source').value = '';
-  const fi = document.getElementById('filter-imported'); if(fi) fi.value = '';
-  const fid = document.getElementById('filter-imported-date'); if(fid){ fid.value = ''; fid.style.display = 'none'; }
-  document.getElementById('filter-account').value = '';
-  document.getElementById('filter-search').value = '';
-  const famin = document.getElementById('filter-amount-min');
-  const famax = document.getElementById('filter-amount-max');
-  if(famin) famin.value = '';
-  if(famax) famax.value = '';
-  const ftag = document.getElementById('filter-tag');
-  if(ftag) ftag.value = '';
-  renderTransactions();
-});
+  panel.addEventListener('input', function(ev){
+    const el = ev.target;
+    if(!el || !el.id) return;
+    if(el.id === 'filter-search' || el.id === 'filter-amount-min' || el.id === 'filter-amount-max') apply();
+  });
+})();
+window.clearTransactionFilters = function clearTransactionFilters(){
+  ['filter-month','filter-from','filter-to','filter-type','filter-category','filter-subcategory','filter-source','filter-imported','filter-imported-date','filter-account','filter-search','filter-amount-min','filter-amount-max','filter-tag'].forEach(function(id){
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  const fid = document.getElementById('filter-imported-date');
+  if(fid) fid.style.display = 'none';
+  try{ renderTransactions(true); }catch(e){ console.error(e); }
+};
 
 /* ============================================================
    MODAL DE EDIÇÃO
@@ -11827,7 +11853,7 @@ function goToView(view){
 
     // dispara a mesma lógica de conteúdo do menu lateral
     if(view==='dashboard'){ try{ renderDashboard(); }catch(e){ console.warn(e); } }
-    if(view==='transactions'){ try{ renderTransactions(true); }catch(e){ console.warn(e); alert('Erro ao abrir lançamentos: '+(e.message||e)); } }
+    if(view==='transactions'){ try{ fillMonthFilter(); fillTypeFilter(); fillAccountSuggestions(); renderTransactions(true); }catch(e){ console.warn(e); alert('Erro ao abrir lançamentos: '+(e.message||e)); } }
     if(view==='import'){
       try{
         const p = state.importPrefs || {};
