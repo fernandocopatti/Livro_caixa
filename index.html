@@ -2212,6 +2212,8 @@ var GIST_LAST_LOCAL_EXPORT_KEY = 'lc-last-local-export-at';
 var AUTH_SESSION_KEY = 'lc-auth-session';
 var AUTH_CLIENT_ID_KEY = 'lc-google-client-id';
 var APP_PIN_KEY = 'lc-app-pin-hash';
+var BIOMETRIC_FLAG_KEY = 'lc-bio-unlock';
+var BIOMETRIC_CRED_KEY = 'lc-bio-cred';
 var PROFILES_KEY = 'lc-profiles';
 var STORAGE_KEY_BASE = 'finance-data';
 var confirmCallback = null; // no topo — evita TDZ no iOS ao restaurar backup
@@ -12430,27 +12432,49 @@ function updateBioStatusUI(){
     ? 'Biometria ativa neste aparelho — ao reabrir pede Face ID/digital (PIN continua como reserva se existir).'
     : 'Biometria desligada. Ative para desbloquear como no AutoCare.';
 }
-async function tryUnlockBiometric(){
-  const err = document.getElementById('pin-unlock-err');
-  try{
-    if(err){ err.style.display='none'; err.textContent=''; }
-    const plugin = getCapacitorBiometric();
-    if(plugin) await verifyNativeBiometric();
-    else await verifyWebBiometric();
-    hidePinUnlock();
-    if(typeof window.__afterPinUnlock === 'function'){
-      const fn = window.__afterPinUnlock;
-      window.__afterPinUnlock = null;
-      await fn();
-    }
-  }catch(e){
-    console.warn(e);
-    if(err){
-      err.style.display='block';
-      err.textContent = 'Biometria não confirmou. Use o PIN ou tente de novo.';
-    }
+async function completeAppUnlock(){
+  hidePinUnlock();
+  if(typeof window.__afterPinUnlock === 'function'){
+    const fn = window.__afterPinUnlock;
+    window.__afterPinUnlock = null;
+    await fn();
   }
 }
+async function tryUnlockBiometric(){
+  const err = document.getElementById('pin-unlock-err');
+  const bioBtn = document.getElementById('bio-unlock-btn');
+  try{
+    if(err){ err.style.display='none'; err.textContent=''; }
+    if(bioBtn){ bioBtn.disabled = true; bioBtn.textContent = 'Verificando…'; }
+    const plugin = getCapacitorBiometric();
+    if(plugin){
+      await verifyNativeBiometric();
+    } else {
+      const credId = localStorage.getItem(BIOMETRIC_CRED_KEY);
+      if(!credId){
+        await enrollWebBiometric();
+        setBiometricEnabled(true);
+      } else {
+        await verifyWebBiometric();
+      }
+    }
+    await completeAppUnlock();
+  }catch(e){
+    console.warn('bio unlock', e);
+    const msg = (e && e.message) ? e.message : String(e);
+    if(err){
+      err.style.display = 'block';
+      err.textContent = 'Biometria: '+msg.slice(0,120)+' — use o PIN ou tente de novo.';
+    }
+    const pinField = document.getElementById('pin-unlock-field');
+    const pinBtn = document.getElementById('pin-unlock-btn');
+    if(pinField) pinField.style.display = '';
+    if(pinBtn) pinBtn.style.display = '';
+  }finally{
+    if(bioBtn){ bioBtn.disabled = false; bioBtn.textContent = 'Usar Face ID / digital'; }
+  }
+}
+window.completeAppUnlock = completeAppUnlock;
 window.enableBiometricClick = enableBiometricClick;
 window.disableBiometricClick = disableBiometricClick;
 window.tryUnlockBiometric = tryUnlockBiometric;
@@ -12479,8 +12503,8 @@ function showPinUnlock(){
   }
   const pinField = document.getElementById('pin-unlock-field');
   const pinBtn = document.getElementById('pin-unlock-btn');
-  if(pinField) pinField.style.display = pinOn || !bioOn ? '' : 'none';
-  if(pinBtn) pinBtn.style.display = pinOn || !bioOn ? '' : 'none';
+  if(pinField) pinField.style.display = '';
+  if(pinBtn) pinBtn.style.display = '';
   if(pinOn && inp) setTimeout(function(){ try{ inp.focus(); }catch(e){} }, 120);
 }
 function hidePinUnlock(){
