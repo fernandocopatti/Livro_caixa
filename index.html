@@ -897,13 +897,14 @@
 <div id="pin-unlock" style="display:none;position:fixed;inset:0;z-index:3000;background:var(--bg);align-items:center;justify-content:center;padding:24px;">
   <div class="auth-card" style="max-width:360px;">
     <h1 style="font-size:20px;margin:0 0 8px;">Desbloquear</h1>
-    <p class="auth-sub" style="margin-bottom:14px;">Digite o PIN deste aparelho para continuar.</p>
-    <div class="field" style="margin-bottom:12px;">
-      <label>PIN</label>
+    <p class="auth-sub" id="unlock-sub" style="margin-bottom:14px;">Use Face ID / digital ou o PIN deste aparelho.</p>
+    <button type="button" class="btn" id="bio-unlock-btn" onclick="tryUnlockBiometric()" style="width:100%;margin-bottom:12px;display:none;">Usar Face ID / digital</button>
+    <div class="field" style="margin-bottom:12px;" id="pin-unlock-field">
+      <label>PIN (opcional se biometria ok)</label>
       <input type="text" id="pin-unlock-input" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="PIN" autocomplete="off" autocapitalize="off" spellcheck="false" onkeydown="if(event.key==='Enter'){event.preventDefault();tryUnlockPin();}">
     </div>
-    <button type="button" class="btn" id="pin-unlock-btn" onclick="tryUnlockPin()" style="width:100%;margin-bottom:8px;">Entrar</button>
-    <button type="button" class="btn ghost" id="pin-unlock-forgot" onclick="forgotPinUnlock()" style="width:100%;">Esqueci o PIN (sair da conta)</button>
+    <button type="button" class="btn secondary" id="pin-unlock-btn" onclick="tryUnlockPin()" style="width:100%;margin-bottom:8px;">Entrar com PIN</button>
+    <button type="button" class="btn ghost" id="pin-unlock-forgot" onclick="forgotPinUnlock()" style="width:100%;">Sair da conta</button>
     <p id="pin-unlock-err" style="color:var(--warn);font-size:12px;margin:10px 0 0;display:none;"></p>
   </div>
 </div>
@@ -1617,6 +1618,18 @@
             <div class="btn-row" style="margin-top:10px;flex-wrap:wrap;gap:8px;">
               <button type="button" class="btn secondary" id="cfg-pin-save" onclick="saveAppPinClick()" style="padding:8px 14px;">Salvar PIN</button>
               <button type="button" class="btn ghost" id="cfg-pin-clear" onclick="clearAppPinClick()" style="padding:8px 14px;">Remover PIN</button>
+            </div>
+            <div style="margin-top:14px;padding-top:12px;border-top:1px dashed var(--line);">
+              <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;">Face ID / biometria</div>
+              <p style="font-size:12px;color:var(--ink-dim);line-height:1.4;margin:0 0 8px;">
+                Como no AutoCare: depois do login Google, ao reabrir o app você desbloqueia com Face ID ou digital
+                (no app instalado fica nativo; no Safari usa a biometria do site quando o iPhone permitir).
+              </p>
+              <p id="bio-status" style="font-size:12px;color:var(--ink-faint);margin:0 0 10px;"></p>
+              <div class="btn-row" style="margin:0;flex-wrap:wrap;gap:8px;">
+                <button type="button" class="btn secondary" id="cfg-bio-enable" onclick="enableBiometricClick()" style="padding:8px 14px;">Ativar Face ID / digital</button>
+                <button type="button" class="btn ghost" id="cfg-bio-disable" onclick="disableBiometricClick()" style="padding:8px 14px;">Desativar</button>
+              </div>
             </div>
           </div>
 
@@ -11713,6 +11726,7 @@ async function continueInitAfterAuth(){
     try{ renderDashboard(); }catch(e){}
     try{ renderTransactions(); }catch(e){}
     try{ updatePinStatusUI(); }catch(e){}
+      try{ updateBioStatusUI(); }catch(e){}
     try{ refreshGistUI(); }catch(e){}
     if(typeof FS_SUPPORTED !== 'undefined' && FS_SUPPORTED){
       try{
@@ -11763,12 +11777,17 @@ async function init(){
         setTimeout(renderGoogleButton, 500);
         await continueInitAfterAuth();
       };
-      let pinOn = false;
+      let pinOn = false, bioOn = false;
       try{ pinOn = !!(localStorage.getItem(APP_PIN_KEY)); }catch(e){}
-      if(pinOn){
+      try{ bioOn = localStorage.getItem(BIOMETRIC_FLAG_KEY) === '1'; }catch(e){}
+      if(pinOn || bioOn){
         window.__afterPinUnlock = finish;
         hideAuthGate();
         showPinUnlock();
+        // tenta biometria sozinha ao abrir
+        if(bioOn){
+          setTimeout(function(){ try{ tryUnlockBiometric(); }catch(e){} }, 350);
+        }
         return;
       }
       await finish();
@@ -12270,21 +12289,220 @@ function clearAppPinClick(){
 }
 function updatePinStatusUI(){
   const el = document.getElementById('pin-status');
-  if(!el) return;
-  let on = false;
-  try{ on = !!(localStorage.getItem(APP_PIN_KEY)); }catch(e){}
-  el.textContent = on
-    ? 'PIN ativo neste navegador — ao reabrir esta URL deve pedir o código.'
-    : 'Nenhum PIN gravado neste navegador. Após salvar, feche a aba e abra de novo (mesmo Safari/Chrome, sem aba anônima).';
+  if(el){
+    let on = false;
+    try{ on = !!(localStorage.getItem(APP_PIN_KEY)); }catch(e){}
+    el.textContent = on
+      ? 'PIN ativo neste navegador — ao reabrir esta URL deve pedir o código.'
+      : 'Nenhum PIN gravado neste navegador. Após salvar, feche a aba e abra de novo (mesmo Safari/Chrome, sem aba anônima).';
+  }
+  try{ updateBioStatusUI(); }catch(e){}
 }
+
+/* ---------- Biometria (Face ID / digital) — web + Capacitor ---------- */
+function isBiometricEnabled(){
+  try{ return localStorage.getItem(BIOMETRIC_FLAG_KEY) === '1'; }catch(e){ return false; }
+}
+function setBiometricEnabled(on){
+  try{ localStorage.setItem(BIOMETRIC_FLAG_KEY, on ? '1' : '0'); }catch(e){}
+}
+function getCapacitorBiometric(){
+  try{
+    const C = window.Capacitor;
+    if(!C) return null;
+    if(C.Plugins && C.Plugins.BiometricAuth) return C.Plugins.BiometricAuth;
+    if(C.Plugins && C.Plugins.NativeBiometric) return C.Plugins.NativeBiometric;
+    return null;
+  }catch(e){ return null; }
+}
+async function biometricAvailable(){
+  // Nativo (Capacitor)
+  const plugin = getCapacitorBiometric();
+  if(plugin){
+    try{
+      if(typeof plugin.checkBiometry === 'function'){
+        const r = await plugin.checkBiometry();
+        return !!(r && (r.isAvailable || r.hasBiometry || r.biometryType));
+      }
+      if(typeof plugin.isAvailable === 'function'){
+        const r = await plugin.isAvailable();
+        return !!(r && (r.isAvailable || r.available));
+      }
+    }catch(e){ console.warn(e); }
+  }
+  // WebAuthn (Safari Face ID / Chrome digital)
+  try{
+    if(window.PublicKeyCredential && PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable){
+      return !!(await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
+    }
+  }catch(e){}
+  return false;
+}
+function bufToB64(buf){
+  const bytes = new Uint8Array(buf);
+  let s = '';
+  for(let i=0;i<bytes.length;i++) s += String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function b64ToBuf(b64){
+  const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+  const b = (b64 + pad).replace(/-/g,'+').replace(/_/g,'/');
+  const str = atob(b);
+  const out = new Uint8Array(str.length);
+  for(let i=0;i<str.length;i++) out[i] = str.charCodeAt(i);
+  return out.buffer;
+}
+async function enrollWebBiometric(){
+  if(!window.PublicKeyCredential || !navigator.credentials) throw new Error('Este navegador não suporta Face ID/digital no site.');
+  const challenge = crypto.getRandomValues(new Uint8Array(32));
+  const userId = crypto.getRandomValues(new Uint8Array(16));
+  const cred = await navigator.credentials.create({
+    publicKey: {
+      challenge: challenge,
+      rp: { name: 'Meu Caixa Inteligente', id: location.hostname },
+      user: { id: userId, name: (currentUser && currentUser.email) || 'usuario', displayName: (currentUser && currentUser.name) || 'Usuário' },
+      pubKeyCredParams: [{ alg: -7, type: 'public-key' }, { alg: -257, type: 'public-key' }],
+      authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+      timeout: 60000,
+      attestation: 'none'
+    }
+  });
+  if(!cred) throw new Error('Não foi possível registrar a biometria.');
+  const id = bufToB64(cred.rawId);
+  try{ localStorage.setItem(BIOMETRIC_CRED_KEY, id); }catch(e){}
+  return id;
+}
+async function verifyWebBiometric(){
+  const credId = localStorage.getItem(BIOMETRIC_CRED_KEY);
+  if(!credId) throw new Error('Biometria ainda não foi ativada neste aparelho.');
+  const challenge = crypto.getRandomValues(new Uint8Array(32));
+  const assertion = await navigator.credentials.get({
+    publicKey: {
+      challenge: challenge,
+      timeout: 60000,
+      userVerification: 'required',
+      allowCredentials: [{ id: b64ToBuf(credId), type: 'public-key', transports: ['internal'] }]
+    }
+  });
+  if(!assertion) throw new Error('Biometria cancelada.');
+  return true;
+}
+async function verifyNativeBiometric(){
+  const plugin = getCapacitorBiometric();
+  if(!plugin) throw new Error('Plugin biométrico não instalado no app.');
+  // @aparajita/capacitor-biometric-auth
+  if(typeof plugin.authenticate === 'function'){
+    await plugin.authenticate({
+      reason: 'Desbloquear Meu Caixa Inteligente',
+      cancelTitle: 'Cancelar',
+      allowDeviceCredential: true
+    });
+    return true;
+  }
+  // @capgo/capacitor-native-biometric / community
+  if(typeof plugin.verifyIdentity === 'function'){
+    await plugin.verifyIdentity({
+      reason: 'Desbloquear Meu Caixa Inteligente',
+      title: 'Desbloquear',
+      subtitle: 'Use Face ID ou digital',
+      description: 'Confirme sua identidade'
+    });
+    return true;
+  }
+  throw new Error('API biométrica não reconhecida no plugin.');
+}
+async function enableBiometricClick(){
+  try{
+    const avail = await biometricAvailable();
+    if(!avail){
+      alert('Biometria indisponível neste aparelho/navegador.\nNo iPhone use Safari (não aba anônima) ou o app Android/iOS com o plugin instalado.\nVocê ainda pode usar o PIN.');
+      return;
+    }
+    const plugin = getCapacitorBiometric();
+    if(plugin){
+      // nativo: só marca flag; autentica na hora para confirmar
+      await verifyNativeBiometric();
+      setBiometricEnabled(true);
+    } else {
+      await enrollWebBiometric();
+      setBiometricEnabled(true);
+    }
+    updateBioStatusUI();
+    showToast('Face ID / digital ativado.');
+    alert('Biometria ativada.\nAo reabrir o app (com a conta Google salva), use Face ID ou digital para entrar.\nRecomendado manter também um PIN de reserva.');
+  }catch(e){
+    console.error(e);
+    alert('Não ativou a biometria: '+(e.message||e));
+  }
+}
+function disableBiometricClick(){
+  try{
+    setBiometricEnabled(false);
+    try{ localStorage.removeItem(BIOMETRIC_CRED_KEY); }catch(e){}
+    updateBioStatusUI();
+    showToast('Biometria desativada.');
+  }catch(e){}
+}
+function updateBioStatusUI(){
+  const el = document.getElementById('bio-status');
+  if(!el) return;
+  const on = isBiometricEnabled();
+  el.textContent = on
+    ? 'Biometria ativa neste aparelho — ao reabrir pede Face ID/digital (PIN continua como reserva se existir).'
+    : 'Biometria desligada. Ative para desbloquear como no AutoCare.';
+}
+async function tryUnlockBiometric(){
+  const err = document.getElementById('pin-unlock-err');
+  try{
+    if(err){ err.style.display='none'; err.textContent=''; }
+    const plugin = getCapacitorBiometric();
+    if(plugin) await verifyNativeBiometric();
+    else await verifyWebBiometric();
+    hidePinUnlock();
+    if(typeof window.__afterPinUnlock === 'function'){
+      const fn = window.__afterPinUnlock;
+      window.__afterPinUnlock = null;
+      await fn();
+    }
+  }catch(e){
+    console.warn(e);
+    if(err){
+      err.style.display='block';
+      err.textContent = 'Biometria não confirmou. Use o PIN ou tente de novo.';
+    }
+  }
+}
+window.enableBiometricClick = enableBiometricClick;
+window.disableBiometricClick = disableBiometricClick;
+window.tryUnlockBiometric = tryUnlockBiometric;
+window.updateBioStatusUI = updateBioStatusUI;
+
+
 function showPinUnlock(){
   const box = document.getElementById('pin-unlock');
   if(!box) return;
   box.style.display = 'flex';
   const inp = document.getElementById('pin-unlock-input');
-  if(inp){ inp.value=''; setTimeout(()=>inp.focus(), 200); }
+  if(inp){ inp.value = ''; }
   const err = document.getElementById('pin-unlock-err');
-  if(err) err.style.display = 'none';
+  if(err){ err.style.display = 'none'; err.textContent = ''; }
+  const bioBtn = document.getElementById('bio-unlock-btn');
+  const pinOn = (function(){ try{ return !!(localStorage.getItem(APP_PIN_KEY)); }catch(e){ return false; } })();
+  const bioOn = isBiometricEnabled();
+  if(bioBtn){
+    bioBtn.style.display = bioOn ? '' : 'none';
+  }
+  const sub = document.getElementById('unlock-sub');
+  if(sub){
+    if(bioOn && pinOn) sub.textContent = 'Use Face ID / digital ou digite o PIN.';
+    else if(bioOn) sub.textContent = 'Use Face ID ou digital para continuar.';
+    else sub.textContent = 'Digite o PIN deste aparelho para continuar.';
+  }
+  const pinField = document.getElementById('pin-unlock-field');
+  const pinBtn = document.getElementById('pin-unlock-btn');
+  if(pinField) pinField.style.display = pinOn || !bioOn ? '' : 'none';
+  if(pinBtn) pinBtn.style.display = pinOn || !bioOn ? '' : 'none';
+  if(pinOn && inp) setTimeout(function(){ try{ inp.focus(); }catch(e){} }, 120);
 }
 function hidePinUnlock(){
   const box = document.getElementById('pin-unlock');
