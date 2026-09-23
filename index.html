@@ -364,6 +364,8 @@
     text-align:center;line-height:1.25;min-width:0;
   }
   .type-btn.active[data-type="despesa"]{background:rgba(217,124,87,.15);border-color:var(--warn-dim);color:var(--warn);}
+  #yoy-mode-toggle .type-btn{padding:6px 12px;}
+  #yoy-mode-toggle .type-btn.active{background:rgba(89,179,163,.15);border-color:var(--accent-dim);color:var(--accent);}
   .type-btn.active[data-type="receita"]{background:rgba(89,179,163,.15);border-color:var(--accent-dim);color:var(--accent);}
 
 
@@ -1081,9 +1083,9 @@
       <div class="card" style="margin-bottom:18px;" id="yoy-card">
         <div class="panel-title" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;">
           <span id="yoy-card-title">Comparativo de despesas</span>
-          <div class="type-toggle" id="yoy-mode-toggle" style="margin:0;font-size:12px;">
-            <button type="button" class="active" data-yoy-mode="yoy">Ano passado</button>
-            <button type="button" data-yoy-mode="mom">Mês anterior</button>
+          <div class="type-toggle" id="yoy-mode-toggle" style="margin:0;font-size:12px;grid-template-columns:repeat(2,auto);">
+            <button type="button" class="type-btn active" data-yoy-mode="yoy">Ano passado</button>
+            <button type="button" class="type-btn" data-yoy-mode="mom">Mês anterior</button>
           </div>
         </div>
         <p id="yoy-card-hint" style="font-size:12px;color:var(--ink-faint);margin:0 0 10px;line-height:1.4;">Esquerda = período base · direita = mês atual (despesas).</p>
@@ -1280,7 +1282,7 @@
           </div>
         </details>
         <div class="filter-actions">
-          <button type="button" class="btn ghost" id="filter-clear-btn" onclick="clearTransactionFilters()" style="padding:8px 12px;font-size:12px;">Limpar filtros</button>
+          <button type="button" class="btn ghost" id="filter-clear-btn" onclick="clearTransactionFilters({toast:true})" style="padding:8px 12px;font-size:12px;">Limpar filtros</button>
           <button type="button" class="btn secondary" id="btn-export-csv" onclick="exportTransactionsCsv()" style="padding:8px 12px;font-size:12px;">Exportar CSV</button>
         </div>
       </div>
@@ -1678,19 +1680,7 @@
           </p>
         </div>
 
-        <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="privacy-config-card">
-          <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Privacidade dos valores</div>
-          <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;margin-bottom:8px;">
-            <!-- cfg-hide-amounts removido -->
-          </label>
-          <label style="display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;">
-            <!-- cfg-hide-on-open removido -->
-          </label>
-          <p style="font-size:11.5px;color:var(--ink-faint);margin:10px 0 0;line-height:1.45;">
-            Também pode usar o botão 👁 no canto inferior esquerdo. Útil ao abrir o app em público.
-          </p>
-        </div>
-
+        <!-- privacy-config-card removido (recurso de privacidade desativado) -->
         <div class="card" style="margin:14px 0;padding:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;" id="lock-config-card">
           <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:8px;">Período conferido (fechamento)</div>
           <p style="font-size:12.5px;color:var(--ink-dim);line-height:1.45;margin:0 0 10px;">
@@ -3262,10 +3252,13 @@ function goToTransactions({month, type, category, source, account, search, from,
   renderTransactions();
 }
 
-document.getElementById('link-view-all').addEventListener('click', (e)=>{
-  e.preventDefault();
-  goToTransactions();
-});
+{
+  const linkViewAll = document.getElementById('link-view-all');
+  if(linkViewAll) linkViewAll.addEventListener('click', (e)=>{
+    e.preventDefault();
+    goToTransactions();
+  });
+}
 
 /* ============================================================
    CATEGORIAS EM SELECTS
@@ -4362,7 +4355,7 @@ function exportFilteredCSV(list){
   list.forEach(t=>{
     rows.push([
       t.date,
-      typeById(t.type).label || t.type,
+      typeById(t.type).name || t.type,
       t.desc||'',
       catById(t.category).name || t.category||'',
       String(t.amount).replace('.',','),
@@ -6544,15 +6537,6 @@ document.getElementById('filter-imported') && document.getElementById('filter-im
     if(el.id === 'filter-search' || el.id === 'filter-amount-min' || el.id === 'filter-amount-max') apply();
   });
 })();
-window.clearTransactionFilters = function clearTransactionFilters(){
-  ['filter-month','filter-from','filter-to','filter-type','filter-category','filter-subcategory','filter-source','filter-imported','filter-imported-date','filter-account','filter-search','filter-amount-min','filter-amount-max','filter-tag'].forEach(function(id){
-    const el = document.getElementById(id);
-    if(el) el.value = '';
-  });
-  const fid = document.getElementById('filter-imported-date');
-  if(fid) fid.style.display = 'none';
-  try{ renderTransactions(true); }catch(e){ console.error(e); }
-};
 
 /* ============================================================
    MODAL DE EDIÇÃO
@@ -10082,15 +10066,6 @@ async function gistSyncSmart(){
 }
 
 
-function clearTransactionFilters(){
-  const ids = ['filter-month','filter-from','filter-to','filter-type','filter-category','filter-subcategory','filter-source','filter-imported','filter-imported-date','filter-account','filter-search','filter-amount-min','filter-amount-max','filter-tag'];
-  ids.forEach(id=>{
-    const el = document.getElementById(id);
-    if(!el) return;
-    if(el.tagName === 'SELECT' || el.tagName === 'INPUT') el.value = '';
-  });
-  txListPage = 0;
-}
 function applyImportedBackup(parsed){
   // aceita backup aninhado { state: { transactions } } ou direto
   if(parsed && !Array.isArray(parsed.transactions) && parsed.state && Array.isArray(parsed.state.transactions)){
@@ -10112,7 +10087,7 @@ function applyImportedBackup(parsed){
     throw e;
   }
   try{ saveState(); }catch(e){}
-  try{ clearTransactionFilters(); }catch(e){}
+  try{ clearTransactionFilters({render:false}); }catch(e){}
   try{ document.getElementById('type-toggle').innerHTML = typeToggleHTML('despesa'); }catch(e){}
   try{ fillCategorySelects(); }catch(e){}
   try{ fillAccountSuggestions(); }catch(e){}
@@ -10933,7 +10908,7 @@ async function enterAppAs(user){
     try{ applyPrivacyFromSettings(); }catch(e){}
     try{ renderDashboard(); }catch(e){ console.error(e); }
     try{ renderTransactions(); }catch(e){ console.error(e); }
-    try{ renderCategories(); }catch(e){ console.error(e); }
+    try{ renderCategoriesView(); }catch(e){ console.error(e); }
     try{ renderConfigStorageSection(); }catch(e){}
     updateAuthConfigUI();
     try{ maybeShowOnboarding(); }catch(e){}
@@ -11905,7 +11880,7 @@ function goToView(view){
           document.getElementById('import-account-planilha').value = p.lastAccountSheet;
       }catch(e){}
     }
-    if(view==='categories'){ try{ renderCategoriesView(); }catch(e){ try{ renderCategories(); }catch(err){} } }
+    if(view==='categories'){ try{ renderCategoriesView(); }catch(e){ console.error(e); } }
     if(view==='config'){
       try{
         // reaplicar pastas se ainda não existirem
@@ -12010,12 +11985,16 @@ window.authContinueLocal = authContinueLocal;
 window.authImportBackupClick = authImportBackupClick;
 window.authImportBackupFile = authImportBackupFile;
 
-function clearTransactionFilters(){
+function clearTransactionFilters(opts){
+  opts = opts || {};
   try{
     const ids = ['filter-month','filter-from','filter-to','filter-type','filter-category','filter-subcategory','filter-source','filter-imported','filter-imported-date','filter-account','filter-search','filter-amount-min','filter-amount-max','filter-tag'];
     ids.forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
-    renderTransactions();
-    showToast('Filtros limpos.');
+    const fid = document.getElementById('filter-imported-date');
+    if(fid) fid.style.display = 'none';
+    txListPage = 0;
+    if(opts.render !== false) renderTransactions(true);
+    if(opts.toast) showToast('Filtros limpos.');
   }catch(e){ console.error(e); }
 }
 function exportTransactionsCsv(){
