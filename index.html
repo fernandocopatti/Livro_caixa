@@ -446,6 +446,56 @@
   .map-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:13px;}
   .map-row label{width:150px;color:var(--ink-dim);flex-shrink:0;}
   .import-summary{margin-top:14px;font-size:12.5px;color:var(--ink-dim);}
+  /* Revisão mobile — cards empilhados (legível no celular) */
+  .rv-cards{display:flex;flex-direction:column;gap:10px;margin:10px 0 16px;}
+  .rv-card{
+    background:var(--surface);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:12px 12px 10px;
+  }
+  .rv-card.rv-dup{border-color:var(--warn-dim);background:rgba(217,124,87,.06);}
+  .rv-card-top{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;}
+  .rv-card-top .rv-chk{width:18px;height:18px;margin-top:3px;flex-shrink:0;accent-color:var(--accent);}
+  .rv-card-desc{flex:1;min-width:0;}
+  .rv-card-desc input.rv-desc{
+    width:100%;background:var(--surface-2);border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:8px 10px;font-size:13.5px;font-weight:500;
+  }
+  .rv-card-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+  .rv-card-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+  }
+  .rv-card-grid .field{margin:0;}
+  .rv-card-grid .field label{
+    display:block;font-size:10px;text-transform:uppercase;letter-spacing:.4px;
+    color:var(--ink-faint);margin-bottom:3px;
+  }
+  .rv-card-grid input,.rv-card-grid select{
+    width:100%;background:var(--surface-2);border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:8px 10px;font-size:13px;
+  }
+  .rv-card-grid .rv-amount{font-family:var(--font-mono);font-weight:600;}
+  .rv-card-foot{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    margin-top:10px;padding-top:8px;border-top:1px dashed var(--line);
+    font-size:12px;color:var(--ink-dim);
+  }
+  .rv-card-foot label{display:flex;align-items:center;gap:6px;cursor:pointer;}
+  .rv-sticky-bar{
+    position:sticky;bottom:72px;z-index:20;
+    display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+    background:rgba(18,26,29,.92);backdrop-filter:blur(8px);
+    border:1px solid var(--line);border-radius:12px;
+    padding:10px 12px;margin:12px 0 8px;
+  }
+  .rv-sticky-bar .btn{flex:1;min-width:120px;}
+  @media (min-width:900px){
+    .rv-card-grid{grid-template-columns:110px 1fr 100px 110px 140px;}
+  }
+
   .badge{
     display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;
     font-weight:600;text-transform:uppercase;letter-spacing:.5px;
@@ -8492,7 +8542,6 @@ function renderReviewTable(containerId, items, sourceType, mode){
     sorted.forEach(it=> items.push(it));
   }catch(e){ console.warn(e); }
 
-  // opções montadas 1x (evita travar no celular com 50+ linhas)
   const types = (state && state.transactionTypes && state.transactionTypes.length) ? state.transactionTypes : [
     {id:'despesa',name:'Despesa'},{id:'receita',name:'Receita'}
   ];
@@ -8500,64 +8549,74 @@ function renderReviewTable(containerId, items, sourceType, mode){
   let catOptionsBase = '';
   try{ catOptionsBase = categoryOptionsHTML(''); }catch(e){ catOptionsBase = '<option value="outros">Outros</option>'; }
 
-  // guarda lote para o botão confirmar (onclick global — mais estável no iOS)
   window.__pendingImport = { items: items, sourceType: sourceType, containerId: containerId };
 
-  const maxShow = 120;
+  const maxShow = 150;
   const showItems = items.slice(0, maxShow);
   const more = items.length - showItems.length;
 
-  let rowsHTML = '';
+  let cardsHTML = '';
   for(let i=0;i<showItems.length;i++){
     const it = showItems[i];
     const type = it.type || 'despesa';
     const cat = it.category || '';
-    const typeOpts = typeOptionsBase.replace('value="'+type+'"', 'value="'+type+'" selected');
+    let typeOpts = typeOptionsBase.replace('value="'+type+'"', 'value="'+type+'" selected');
     let catOpts = catOptionsBase;
     if(cat){
-      catOpts = catOptionsBase.replace('value="'+escapeAttr(cat)+'"', 'value="'+escapeAttr(cat)+'" selected');
-      if(catOpts === catOptionsBase && cat){
+      const needle = 'value="'+escapeAttr(cat)+'"';
+      if(catOpts.indexOf(needle) >= 0){
+        catOpts = catOpts.replace(needle, needle+' selected');
+      } else {
         catOpts = '<option value="'+escapeAttr(cat)+'" selected>'+escapeHTML(cat)+'</option>' + catOptionsBase;
       }
     }
     const dateVal = (it.date && String(it.date).length>=10) ? String(it.date).slice(0,10) : (it.date||'');
     const amt = (it.amount!=null && !isNaN(it.amount)) ? it.amount : '';
     const desc = escapeAttr(it.desc||'');
-    rowsHTML += '<tr data-idx="'+i+'" class="'+(it.duplicate?'rv-dup':'')+'">'
-      + '<td class="chk"><input type="checkbox" class="rv-chk" '+(it.duplicate?'':'checked')+'></td>'
-      + '<td><input type="date" class="rv-date" value="'+escapeAttr(dateVal)+'"></td>'
-      + '<td><input type="text" class="rv-desc" value="'+desc+'">'
-      + (it.duplicate ? '<span class="dup-badge">duplicata</span>' : '')
-      + (it.installment ? '<span class="dup-badge" style="color:var(--gold);">'+it.installment.current+'/'+it.installment.total+'</span>' : '')
-      + '</td>'
-      + '<td><input type="number" step="0.01" class="rv-amount" value="'+amt+'"></td>'
-      + '<td><select class="rv-type">'+typeOpts+'</select></td>'
-      + '<td><select class="rv-cat">'+catOpts+'</select></td>'
-      + '<td class="chk"><input type="checkbox" class="rv-remember" checked></td>'
-      + '</tr>';
+    const badges = [];
+    if(it.duplicate) badges.push('<span class="dup-badge">duplicata</span>');
+    if(it.installment) badges.push('<span class="dup-badge" style="color:var(--gold);">Parcela '+it.installment.current+'/'+it.installment.total+'</span>');
+    if(it.matchIsOcr) badges.push('<span class="dup-badge" style="color:var(--accent);">OCR</span>');
+
+    cardsHTML +=
+      '<div class="rv-card'+(it.duplicate?' rv-dup':'')+'" data-idx="'+i+'">'
+      + '<div class="rv-card-top">'
+      +   '<input type="checkbox" class="rv-chk" '+(it.duplicate?'':'checked')+'>'
+      +   '<div class="rv-card-desc">'
+      +     '<input type="text" class="rv-desc" value="'+desc+'" placeholder="Descrição">'
+      +     (badges.length ? '<div class="rv-card-badges">'+badges.join('')+'</div>' : '')
+      +   '</div>'
+      + '</div>'
+      + '<div class="rv-card-grid">'
+      +   '<div class="field"><label>Data</label><input type="date" class="rv-date" value="'+escapeAttr(dateVal)+'"></div>'
+      +   '<div class="field"><label>Valor</label><input type="number" step="0.01" class="rv-amount" value="'+amt+'"></div>'
+      +   '<div class="field"><label>Tipo</label><select class="rv-type">'+typeOpts+'</select></div>'
+      +   '<div class="field"><label>Categoria</label><select class="rv-cat">'+catOpts+'</select></div>'
+      + '</div>'
+      + '<div class="rv-card-foot">'
+      +   '<label><input type="checkbox" class="rv-remember" checked> Memorizar categoria</label>'
+      +   '<span style="font-family:var(--font-mono);font-size:11px;color:var(--ink-faint);">#'+(i+1)+'</span>'
+      + '</div>'
+      + '</div>';
   }
 
   container.innerHTML =
     '<div class="import-summary" style="margin-bottom:10px;">'
-    + items.length + ' lançamento(s) prontos para revisar.'
-    + (dupCount ? ' '+dupCount+' possível(is) duplicata(s) desmarcada(s).' : '')
-    + (more > 0 ? ' Mostrando os primeiros '+maxShow+' (os demais entram iguais ao confirmar).' : '')
+    + '<strong>'+items.length+'</strong> lançamento(s) para conferir.'
+    + (dupCount ? ' <span style="color:var(--warn);">'+dupCount+' possível(is) duplicata(s) já desmarcada(s).</span>' : '')
+    + (more > 0 ? ' Mostrando os primeiros '+maxShow+'; o restante entra igual ao confirmar.' : '')
+    + ' Toque no quadrado para incluir/excluir.'
     + '</div>'
-    + '<div class="btn-row" style="margin:0 0 10px;flex-wrap:wrap;gap:8px;">'
-    + '<button type="button" class="btn" id="confirm-import-'+sourceType+'" onclick="window.__confirmPendingImport && window.__confirmPendingImport(false)">Confirmar importação</button>'
-    + '<button type="button" class="btn ghost" id="cancel-import-'+sourceType+'" onclick="(function(){var c=document.getElementById(\''+containerId+'\'); if(c)c.innerHTML=\'\'; window.__pendingImport=null;})()">Cancelar</button>'
+    + '<div class="rv-sticky-bar">'
+    +   '<button type="button" class="btn" onclick="window.__confirmPendingImport&&window.__confirmPendingImport(false)">Confirmar importação</button>'
+    +   '<button type="button" class="btn ghost" onclick="(function(){var c=document.getElementById(\''+containerId+'\');if(c)c.innerHTML=\'\';window.__pendingImport=null;})()">Cancelar</button>'
     + '</div>'
-    + '<div class="review-table-scroll">'
-    + '<table class="review-table"><thead><tr>'
-    + '<th></th><th>Data</th><th>Descrição</th><th>Valor</th><th>Tipo</th><th>Categoria</th><th>🧠</th>'
-    + '</tr></thead><tbody>'+rowsHTML+'</tbody></table></div>'
-    + '<div class="btn-row" style="margin-top:12px;">'
-    + '<button type="button" class="btn" onclick="window.__confirmPendingImport && window.__confirmPendingImport(false)">Confirmar importação</button>'
+    + '<div class="rv-cards">'+cardsHTML+'</div>'
+    + '<div class="rv-sticky-bar">'
+    +   '<button type="button" class="btn" onclick="window.__confirmPendingImport&&window.__confirmPendingImport(false)">Confirmar importação</button>'
     + '</div>';
 
-  // inclui itens além do maxShow no pending (confirm importa todos os do array, não só os da tabela)
-  // Para linhas visíveis, o confirm lê da tabela; para ocultos, usa o array original.
-  window.__confirmPendingImport = function(forceMergeAllOcr){
+  window.__confirmPendingImport = function(){
     try{
       const pending = window.__pendingImport;
       if(!pending || !pending.items){ showToast('Nada para importar.'); return; }
@@ -8566,23 +8625,24 @@ function renderReviewTable(containerId, items, sourceType, mode){
       const src = pending.sourceType;
       let count = 0, skippedDup = 0, skippedManual = 0;
       const batchImportedAt = (typeof todayISO === 'function') ? todayISO() : new Date().toISOString().slice(0,10);
-      const tableRows = cont ? cont.querySelectorAll('tbody tr') : [];
+      const cards = cont ? cont.querySelectorAll('.rv-card') : [];
       const seenIdx = new Set();
 
-      tableRows.forEach(row=>{
-        const idx = parseInt(row.dataset.idx, 10);
+      cards.forEach(card=>{
+        const idx = parseInt(card.dataset.idx, 10);
         if(isNaN(idx) || !itemsArr[idx]) return;
         seenIdx.add(idx);
         const it = itemsArr[idx];
-        if(!row.querySelector('.rv-chk') || !row.querySelector('.rv-chk').checked){
+        const chk = card.querySelector('.rv-chk');
+        if(!chk || !chk.checked){
           if(it.duplicate) skippedDup++; else skippedManual++;
           return;
         }
-        const date = (row.querySelector('.rv-date')||{}).value || it.date;
-        const desc = ((row.querySelector('.rv-desc')||{}).value || it.desc || '').trim();
-        const amount = parseFloat((row.querySelector('.rv-amount')||{}).value);
-        const type = (row.querySelector('.rv-type')||{}).value || it.type || 'despesa';
-        const category = (row.querySelector('.rv-cat')||{}).value || it.category || 'outros';
+        const date = (card.querySelector('.rv-date')||{}).value || it.date;
+        const desc = ((card.querySelector('.rv-desc')||{}).value || it.desc || '').trim();
+        const amount = parseFloat((card.querySelector('.rv-amount')||{}).value);
+        const type = (card.querySelector('.rv-type')||{}).value || it.type || 'despesa';
+        const category = (card.querySelector('.rv-cat')||{}).value || it.category || 'outros';
         if(!date || !desc || isNaN(amount)) return;
         addTransaction({
           date, amount, desc, category, source: src, type,
@@ -8590,14 +8650,13 @@ function renderReviewTable(containerId, items, sourceType, mode){
           externalId: it.externalId, importedAt: batchImportedAt
         });
         try{
-          if(row.querySelector('.rv-remember') && row.querySelector('.rv-remember').checked && typeof learnCategory === 'function'){
+          if(card.querySelector('.rv-remember') && card.querySelector('.rv-remember').checked && typeof learnCategory === 'function'){
             learnCategory(desc, category);
           }
         }catch(e){}
         count++;
       });
 
-      // itens não mostrados na tabela (além do maxShow) — importa se não forem duplicata
       for(let i=0;i<itemsArr.length;i++){
         if(seenIdx.has(i)) continue;
         const it = itemsArr[i];
