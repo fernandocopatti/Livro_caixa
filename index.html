@@ -8656,7 +8656,7 @@ function renderReviewTable(containerId, items, sourceType, mode){
     + '</div>'
     + '<div class="rv-sticky-bar">'
     +   '<button type="button" class="btn" onclick="window.__confirmPendingImport&&window.__confirmPendingImport(false)">Confirmar importação</button>'
-    +   '<button type="button" class="btn ghost" onclick="(function(){var c=document.getElementById(\''+containerId+'\');if(c)c.innerHTML=\'\';window.__pendingImport=null;try{document.body.classList.remove('import-reviewing')}catch(e){}})()">Cancelar</button>'
+    +   '<button type="button" class="btn ghost" onclick="(function(){var c=document.getElementById(\''+containerId+'\');if(c)c.innerHTML=\'\';window.__pendingImport=null;try{document.body.classList.remove("import-reviewing")}catch(e){}})()">Cancelar</button>'
     + '</div>'
     + '<div class="rv-cards">'+cardsHTML+'</div>'
     + '<div class="rv-sticky-bar">'
@@ -8722,7 +8722,7 @@ function renderReviewTable(containerId, items, sourceType, mode){
       if(skippedDup) log.push(skippedDup+' duplicata(s) pulada(s).');
       if(skippedManual) log.push(skippedManual+' desmarcado(s).');
       if(cont) cont.innerHTML = '<div class="import-summary">'+log.join(' ')+'</div>';
-      window.__pendingImport = null; try{ document.body.classList.remove('import-reviewing'); }catch(e){}
+      window.__pendingImport = null; try{ document.body.classList.remove("import-reviewing"); }catch(e){}
       try{ renderDashboard(); }catch(e){}
       try{ fillAccountSuggestions(); }catch(e){}
       try{ renderTransactions(); }catch(e){}
