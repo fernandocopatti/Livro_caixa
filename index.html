@@ -446,35 +446,31 @@
   .map-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:13px;}
   .map-row label{width:150px;color:var(--ink-dim);flex-shrink:0;}
   .import-summary{margin-top:14px;font-size:12.5px;color:var(--ink-dim);}
-  /* Revisão mobile — cards empilhados (legível no celular) */
-  .rv-cards{display:flex;flex-direction:column;gap:10px;margin:10px 0 16px;}
+  /* Revisão mobile — cards compactos */
+  .rv-cards{display:flex;flex-direction:column;gap:8px;margin:8px 0 12px;padding-bottom:120px;}
   .rv-card{
     background:var(--surface);
     border:1px solid var(--line);
-    border-radius:12px;
-    padding:12px 12px 10px;
+    border-radius:10px;
+    padding:10px;
   }
   .rv-card.rv-dup{border-color:var(--warn-dim);background:rgba(217,124,87,.06);}
-  .rv-card-top{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;}
-  .rv-card-top .rv-chk{width:18px;height:18px;margin-top:3px;flex-shrink:0;accent-color:var(--accent);}
+  .rv-card-top{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;}
+  .rv-card-top .rv-chk{width:16px;height:16px;margin-top:4px;flex-shrink:0;accent-color:var(--accent);}
   .rv-card-desc{flex:1;min-width:0;}
-  .rv-card-desc input.rv-desc{
-    width:100%;background:var(--surface-2);border:1px solid var(--line);color:var(--ink);
-    border-radius:8px;padding:8px 10px;font-size:13.5px;font-weight:500;
-  }
-  .rv-card-badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+  .rv-card-badges{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;}
   .rv-card-grid{
     display:grid;
     grid-template-columns:1fr 1fr;
-    gap:10px;
+    gap:6px 8px;
   }
   .rv-card-grid .field{margin:0;min-width:0;}
   .rv-card-grid .field.full{grid-column:1 / -1;}
   .rv-card-grid .field label{
-    display:block;font-size:10px;text-transform:uppercase;letter-spacing:.4px;
-    color:var(--ink-faint);margin-bottom:4px;
+    display:block;font-size:9px;text-transform:uppercase;letter-spacing:.4px;
+    color:var(--ink-faint);margin-bottom:2px;
   }
-  /* override do .field input/select global (height:40px + line-height cortava no iOS) */
+  /* compacto — sobrescreve regra global de height:40px */
   .rv-card .field input,
   .rv-card .field select,
   .rv-card-grid input,
@@ -484,15 +480,15 @@
     max-width:100% !important;
     box-sizing:border-box !important;
     height:auto !important;
-    min-height:48px !important;
-    line-height:1.35 !important;
-    font-size:16px !important;
+    min-height:34px !important;
+    line-height:1.3 !important;
+    font-size:13px !important;
     font-weight:500 !important;
-    padding:12px 12px !important;
+    padding:6px 8px !important;
     background:var(--surface-2) !important;
     border:1px solid var(--line) !important;
     color:var(--ink) !important;
-    border-radius:10px !important;
+    border-radius:8px !important;
     -webkit-appearance:none !important;
     appearance:none !important;
     overflow:visible !important;
@@ -501,44 +497,33 @@
   }
   .rv-card .field select,
   .rv-card-grid select{
-    padding-right:36px !important;
+    padding-right:28px !important;
     background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23A9AFA7' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") !important;
     background-repeat:no-repeat !important;
-    background-position:right 12px center !important;
+    background-position:right 8px center !important;
   }
   .rv-card-grid .rv-amount{font-family:var(--font-mono) !important;font-weight:700 !important;}
-  .rv-card-desc input.rv-desc{
-    word-break:break-word !important;
-    font-weight:600 !important;
-  }
+  .rv-card-desc input.rv-desc{font-weight:600 !important;word-break:break-word !important;}
   .rv-card-foot{
-    display:flex;align-items:center;justify-content:space-between;gap:8px;
-    margin-top:10px;padding-top:8px;border-top:1px dashed var(--line);
-    font-size:12px;color:var(--ink-dim);
+    display:flex;align-items:center;justify-content:space-between;gap:6px;
+    margin-top:6px;padding-top:6px;border-top:1px dashed var(--line);
+    font-size:11px;color:var(--ink-dim);
   }
-  .rv-card-foot label{display:flex;align-items:center;gap:6px;cursor:pointer;}
-  /* barra de confirmar: fixa acima do menu, sem cobrir o card */
+  .rv-card-foot label{display:flex;align-items:center;gap:5px;cursor:pointer;}
   .rv-sticky-bar{
-    position:sticky;bottom:88px;z-index:30;
-    display:flex;flex-direction:column;gap:8px;
+    position:sticky;bottom:84px;z-index:30;
+    display:flex;flex-direction:column;gap:6px;
     background:rgba(18,26,29,.98);backdrop-filter:blur(12px);
-    border:1px solid var(--line);border-radius:14px;
-    padding:10px;margin:14px 0 8px;
-    box-shadow:0 6px 24px rgba(0,0,0,.4);
+    border:1px solid var(--line);border-radius:12px;
+    padding:8px;margin:10px 0 6px;
+    box-shadow:0 6px 20px rgba(0,0,0,.35);
   }
-  .rv-sticky-bar .btn{width:100%;min-height:48px;font-size:16px;}
-  .rv-cards{padding-bottom:140px;}
-  /* esconde FAB + durante a revisão de importação */
+  .rv-sticky-bar .btn{width:100%;min-height:42px;font-size:14px;}
   body.import-reviewing #fab-add,
-  body.import-reviewing .fab-add{display:none !important;}
-  @media (max-width:480px){
-    .rv-card{padding:12px;}
-    .rv-card-grid{grid-template-columns:1fr 1fr;gap:10px;}
-    /* data e valor lado a lado; tipo e categoria em linha inteira */
-    .rv-card-grid .field.full{grid-column:1 / -1;}
-  }
+  body.import-reviewing .fab-add,
+  body.import-reviewing #fab-scroll-top{display:none !important;}
   @media (min-width:900px){
-    .rv-card-grid{grid-template-columns:120px 110px 1fr 1fr;}
+    .rv-card-grid{grid-template-columns:110px 100px 1fr 1fr;gap:8px;}
     .rv-card-grid .field.full{grid-column:auto;}
   }
 
@@ -8656,12 +8641,35 @@ function renderReviewTable(containerId, items, sourceType, mode){
     + '</div>'
     + '<div class="rv-sticky-bar">'
     +   '<button type="button" class="btn" onclick="window.__confirmPendingImport&&window.__confirmPendingImport(false)">Confirmar importação</button>'
-    +   '<button type="button" class="btn ghost" onclick="(function(){var c=document.getElementById(\''+containerId+'\');if(c)c.innerHTML=\'\';window.__pendingImport=null;try{document.body.classList.remove("import-reviewing")}catch(e){}})()">Cancelar</button>'
+    +   '<button type="button" class="btn ghost" onclick="window.__cancelPendingImport&&window.__cancelPendingImport()">Cancelar</button>'
     + '</div>'
     + '<div class="rv-cards">'+cardsHTML+'</div>'
     + '<div class="rv-sticky-bar">'
     +   '<button type="button" class="btn" onclick="window.__confirmPendingImport&&window.__confirmPendingImport(false)">Confirmar importação</button>'
     + '</div>';
+
+
+  window.__cancelPendingImport = function(){
+    try{
+      const pending = window.__pendingImport;
+      const id = pending && pending.containerId;
+      const cont = id ? document.getElementById(id) : null;
+      if(cont) cont.innerHTML = '';
+      // limpa também áreas padrão de revisão
+      ['review-ofx','review-pdf','review-planilha','planilha-preview'].forEach(function(cid){
+        const el = document.getElementById(cid);
+        if(el && (!cont || el===cont || cont.contains(el))){
+          /* só limpa container principal */
+        }
+      });
+      window.__pendingImport = null;
+      try{ document.body.classList.remove('import-reviewing'); }catch(e){}
+      try{ showToast('Importação cancelada.'); }catch(e){}
+    }catch(err){
+      console.error(err);
+      try{ document.body.classList.remove('import-reviewing'); }catch(e){}
+    }
+  };
 
   window.__confirmPendingImport = function(){
     try{
@@ -8740,19 +8748,66 @@ function escapeAttr(s){ return (s||'').replace(/"/g,'&quot;'); }
 /* ---------- OFX / extrato bancário ---------- */
 function readFileAsTextAutoEncoding(file){
   return new Promise((resolve, reject)=>{
+    const tryDecode = (buf, enc)=>{
+      try{
+        if(typeof TextDecoder !== 'undefined'){
+          return new TextDecoder(enc, {fatal:false}).decode(buf);
+        }
+      }catch(e){}
+      return null;
+    };
     const reader = new FileReader();
     reader.onload = ()=>{
-      let text = reader.result || '';
-      const bad = (text.match(/\uFFFD/g)||[]).length;
-      if(bad > 3){
-        const r2 = new FileReader();
-        r2.onload = ()=> resolve(r2.result || text);
-        r2.onerror = ()=> resolve(text);
-        r2.readAsText(file, 'UTF-8');
-      } else resolve(text);
+      try{
+        const buf = reader.result;
+        // ArrayBuffer path
+        if(buf && buf.byteLength !== undefined){
+          const u8 = new Uint8Array(buf);
+          // UTF-8 BOM
+          if(u8.length >= 3 && u8[0]===0xEF && u8[1]===0xBB && u8[2]===0xBF){
+            resolve(tryDecode(buf, 'utf-8') || '');
+            return;
+          }
+          const asUtf = tryDecode(buf, 'utf-8') || '';
+          const asLat = tryDecode(buf, 'iso-8859-1') || '';
+          // escolhe a que tiver mais tags OFX legíveis
+          const score = (s)=>{
+            const u = (s||'').toUpperCase();
+            let n = 0;
+            if(u.includes('OFX')) n+=2;
+            if(u.includes('STMTTRN')) n+=3;
+            if(u.includes('TRNAMT')) n+=2;
+            if(u.includes('BANKTRANLIST')) n+=1;
+            // penaliza caracteres de substituição
+            n -= (s.match(/\uFFFD/g)||[]).length;
+            return n;
+          };
+          resolve(score(asUtf) >= score(asLat) ? asUtf : asLat);
+          return;
+        }
+        // string path (fallback)
+        const text = String(buf||'');
+        if(/[ÃÂÃ¡Ã§]/.test(text)){
+          // provavelmente latin1 lido como utf — tenta de novo via array buffer
+          const r2 = new FileReader();
+          r2.onload = ()=> resolve(String(r2.result||text));
+          r2.onerror = ()=> resolve(text);
+          r2.readAsText(file, 'ISO-8859-1');
+          return;
+        }
+        resolve(text);
+      }catch(err){ reject(err); }
     };
     reader.onerror = reject;
-    reader.readAsText(file, 'ISO-8859-1');
+    try{ reader.readAsArrayBuffer(file); }
+    catch(e){
+      try{
+        const r3 = new FileReader();
+        r3.onload = ()=> resolve(String(r3.result||''));
+        r3.onerror = reject;
+        r3.readAsText(file, 'UTF-8');
+      }catch(e2){ reject(e2); }
+    }
   });
 }
 
@@ -8796,9 +8851,14 @@ function parseOFX(text){
   const items = [];
   const meta = extractOfxAccountMeta(text);
   const normalized = String(text).replace(/\r\n/g,'\n').replace(/\r/g,'\n');
-  const blocks = normalized.split(/<STMTTRN>/i).slice(1);
+  // STMTTRN (conta) e CCSTMTTRN (cartão); aceita atributos no tag
+  let blocks = normalized.split(/<(?:CC)?STMTTRN(?:\s[^>]*)?>/i).slice(1);
+  if(blocks.length < 1){
+    // alguns bancos usam TRN sozinho dentro de BANKTRANLIST
+    blocks = normalized.split(/<TRN(?:\s[^>]*)?>/i).slice(1);
+  }
   blocks.forEach(block=>{
-    const chunk = block.split(/<\/STMTTRN>/i)[0];
+    const chunk = block.split(/<\/(?:CC)?STMTTRN>/i)[0].split(/<\/TRN>/i)[0];
     const dt = ofxGetTag(chunk, 'DTPOSTED') || ofxGetTag(chunk, 'DTUSER');
     const amtRaw = ofxGetTag(chunk, 'TRNAMT');
     const fitId = ofxGetTag(chunk, 'FITID') || ofxGetTag(chunk, 'CHECKNUM');
@@ -8849,17 +8909,17 @@ async function handleOfxFiles(fileList){
   for(const file of files){
     try{
       const text = await readFileAsTextAutoEncoding(file);
-      const head = String(text).slice(0, 400).toUpperCase();
-      const looksOfx = head.includes('OFX') || head.includes('STMTTRN') || head.includes('BANKTRANLIST') || head.includes('CREDITCARDMSGSRQV1') || head.includes('<OFX');
-      if(!looksOfx && !/\.ofx|\.qfx/i.test(file.name||'')){
+      const upper = String(text).toUpperCase();
+      const looksOfx = upper.includes('OFX') || upper.includes('STMTTRN') || upper.includes('CCSTMTTRN') || upper.includes('BANKTRANLIST') || upper.includes('CREDITCARDMSGSRQV1') || upper.includes('BANKMSGSRSV1') || /\.OFX|\.QFX/i.test(file.name||'');
+      if(!looksOfx){
         metas.push({ name: file.name||'arquivo', ok:false, msg: 'não parece OFX (conteúdo sem tags OFX)' });
         continue;
       }
-      const parsed = parseOFX(text);
-      const items = (parsed && parsed.items) ? parsed.items : (Array.isArray(parsed) ? parsed : []);
-      const meta = (parsed && parsed.meta) ? parsed.meta : null;
+      let parsed = parseOFX(text);
+      let items = (parsed && parsed.items) ? parsed.items : (Array.isArray(parsed) ? parsed : []);
+      let meta = (parsed && parsed.meta) ? parsed.meta : null;
       if(!items.length){
-        metas.push({ name: file.name||'arquivo', ok:false, msg: 'OFX lido, mas sem lançamentos (STMTTRN)' });
+        metas.push({ name: file.name||'arquivo', ok:false, msg: 'OFX lido, mas sem lançamentos (STMTTRN/CCSTMTTRN). Tamanho: '+String(text).length+' chars' });
         continue;
       }
       items.forEach(it=>{ it._srcFile = file.name; });
