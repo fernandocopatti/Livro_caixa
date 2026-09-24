@@ -474,22 +474,42 @@
     display:block;font-size:10px;text-transform:uppercase;letter-spacing:.4px;
     color:var(--ink-faint);margin-bottom:4px;
   }
-  .rv-card-grid input,.rv-card-grid select{
-    width:100%;max-width:100%;box-sizing:border-box;
-    background:var(--surface-2);border:1px solid var(--line);color:var(--ink);
-    border-radius:8px;padding:10px 10px;font-size:14px;
-    min-height:42px;
-  }
-  .rv-card-grid select{
-    /* evita corte do texto no iOS */
-    white-space:normal;
-    text-overflow:ellipsis;
-    padding-right:28px;
-  }
-  .rv-card-grid .rv-amount{font-family:var(--font-mono);font-weight:600;}
+  /* override do .field input/select global (height:40px + line-height cortava no iOS) */
+  .rv-card .field input,
+  .rv-card .field select,
+  .rv-card-grid input,
+  .rv-card-grid select,
   .rv-card-desc input.rv-desc{
-    font-size:14px;min-height:42px;
-    white-space:normal;word-break:break-word;
+    width:100% !important;
+    max-width:100% !important;
+    box-sizing:border-box !important;
+    height:auto !important;
+    min-height:48px !important;
+    line-height:1.35 !important;
+    font-size:16px !important;
+    font-weight:500 !important;
+    padding:12px 12px !important;
+    background:var(--surface-2) !important;
+    border:1px solid var(--line) !important;
+    color:var(--ink) !important;
+    border-radius:10px !important;
+    -webkit-appearance:none !important;
+    appearance:none !important;
+    overflow:visible !important;
+    text-overflow:clip !important;
+    white-space:normal !important;
+  }
+  .rv-card .field select,
+  .rv-card-grid select{
+    padding-right:36px !important;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23A9AFA7' d='M1 1l5 5 5-5'/%3E%3C/svg%3E") !important;
+    background-repeat:no-repeat !important;
+    background-position:right 12px center !important;
+  }
+  .rv-card-grid .rv-amount{font-family:var(--font-mono) !important;font-weight:700 !important;}
+  .rv-card-desc input.rv-desc{
+    word-break:break-word !important;
+    font-weight:600 !important;
   }
   .rv-card-foot{
     display:flex;align-items:center;justify-content:space-between;gap:8px;
@@ -497,16 +517,20 @@
     font-size:12px;color:var(--ink-dim);
   }
   .rv-card-foot label{display:flex;align-items:center;gap:6px;cursor:pointer;}
+  /* barra de confirmar: fixa acima do menu, sem cobrir o card */
   .rv-sticky-bar{
-    position:sticky;bottom:78px;z-index:25;
-    display:flex;flex-wrap:wrap;gap:8px;align-items:center;
-    background:rgba(18,26,29,.96);backdrop-filter:blur(10px);
-    border:1px solid var(--line);border-radius:12px;
-    padding:10px 12px;margin:12px 0;
-    box-shadow:0 4px 20px rgba(0,0,0,.35);
+    position:sticky;bottom:88px;z-index:30;
+    display:flex;flex-direction:column;gap:8px;
+    background:rgba(18,26,29,.98);backdrop-filter:blur(12px);
+    border:1px solid var(--line);border-radius:14px;
+    padding:10px;margin:14px 0 8px;
+    box-shadow:0 6px 24px rgba(0,0,0,.4);
   }
-  .rv-sticky-bar .btn{flex:1;min-width:120px;min-height:44px;}
-  .rv-cards{padding-bottom:100px;}
+  .rv-sticky-bar .btn{width:100%;min-height:48px;font-size:16px;}
+  .rv-cards{padding-bottom:140px;}
+  /* esconde FAB + durante a revisão de importação */
+  body.import-reviewing #fab-add,
+  body.import-reviewing .fab-add{display:none !important;}
   @media (max-width:480px){
     .rv-card{padding:12px;}
     .rv-card-grid{grid-template-columns:1fr 1fr;gap:10px;}
@@ -8572,6 +8596,7 @@ function renderReviewTable(containerId, items, sourceType, mode){
   try{ catOptionsBase = categoryOptionsHTML(''); }catch(e){ catOptionsBase = '<option value="outros">Outros</option>'; }
 
   window.__pendingImport = { items: items, sourceType: sourceType, containerId: containerId };
+  try{ document.body.classList.add('import-reviewing'); }catch(e){}
 
   const maxShow = 150;
   const showItems = items.slice(0, maxShow);
@@ -8631,7 +8656,7 @@ function renderReviewTable(containerId, items, sourceType, mode){
     + '</div>'
     + '<div class="rv-sticky-bar">'
     +   '<button type="button" class="btn" onclick="window.__confirmPendingImport&&window.__confirmPendingImport(false)">Confirmar importação</button>'
-    +   '<button type="button" class="btn ghost" onclick="(function(){var c=document.getElementById(\''+containerId+'\');if(c)c.innerHTML=\'\';window.__pendingImport=null;})()">Cancelar</button>'
+    +   '<button type="button" class="btn ghost" onclick="(function(){var c=document.getElementById(\''+containerId+'\');if(c)c.innerHTML=\'\';window.__pendingImport=null;try{document.body.classList.remove('import-reviewing')}catch(e){}})()">Cancelar</button>'
     + '</div>'
     + '<div class="rv-cards">'+cardsHTML+'</div>'
     + '<div class="rv-sticky-bar">'
@@ -8697,7 +8722,7 @@ function renderReviewTable(containerId, items, sourceType, mode){
       if(skippedDup) log.push(skippedDup+' duplicata(s) pulada(s).');
       if(skippedManual) log.push(skippedManual+' desmarcado(s).');
       if(cont) cont.innerHTML = '<div class="import-summary">'+log.join(' ')+'</div>';
-      window.__pendingImport = null;
+      window.__pendingImport = null; try{ document.body.classList.remove('import-reviewing'); }catch(e){}
       try{ renderDashboard(); }catch(e){}
       try{ fillAccountSuggestions(); }catch(e){}
       try{ renderTransactions(); }catch(e){}
