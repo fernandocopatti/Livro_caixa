@@ -466,18 +466,31 @@
   .rv-card-grid{
     display:grid;
     grid-template-columns:1fr 1fr;
-    gap:8px;
+    gap:10px;
   }
-  .rv-card-grid .field{margin:0;}
+  .rv-card-grid .field{margin:0;min-width:0;}
+  .rv-card-grid .field.full{grid-column:1 / -1;}
   .rv-card-grid .field label{
     display:block;font-size:10px;text-transform:uppercase;letter-spacing:.4px;
-    color:var(--ink-faint);margin-bottom:3px;
+    color:var(--ink-faint);margin-bottom:4px;
   }
   .rv-card-grid input,.rv-card-grid select{
-    width:100%;background:var(--surface-2);border:1px solid var(--line);color:var(--ink);
-    border-radius:8px;padding:8px 10px;font-size:13px;
+    width:100%;max-width:100%;box-sizing:border-box;
+    background:var(--surface-2);border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:10px 10px;font-size:14px;
+    min-height:42px;
+  }
+  .rv-card-grid select{
+    /* evita corte do texto no iOS */
+    white-space:normal;
+    text-overflow:ellipsis;
+    padding-right:28px;
   }
   .rv-card-grid .rv-amount{font-family:var(--font-mono);font-weight:600;}
+  .rv-card-desc input.rv-desc{
+    font-size:14px;min-height:42px;
+    white-space:normal;word-break:break-word;
+  }
   .rv-card-foot{
     display:flex;align-items:center;justify-content:space-between;gap:8px;
     margin-top:10px;padding-top:8px;border-top:1px dashed var(--line);
@@ -485,15 +498,24 @@
   }
   .rv-card-foot label{display:flex;align-items:center;gap:6px;cursor:pointer;}
   .rv-sticky-bar{
-    position:sticky;bottom:72px;z-index:20;
+    position:sticky;bottom:78px;z-index:25;
     display:flex;flex-wrap:wrap;gap:8px;align-items:center;
-    background:rgba(18,26,29,.92);backdrop-filter:blur(8px);
+    background:rgba(18,26,29,.96);backdrop-filter:blur(10px);
     border:1px solid var(--line);border-radius:12px;
-    padding:10px 12px;margin:12px 0 8px;
+    padding:10px 12px;margin:12px 0;
+    box-shadow:0 4px 20px rgba(0,0,0,.35);
   }
-  .rv-sticky-bar .btn{flex:1;min-width:120px;}
+  .rv-sticky-bar .btn{flex:1;min-width:120px;min-height:44px;}
+  .rv-cards{padding-bottom:100px;}
+  @media (max-width:480px){
+    .rv-card{padding:12px;}
+    .rv-card-grid{grid-template-columns:1fr 1fr;gap:10px;}
+    /* data e valor lado a lado; tipo e categoria em linha inteira */
+    .rv-card-grid .field.full{grid-column:1 / -1;}
+  }
   @media (min-width:900px){
-    .rv-card-grid{grid-template-columns:110px 1fr 100px 110px 140px;}
+    .rv-card-grid{grid-template-columns:120px 110px 1fr 1fr;}
+    .rv-card-grid .field.full{grid-column:auto;}
   }
 
   .badge{
@@ -8589,9 +8611,9 @@ function renderReviewTable(containerId, items, sourceType, mode){
       + '</div>'
       + '<div class="rv-card-grid">'
       +   '<div class="field"><label>Data</label><input type="date" class="rv-date" value="'+escapeAttr(dateVal)+'"></div>'
-      +   '<div class="field"><label>Valor</label><input type="number" step="0.01" class="rv-amount" value="'+amt+'"></div>'
-      +   '<div class="field"><label>Tipo</label><select class="rv-type">'+typeOpts+'</select></div>'
-      +   '<div class="field"><label>Categoria</label><select class="rv-cat">'+catOpts+'</select></div>'
+      +   '<div class="field"><label>Valor (R$)</label><input type="number" step="0.01" class="rv-amount" value="'+amt+'" inputmode="decimal"></div>'
+      +   '<div class="field full"><label>Tipo</label><select class="rv-type">'+typeOpts+'</select></div>'
+      +   '<div class="field full"><label>Categoria</label><select class="rv-cat">'+catOpts+'</select></div>'
       + '</div>'
       + '<div class="rv-card-foot">'
       +   '<label><input type="checkbox" class="rv-remember" checked> Memorizar categoria</label>'
@@ -12015,18 +12037,11 @@ async function init(){
   function run(){
     const view = document.getElementById('view-config');
     if(!view) return;
-    // cards diretos e dentro de .view-head / .dash-cols
     const cards = view.querySelectorAll('.card');
-    // deixa abertos os blocos mais usados (backup, metas, gist, conta)
-    const openIds = new Set(['auth-config-card','pro-config-card','github-gist-card','lock-config-card','limits-section','accounts-config-card']);
-    // também abre card que contém export de backup
-    cards.forEach(card => {
-      if(card.querySelector('#export-backup-btn, #reduction-save-btn, #monthly-goal-input')) openIds.add(card.id || '');
-    });
+    // padrão: todos recolhidos — usuário abre o que precisar
     cards.forEach(card => {
       if(card.children.length < 1) return;
-      const forceOpen = openIds.has(card.id) || !!card.querySelector('#export-backup-btn, #reduction-save-btn, #monthly-goal-input, #gist-save-creds, #cfg-save-closed-until');
-      foldCard(card, forceOpen);
+      foldCard(card, false);
     });
   }
 
