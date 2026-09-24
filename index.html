@@ -8847,6 +8847,98 @@ function extractOfxAccountMeta(text){
   return { bankId, acctId, acctType, org, label: label.trim() };
 }
 
+
+/** Limpa prefixos de débito/PIX/cartão nas descrições importadas */
+function cleanImportDescription(raw){
+  let s = String(raw || '').replace(/\s+/g, ' ').trim();
+  if(!s) return s;
+  const original = s;
+  const noiseWord = /^(compra|debito|crédito|credito|master|mastercard|visa|elo|hiper|amex|pix|pagto|pagamento|deb|aut|automatico|automático|cartao|cartão|transf|transferencia|transferência|ted|doc)$/i;
+  const rules = [
+    /^(compra\s+)?d[eé]bito\s*(master|mastercard|visa|elo|hiper|amex)?[\s\-\*]*/i,
+    /^(compra\s+)?cr[eé]dito\s*(master|mastercard|visa|elo|hiper|amex)?[\s\-\*]*/i,
+    /^compra\s+no\s+d[eé]bito[\s\-\*]*/i,
+    /^compra\s+com\s+cart[aã]o[\s\-\*]*/i,
+    /^compra\s+cart[aã]o[\s\-\*]*/i,
+    /^compra\s+/i,
+    /^pagto\s+pix([\s\-\_]+|$)/i,
+    /^pagamento\s+pix([\s\-\_]+|$)/i,
+    /^pix[\s\-\_]*deb([\s\-\_]+|$)/i,
+    /^pix[\s\-\_]*transf([\s\-\_]+|$)/i,
+    /^pix[\s\-\_]*envio([\s\-\_]+|$)/i,
+    /^pix[\s\-\_]*receb([\s\-\_]+|$)/i,
+    /^pix([\s\-\_]+|$)/i,
+    /^transf(\.|er[eê]ncia)?\s*(pix|ted|doc)?([\s\-\_]+|$)/i,
+    /^ted\s+/i,
+    /^doc\s+/i,
+    /^pagto\s+/i,
+    /^pagamento\s+/i,
+    /^deb\s+aut[\s\-\.]*/i,
+    /^d[eé]b\.\s*autom[aá]tico[\s\-\.]*/i,
+    // códigos de autorização no início: CM0740023 / VM123456
+    /^(CM|VM|EL|SI|CD)[0-9]{4,}[\s\-]*/i,
+    // PIX_DEB 04870…
+    /^[0-9]{4,}[\s\-]*/i,
+  ];
+  let prev = '';
+  for(let n=0;n<6 && s!==prev;n++){
+    prev = s;
+    for(const re of rules) s = s.replace(re, '').trim();
+    s = s.replace(/^[\-\*\·\|:_]+/, '').trim();
+  }
+  // remove código no meio/fim: -CM0740023 SU
+  s = s.replace(/[\s\-]+(CM|VM|EL|SI|CD)[0-9]{4,}.*$/i, '').trim();
+  s = s.replace(/^(CM|VM|EL|SI|CD)[0-9]{4,}[\s\-]*/i, '').trim();
+  // tokens finais inúteis de 1–2 letras (SU, OR, etc.)
+  s = s.replace(/[\s\-]+[A-Z]{1,2}$/i, '').trim();
+  // se ainda parece só código/ruído, tenta extrair nome do original
+  const looksCode = !s || s.length < 3 || /^(CM|VM|EL|SI|CD)?[0-9]{3,}/i.test(s) || noiseWord.test(s);
+  if(looksCode){
+    const star = original.match(/\*\s*([A-Za-zÀ-ú][A-Za-zÀ-ú0-9\s\.\-]{2,})/);
+    if(star) s = star[1].trim();
+    else {
+      const parts = original.split(/[\-\*\·\|]/).map(x=>x.trim()).filter(Boolean);
+      const named = parts.filter(p =>
+        /[A-Za-zÀ-ú]{3,}/.test(p) &&
+        !noiseWord.test(p) &&
+        !/^(CM|VM|EL|SI|CD)\d+/i.test(p) &&
+        !/^[0-9]+$/.test(p)
+      );
+      if(named.length) s = named[named.length-1];
+    }
+  }
+  // "MERCADOLIVRE*MERCAD" → prefere o lado mais legível
+  if(s.includes('*')){
+    const sides = s.split('*').map(x=>x.trim()).filter(Boolean);
+    if(sides.length >= 2){
+      sides.sort((a,b)=> b.length - a.length);
+      s = sides[0];
+    }
+  }
+  s = s.replace(/\s{2,}/g, ' ').trim();
+  // se não sobrou nome útil, mantém original curto (melhor que vazio)
+  if(s.length < 2 || noiseWord.test(s)) return original.slice(0, 48);
+  return s.slice(0, 60);
+}
+
+function pickBestImportDesc(name, memo, payee){
+  const candidates = [name, memo, payee].filter(v => v && String(v).trim());
+  if(!candidates.length) return 'Lançamento';
+  let best = cleanImportDescription(candidates.join(' · '));
+  let bestScore = -999;
+  for(const c of candidates){
+    const cleaned = cleanImportDescription(c);
+    let score = 0;
+    if(/[A-Za-zÀ-ú]{3,}/.test(cleaned)) score += 30;
+    if(/\s/.test(cleaned)) score += 5;
+    if(/^(CM|VM|EL|SI|CD)?\d+/i.test(cleaned)) score -= 40;
+    if(/\*/.test(c)) score += 10; // MERCADOLIVRE*LOJA
+    score += Math.min(cleaned.length, 40);
+    if(score > bestScore){ bestScore = score; best = cleaned; }
+  }
+  return best || cleanImportDescription(candidates[0]);
+}
+
 function parseOFX(text){
   const items = [];
   const meta = extractOfxAccountMeta(text);
@@ -8866,8 +8958,7 @@ function parseOFX(text){
     const name = ofxGetTag(chunk, 'NAME');
     const memo = ofxGetTag(chunk, 'MEMO');
     const payee = ofxGetTag(chunk, 'PAYEE');
-    let desc = [name, memo, payee].filter(Boolean).join(' · ') || 'Lançamento OFX';
-    desc = desc.replace(/\s{2,}/g,' ').trim().slice(0,120);
+    let desc = pickBestImportDesc(name, memo, payee) || 'Lançamento OFX';
     const iso = parseOfxDate(dt);
     if(!iso || !amtRaw) return;
     let amt = parseFloat(String(amtRaw).replace(/\s/g,'').replace(',','.'));
@@ -9081,7 +9172,7 @@ function parseStatementText(text){
     if(isNaN(new Date(iso).getTime())) return;
     const instMatch = line.match(installmentRe);
     let desc = line.replace(dateRe,'').replace(amtStr,'').replace(installmentRe,'').replace(/[-–]\s*$/,'').trim();
-    desc = desc.replace(/\s{2,}/g,' ').slice(0,80) || 'Lançamento do extrato';
+    desc = cleanImportDescription(desc) || 'Lançamento do extrato';
     const type = amt < 0 ? 'receita' : 'despesa';
     const item = { date: iso, desc, amount: Math.abs(amt), type, category: suggestCategory(desc, type) };
     if(instMatch){
@@ -9350,7 +9441,7 @@ function renderColumnMapper(rows){
         const iso = parseFlexibleDate(rawDate);
         const amt = parseFlexibleAmount(rawAmt);
         if(!iso || amt===null || amt===0){ skipped++; continue; }
-        const desc = String(rawDesc||'Lançamento').trim().slice(0,120);
+        const desc = cleanImportDescription(String(rawDesc||'Lançamento'));
         let type;
         if(ti !== null && !isNaN(ti)){
           const rawTipo = String(row[ti]||'').toLowerCase();
