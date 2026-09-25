@@ -1645,7 +1645,7 @@
           <span>Só prévia (mostrar quantos mudariam, sem aplicar)</span>
         </label>
         <div class="btn-row" style="margin-top:0;flex-wrap:wrap;">
-          <button type="button" class="btn" id="btn-reclassify" style="padding:10px 16px;">Atualizar categorias dos lançamentos</button>
+          <button type="button" class="btn" id="btn-reclassify" onclick="runReclassifyUI()" style="padding:10px 16px;">Atualizar categorias dos lançamentos</button>
         </div>
         <div id="reclassify-result" style="margin-top:12px;font-size:13px;color:var(--ink-dim);line-height:1.45;"></div>
       </div>
@@ -1673,8 +1673,8 @@
           <span>Ignorar categoria “Outros” / genéricas</span>
         </label>
         <div class="btn-row" style="margin:0;flex-wrap:wrap;gap:8px;">
-          <button type="button" class="btn secondary" id="btn-harvest-preview" style="padding:10px 16px;">Prévia</button>
-          <button type="button" class="btn" id="btn-harvest-apply" style="padding:10px 16px;">Gerar e gravar</button>
+          <button type="button" class="btn secondary" id="btn-harvest-preview" onclick="runHarvestPreview()" style="padding:10px 16px;">Prévia</button>
+          <button type="button" class="btn" id="btn-harvest-apply" onclick="runHarvestApply()" style="padding:10px 16px;">Gerar e gravar</button>
         </div>
         <div id="harvest-result" style="margin-top:12px;font-size:13px;color:var(--ink-dim);line-height:1.45;"></div>
       </div>
@@ -7747,7 +7747,8 @@ function guessCategory(text, kind){
 /* ---------- memória de categorização (aprende com correções feitas na importação) ---------- */
 const CATEGORY_STOPWORDS = new Set(['de','da','do','das','dos','ltda','sa','me','eireli','cia','com',
   'loja','filial','pagamento','compra','pag','cartao','cartão','debito','débito','credito','crédito',
-  'compra ','parc','parcela','the','and']);
+  'compra ','parc','parcela','the','and','master','mastercard','visa','elo','pix','pagto','deb',
+  'automático','automatico','transferencia','transferência','ted','doc']);
 
 function normalizeDesc(s){
   return (s||'')
@@ -7761,10 +7762,19 @@ function normalizeDesc(s){
 
 // extrai as palavras mais "significativas" da descrição, pra usar como chave de memorização
 function extractKeyword(desc){
-  const norm = normalizeDesc(desc);
-  const words = norm.split(' ').filter(w=>w.length>=3 && !CATEGORY_STOPWORDS.has(w));
+  // limpa prefixos de débito/PIX antes de extrair
+  let cleaned = desc;
+  try{ if(typeof cleanImportDescription === 'function') cleaned = cleanImportDescription(desc) || desc; }catch(e){}
+  const norm = normalizeDesc(cleaned);
+  let words = norm.split(' ').filter(w=> w.length>=3 && !CATEGORY_STOPWORDS.has(w));
+  // também tenta do texto original se a limpeza apagou tudo
+  if(!words.length){
+    const norm2 = normalizeDesc(desc);
+    words = norm2.split(' ').filter(w=> w.length>=3 && !CATEGORY_STOPWORDS.has(w));
+  }
   if(!words.length) return norm.slice(0,24).trim();
-  return words.slice(0,2).join(' ');
+  // 1–3 palavras mais significativas
+  return words.slice(0,3).join(' ');
 }
 
 function isGenericCategoryName(name){
@@ -8151,19 +8161,37 @@ function suggestCategoryFromRulesOnly(desc, type, amount){
   return null;
 }
 
+var RECLASSIFY_IGNORE_KEY = 'lc-reclassify-ignore';
+function getReclassifyIgnoreSet(){
+  try{
+    const arr = JSON.parse(localStorage.getItem(RECLASSIFY_IGNORE_KEY) || '[]');
+    return new Set(Array.isArray(arr) ? arr : []);
+  }catch(e){ return new Set(); }
+}
+function saveReclassifyIgnoreSet(set){
+  try{ localStorage.setItem(RECLASSIFY_IGNORE_KEY, JSON.stringify(Array.from(set))); }catch(e){}
+}
+function reclassifyIgnoreKey(desc, toCatId){
+  return (typeof normalizeDesc==='function' ? normalizeDesc(desc) : String(desc||'').toLowerCase()) + '=>' + String(toCatId||'');
+}
+
 function reclassifyTransactions(opts={}){
   const rulesOnly = !!opts.rulesOnly;
   const dryRun = !!opts.dryRun;
+  const onlyIds = opts.onlyIds ? new Set(opts.onlyIds) : null;
+  const ignoreSet = getReclassifyIgnoreSet();
   let changed = 0;
+  const changes = [];
   const samples = [];
   const byCat = {};
-
   let skippedLocked = 0;
+  let skippedIgnored = 0;
+
   state.transactions.forEach(t=>{
     if(t.type === 'transferencia' || t.type === 'pagamento_fatura') return;
     const tt = typeById(t.type);
-    if(tt.flowSign === 0 && !tt.countsAsExpense) return;
-    if(isTxLocked(t)){ skippedLocked++; return; }
+    if(tt && tt.flowSign === 0 && !tt.countsAsExpense) return;
+    if(typeof isTxLocked === 'function' && isTxLocked(t)){ skippedLocked++; return; }
 
     const kind = t.type || 'despesa';
     const suggested = rulesOnly
@@ -8172,11 +8200,18 @@ function reclassifyTransactions(opts={}){
 
     if(!suggested || suggested === t.category) return;
 
-    const fromName = catById(t.category).name || t.category || '—';
-    const toName = catById(suggested).name || suggested;
-    if(samples.length < 8){
-      samples.push({ desc: t.desc, from: fromName, to: toName, amount: t.amount });
-    }
+    const ikey = reclassifyIgnoreKey(t.desc, suggested);
+    if(ignoreSet.has(ikey)){ skippedIgnored++; return; }
+
+    if(onlyIds && !onlyIds.has(t.id)) return;
+
+    const fromCat = catById(t.category);
+    const toCat = catById(suggested);
+    const fromName = (fromCat && fromCat.name) || t.category || '—';
+    const toName = (toCat && toCat.name) || suggested;
+    const row = { id: t.id, desc: t.desc, from: fromName, to: toName, fromId: t.category, toId: suggested, amount: t.amount, ignoreKey: ikey };
+    changes.push(row);
+    if(samples.length < 12) samples.push(row);
     byCat[toName] = (byCat[toName]||0) + 1;
     changed++;
     if(!dryRun) t.category = suggested;
@@ -8188,50 +8223,111 @@ function reclassifyTransactions(opts={}){
     try{ renderTransactions(); }catch(e){}
     try{ if(typeof renderCategoriesView==='function') renderCategoriesView(); }catch(e){}
   }
-  return { changed, samples, byCat, skippedLocked };
+  return { changed, samples, changes, byCat, skippedLocked, skippedIgnored };
 }
 
 function runReclassifyUI(){
-  const rulesOnly = !!(document.getElementById('reclassify-only-rules')||{}).checked;
-  const dryRun = !!(document.getElementById('reclassify-preview-only')||{}).checked;
-  const resultEl = document.getElementById('reclassify-result');
-
-  const preview = reclassifyTransactions({ rulesOnly, dryRun: true });
-  if(preview.changed === 0){
-    if(resultEl) resultEl.innerHTML = 'Nenhum lançamento aberto mudaria.'+(preview.skippedLocked?(' '+preview.skippedLocked+' no período conferido ignorados.'):'');
-    showToast('Nada a reclassificar.');
-    return;
-  }
-
-  const sampleHtml = preview.samples.map(s=>
-    `• ${escapeHTML((s.desc||'').slice(0,42))}${(s.desc||'').length>42?'…':''}: <em>${escapeHTML(s.from)}</em> → <strong>${escapeHTML(s.to)}</strong>`
-  ).join('<br>');
-
-  if(dryRun){
-    if(resultEl) resultEl.innerHTML =
-      `<strong>${preview.changed}</strong> lançamento(s) mudariam.` +
-      (sampleHtml ? `<div style="margin-top:8px;">${sampleHtml}</div>` : '');
-    showToast(preview.changed+' mudariam (prévia).');
-    return;
-  }
-
-  askConfirm(
-    'Reclassificar lançamentos',
-    preview.changed+' lançamento(s) terão a categoria atualizada com base nas palavras-chave e regras atuais. Continuar?',
-    ()=>{
-      const res = reclassifyTransactions({ rulesOnly, dryRun: false });
-      if(resultEl){
-        const top = Object.entries(res.byCat).sort((a,b)=>b[1]-a[1]).slice(0,6)
-          .map(([n,c])=> escapeHTML(n)+': '+c).join(' · ');
-        resultEl.innerHTML =
-          `<strong>${res.changed}</strong> lançamento(s) atualizados.` +
-          (top ? `<div style="margin-top:6px;color:var(--ink-faint);">${top}</div>` : '') +
-          (sampleHtml ? `<div style="margin-top:8px;">${sampleHtml}</div>` : '');
-      }
-      showToast(res.changed+' lançamento(s) reclassificados.');
+  try{
+    const rulesOnly = !!(document.getElementById('reclassify-only-rules')||{}).checked;
+    const resultEl = document.getElementById('reclassify-result');
+    const preview = reclassifyTransactions({ rulesOnly, dryRun: true });
+    if(!preview.changes.length){
+      let msg = 'Nenhum lançamento mudaria com as regras atuais.';
+      if(preview.skippedLocked) msg += ' '+preview.skippedLocked+' no período conferido.';
+      if(preview.skippedIgnored) msg += ' '+preview.skippedIgnored+' ignorado(s) por decisões anteriores.';
+      if(resultEl) resultEl.innerHTML = msg;
+      showToast('Nada a reclassificar.');
+      return;
     }
-  );
+
+    window.__reclassPreview = preview;
+    const list = preview.changes.map((s, i)=>{
+      const desc = escapeHTML((s.desc||'').slice(0,48)) + ((s.desc||'').length>48?'…':'');
+      return '<label class="reclass-row" style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:12.5px;cursor:pointer;">'
+        + '<input type="checkbox" class="reclass-chk" data-id="'+escapeAttr(s.id)+'" data-ignore-key="'+escapeAttr(s.ignoreKey)+'" checked style="margin-top:3px;flex-shrink:0;">'
+        + '<span style="flex:1;min-width:0;line-height:1.4;">'
+        + '<strong>'+desc+'</strong><br>'
+        + '<span style="color:var(--ink-faint);">'+escapeHTML(s.from)+'</span> → <strong style="color:var(--accent);">'+escapeHTML(s.to)+'</strong>'
+        + '</span></label>';
+    }).join('');
+
+    if(resultEl){
+      resultEl.innerHTML =
+        '<div style="margin-bottom:10px;"><strong>'+preview.changes.length+'</strong> alteração(ões) sugerida(s).'
+        + (preview.skippedIgnored ? ' <span style="color:var(--ink-faint);">'+preview.skippedIgnored+' ocultas (já ignoradas).</span>' : '')
+        + '</div>'
+        + '<div class="btn-row" style="margin:0 0 10px;flex-wrap:wrap;gap:8px;">'
+        + '<button type="button" class="btn secondary" style="padding:8px 12px;font-size:12.5px;" onclick="reclassSelectAll(true)">Marcar todos</button>'
+        + '<button type="button" class="btn secondary" style="padding:8px 12px;font-size:12.5px;" onclick="reclassSelectAll(false)">Desmarcar todos</button>'
+        + '</div>'
+        + '<div style="max-height:340px;overflow:auto;margin-bottom:12px;">'+list+'</div>'
+        + '<div class="btn-row" style="margin:0;flex-wrap:wrap;gap:8px;">'
+        + '<button type="button" class="btn" style="padding:10px 16px;" onclick="applyReclassSelection()">Aplicar marcados</button>'
+        + '<button type="button" class="btn ghost" style="padding:10px 16px;" onclick="ignoreUnselectedReclass()">Ignorar desmarcados (não sugerir de novo)</button>'
+        + '</div>';
+    }
+    showToast(preview.changes.length+' sugestões — escolha quais aplicar.');
+  }catch(err){
+    console.error(err);
+    alert('Erro na reclassificação: '+(err.message||err));
+  }
 }
+function reclassSelectAll(on){
+  document.querySelectorAll('.reclass-chk').forEach(chk=>{ chk.checked = !!on; });
+}
+function applyReclassSelection(){
+  try{
+    const chks = Array.from(document.querySelectorAll('.reclass-chk'));
+    const ids = chks.filter(c=> c.checked).map(c=> c.getAttribute('data-id'));
+    if(!ids.length){ showToast('Marque pelo menos um lançamento.'); return; }
+    // também grava ignorados os desmarcados
+    const ignoreSet = getReclassifyIgnoreSet();
+    chks.filter(c=> !c.checked).forEach(c=>{
+      const k = c.getAttribute('data-ignore-key');
+      if(k) ignoreSet.add(k);
+    });
+    saveReclassifyIgnoreSet(ignoreSet);
+
+    const rulesOnly = !!(document.getElementById('reclassify-only-rules')||{}).checked;
+    const res = reclassifyTransactions({ rulesOnly, dryRun: false, onlyIds: ids });
+    const resultEl = document.getElementById('reclassify-result');
+    if(resultEl) resultEl.innerHTML = '<strong>'+res.changed+'</strong> lançamento(s) atualizados.'
+      + (ignoreSet.size ? ' Decisões de ignorar lembradas.' : '');
+    showToast(res.changed+' reclassificado(s).');
+    window.__reclassPreview = null;
+  }catch(err){
+    console.error(err);
+    alert('Erro ao aplicar: '+(err.message||err));
+  }
+}
+function ignoreUnselectedReclass(){
+  try{
+    const chks = Array.from(document.querySelectorAll('.reclass-chk'));
+    const ignoreSet = getReclassifyIgnoreSet();
+    let n = 0;
+    chks.filter(c=> !c.checked).forEach(c=>{
+      const k = c.getAttribute('data-ignore-key');
+      if(k && !ignoreSet.has(k)){ ignoreSet.add(k); n++; }
+    });
+    // se nenhum desmarcado, ignora todos desmarcados-or-user meant "ignore selected"?
+    if(!n && chks.every(c=> c.checked)){
+      // ignora todos (usuário quer limpar a lista)
+      chks.forEach(c=>{
+        const k = c.getAttribute('data-ignore-key');
+        if(k) ignoreSet.add(k);
+      });
+      n = chks.length;
+    }
+    saveReclassifyIgnoreSet(ignoreSet);
+    showToast(n+' sugestão(ões) não serão mais propostas.');
+    runReclassifyUI(); // atualiza lista
+  }catch(err){ console.error(err); }
+}
+window.runReclassifyUI = runReclassifyUI;
+window.reclassSelectAll = reclassSelectAll;
+window.applyReclassSelection = applyReclassSelection;
+window.ignoreUnselectedReclass = ignoreUnselectedReclass;
+
 
 /* ---------- detecção de duplicados (importação + base) ---------- */
 function installmentKey(inst){
