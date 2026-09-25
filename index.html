@@ -1732,7 +1732,7 @@
             <div style="font-size:13px;font-weight:600;color:var(--ink);margin-bottom:6px;">Google (login e Drive)</div>
             <p style="font-size:12.5px;color:var(--ink-dim);line-height:1.45;margin:0 0 10px;">
               Mesmo projeto do Google Cloud: login com a conta e backup no Drive
-              (arquivo <strong>Livro-Caixa-backup.json</strong>). Sem Cloud Console, use o <strong>GitHub Gist</strong> ou exporte o JSON.
+              (arquivo <strong>Meu-Caixa-Inteligente-backup.json</strong>). Sem Cloud Console, use o <strong>GitHub Gist</strong> ou exporte o JSON.
             </p>
             <div class="field" style="margin:0 0 10px;">
               <label>Client ID Web (OAuth)</label>
@@ -10052,7 +10052,7 @@ function buildBackupObject(){
   setLastLocalExportAt(exportedAt);
   return {
     exportedAt,
-    app: 'livro-caixa',
+    app: 'Meu Caixa Inteligente',
     version: 2,
     deviceId: getOrCreateDeviceId(),
     deviceName: getDeviceName() || 'Aparelho',
@@ -11861,7 +11861,8 @@ function initAuthUI(){
 
 /* ---------- Google Drive backup ---------- */
 var DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
-var DRIVE_FILE_NAME = 'Livro-Caixa-backup.json';
+var DRIVE_FILE_NAME = 'Meu-Caixa-Inteligente-backup.json';
+var DRIVE_FILE_NAME_ALIASES = ['Meu-Caixa-Inteligente-backup.json','Livro-Caixa-backup.json','livro-caixa-backup.json'];
 var DRIVE_TOKEN_KEY = 'lc-drive-token';
 var DRIVE_FILE_ID_KEY = 'lc-drive-file-id';
 var driveAccessToken = null;
@@ -11958,16 +11959,41 @@ async function findDriveBackupFile(){
   let id = loadDriveFileId();
   if(id){
     const check = await driveFetch('/files/'+encodeURIComponent(id)+'?fields=id,name,modifiedTime');
-    if(check.ok) return await check.json();
+    if(check.ok){
+      const f = await check.json();
+      // renomeia se estiver Untitled ou nome antigo
+      if(f && f.name && f.name !== DRIVE_FILE_NAME){
+        try{ await renameDriveFile(f.id, DRIVE_FILE_NAME); f.name = DRIVE_FILE_NAME; }catch(e){ console.warn(e); }
+      }
+      return f;
+    }
     saveDriveFileId('');
   }
-  const q = encodeURIComponent(`name='${DRIVE_FILE_NAME}' and trashed=false`);
-  const res = await driveFetch(`/files?q=${q}&spaces=drive&fields=files(id,name,modifiedTime)&pageSize=5`);
-  if(!res.ok) throw new Error('Falha ao buscar arquivo no Drive.');
-  const data = await res.json();
-  const file = (data.files && data.files[0]) || null;
-  if(file) saveDriveFileId(file.id);
-  return file;
+  const names = (typeof DRIVE_FILE_NAME_ALIASES !== 'undefined' ? DRIVE_FILE_NAME_ALIASES : [DRIVE_FILE_NAME]);
+  for(const name of names){
+    const q = encodeURIComponent("name='"+name.replace(/'/g,"\\'")+"' and trashed=false");
+    const res = await driveFetch('/files?q='+q+'&spaces=drive&fields=files(id,name,modifiedTime)&pageSize=5&orderBy=modifiedTime desc');
+    if(!res.ok) continue;
+    const data = await res.json();
+    const file = (data.files && data.files[0]) || null;
+    if(file){
+      saveDriveFileId(file.id);
+      if(file.name !== DRIVE_FILE_NAME){
+        try{ await renameDriveFile(file.id, DRIVE_FILE_NAME); file.name = DRIVE_FILE_NAME; }catch(e){ console.warn(e); }
+      }
+      return file;
+    }
+  }
+  return null;
+}
+async function renameDriveFile(fileId, newName){
+  const res = await driveFetch('/files/'+encodeURIComponent(fileId), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: newName })
+  });
+  if(!res.ok) throw new Error('Não foi possível renomear o arquivo no Drive.');
+  return res.json();
 }
 
 function buildBackupPayload(){
@@ -11993,50 +12019,65 @@ async function uploadBackupToDrive(){
   setDriveStatus('Enviando backup…');
   await requestDriveAccess();
   const payload = JSON.stringify(buildBackupPayload(), null, 2);
-  const blob = new Blob([payload], { type: 'application/json' });
   let file = await findDriveBackupFile();
 
   if(file && file.id){
+    // atualiza conteúdo
     const res = await fetch('https://www.googleapis.com/upload/drive/v3/files/'+encodeURIComponent(file.id)+'?uploadType=media', {
       method: 'PATCH',
       headers: {
         'Authorization': 'Bearer '+driveAccessToken,
         'Content-Type': 'application/json'
       },
-      body: blob
+      body: payload
     });
     if(!res.ok) throw new Error('Falha ao atualizar arquivo no Drive.');
+    // garante o nome do app
+    try{ await renameDriveFile(file.id, DRIVE_FILE_NAME); }catch(e){ console.warn(e); }
     const meta = await res.json();
     saveDriveFileId(meta.id || file.id);
-    setDriveStatus('Backup atualizado no Drive · '+new Date().toLocaleString('pt-BR'));
+    setDriveStatus('Backup atualizado · '+DRIVE_FILE_NAME+' · '+new Date().toLocaleString('pt-BR'));
     return meta;
   }
 
-  // criar novo
-  const metadata = { name: DRIVE_FILE_NAME, mimeType: 'application/json' };
-  const form = new FormData();
-  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-  form.append('file', blob);
+  // criar novo com nome explícito (multipart/related correto — evita "Untitled")
+  const boundary = '-------mci'+Date.now();
+  const meta = { name: DRIVE_FILE_NAME, mimeType: 'application/json' };
+  const body =
+    '--'+boundary+'\r\n'+
+    'Content-Type: application/json; charset=UTF-8\r\n\r\n'+
+    JSON.stringify(meta)+'\r\n'+
+    '--'+boundary+'\r\n'+
+    'Content-Type: application/json\r\n\r\n'+
+    payload+'\r\n'+
+    '--'+boundary+'--';
   const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
     method: 'POST',
-    headers: { 'Authorization': 'Bearer '+driveAccessToken },
-    body: form
+    headers: {
+      'Authorization': 'Bearer '+driveAccessToken,
+      'Content-Type': 'multipart/related; boundary='+boundary
+    },
+    body: body
   });
   if(!res.ok){
     const errText = await res.text();
-    throw new Error('Falha ao criar arquivo no Drive. '+errText.slice(0,120));
+    throw new Error('Falha ao criar arquivo no Drive. '+errText.slice(0,160));
   }
-  const meta = await res.json();
-  saveDriveFileId(meta.id);
-  setDriveStatus('Backup criado no Drive · '+new Date().toLocaleString('pt-BR'));
-  return meta;
+  const created = await res.json();
+  saveDriveFileId(created.id);
+  // reforça o nome se a API devolver Untitled
+  if(!created.name || /untitled|sem título/i.test(created.name)){
+    try{ await renameDriveFile(created.id, DRIVE_FILE_NAME); created.name = DRIVE_FILE_NAME; }catch(e){ console.warn(e); }
+  }
+  setDriveStatus('Backup criado · '+DRIVE_FILE_NAME+' · '+new Date().toLocaleString('pt-BR'));
+  return created;
 }
 
 async function downloadBackupFromDrive(){
   setDriveStatus('Baixando backup…');
   await requestDriveAccess();
   const file = await findDriveBackupFile();
-  if(!file || !file.id) throw new Error('Nenhum backup Livro-Caixa-backup.json encontrado no Drive.');
+  if(!file || !file.id) throw new Error('Nenhum backup Meu-Caixa-Inteligente-backup.json encontrado no Drive.');
   const res = await driveFetch('/files/'+encodeURIComponent(file.id)+'?alt=media');
   if(!res.ok) throw new Error('Falha ao baixar o arquivo.');
   const parsed = await res.json();
