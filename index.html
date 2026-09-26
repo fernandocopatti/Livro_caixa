@@ -1419,11 +1419,13 @@
             <span style="font-size:11px;">JPG ou PNG · lê o valor total de cada nota</span>
           </div>
           <div class="btn-row" style="margin-top:12px;">
-            <button type="button" class="btn secondary" id="btn-take-photo" onclick="openCameraPicker()" style="flex:1;">📷 Tirar foto</button>
-            <button type="button" class="btn secondary" id="btn-choose-gallery" onclick="openGalleryPicker()" style="flex:1;">🖼️ Galeria</button>
+            <button type="button" class="btn secondary" id="btn-take-photo" onclick="openCameraPicker();return false;" style="flex:1;">📷 Tirar foto</button>
+            <button type="button" class="btn secondary" id="btn-choose-gallery" onclick="openGalleryPicker();return false;" style="flex:1;">🖼️ Galeria</button>
           </div>
-          <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none;" onchange="onCameraPhotoChange(event)">
-          <input type="file" id="gallery-input" accept="image/*" multiple style="display:none;" onchange="onGalleryPhotoChange(event)">
+          <div id="photo-attach-status" style="margin-top:8px;font-size:12.5px;color:var(--ink-dim);min-height:18px;"></div>
+          <!-- inputs quase invisíveis (display:none quebra em alguns iOS) -->
+          <input type="file" id="camera-input" accept="image/*" capture="environment" onchange="onCameraPhotoChange(event)" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;">
+          <input type="file" id="gallery-input" accept="image/*" multiple onchange="onGalleryPhotoChange(event)" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;">
           <div class="ocr-preview" id="ocr-preview" style="display:none;">
             <img id="ocr-img" src="">
             <div>
@@ -6993,22 +6995,41 @@ try{
   });
 }catch(e){ console.warn('photo buttons', e); }
 
+function setPhotoAttachStatus(msg){
+  try{
+    const el = document.getElementById('photo-attach-status');
+    if(el) el.textContent = msg || '';
+  }catch(e){}
+}
 function handlePhotoFiles(files){
-  files = Array.from(files||[]).filter(function(f){ return f && (/^image\//i.test(f.type)||/\.(jpe?g|png|webp|heic|heif)$/i.test(f.name||'')); });
-  if(!files.length){
+  files = Array.from(files||[]).filter(function(f){ return !!f; });
+  // se o tipo veio vazio (iOS), ainda tenta
+  const images = files.filter(function(f){
+    const t = (f.type||'').toLowerCase();
+    const n = (f.name||'').toLowerCase();
+    if(!t || t === 'application/octet-stream') return true;
+    if(t.indexOf('image/') === 0) return true;
+    if(/\.(jpe?g|png|webp|gif|heic|heif|bmp)$/i.test(n)) return true;
+    return false;
+  });
+  if(!images.length){
+    setPhotoAttachStatus('Nenhuma imagem selecionada.');
     try{ showToast('Nenhuma imagem selecionada.'); }catch(e){}
     return;
   }
+  setPhotoAttachStatus('Processando '+images.length+' imagem(ns)…');
+  try{ showToast('Processando foto…'); }catch(e){}
   try{
-    if(files.length === 1){
-      runOCR(files[0]);
+    if(images.length === 1){
+      runOCR(images[0]);
     } else {
       const prev = document.getElementById('ocr-preview');
       if(prev) prev.style.display = 'none';
-      runBatchOCR(files);
+      runBatchOCR(images);
     }
   }catch(err){
     console.error(err);
+    setPhotoAttachStatus('Erro: '+(err.message||err));
     try{ showToast('Erro ao processar a foto: '+(err.message||err)); }catch(e){}
     alert('Erro ao processar a foto: '+(err.message||err));
   }
@@ -7594,6 +7615,7 @@ async function runOCR(file){
     if(dataUrl){
       pendingPhotoDataUrl = dataUrl;
       if(statusEl) statusEl.textContent = 'Foto anexada. Preparando leitura…';
+      setPhotoAttachStatus('Foto anexada.');
     } else {
       // fallback: data URL direto
       pendingPhotoDataUrl = await new Promise(function(resolve){
@@ -7614,26 +7636,12 @@ async function runOCR(file){
     try{ showToast('Foto anexada ao lançamento.'); }catch(e){}
   }
 
-  // 2) OCR — recurso Pro (se não for Pro, mantém só o anexo)
-  let canOcr = true;
-  try{
-    if(typeof isPro === 'function' && !isPro()){
-      canOcr = false;
-    } else if(typeof requirePro === 'function'){
-      // requirePro mostra paywall; ainda assim a foto já ficou anexada
-      if(!requirePro('Leitura de cupom por foto (OCR)')) canOcr = false;
-    }
-  }catch(e){ canOcr = true; }
-
-  if(!canOcr){
-    if(statusEl) statusEl.textContent = 'Foto anexada. OCR é recurso Pro — preencha data, valor e descrição manualmente.';
-    if(progEl) progEl.style.width = '0%';
-    return;
-  }
-
+  // 2) OCR na foto única — liberado (batch continua Pro)
+  setPhotoAttachStatus('Foto anexada. Tentando ler o cupom…');
   if(typeof Tesseract === 'undefined'){
-    if(statusEl) statusEl.textContent = 'Foto anexada. OCR indisponível neste aparelho — preencha os dados manualmente.';
+    if(statusEl) statusEl.textContent = 'Foto anexada. OCR indisponível (biblioteca não carregou) — preencha os dados manualmente.';
     if(progEl) progEl.style.width = '0%';
+    setPhotoAttachStatus('Foto anexada (OCR indisponível). Preencha manualmente.');
     try{ showToast('Foto anexada (sem OCR).'); }catch(e){}
     return;
   }
@@ -11121,7 +11129,7 @@ function registerPWA(){
 
     if('serviceWorker' in navigator){
       const swCode = `
-        const CACHE = 'livro-caixa-v2026-08-12';
+        const CACHE = 'mci-v2026-09-26-photo';
         self.addEventListener('install', (e)=>{
           self.skipWaiting();
           e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./']).catch(()=>{})));
@@ -11135,10 +11143,18 @@ function registerPWA(){
         self.addEventListener('fetch', (e)=>{
           const req = e.request;
           if(req.method !== 'GET') return;
+          // HTML sempre da rede (evita foto/OCR antigos em cache)
+          const isDoc = req.mode === 'navigate' || (req.headers.get('accept')||'').includes('text/html');
+          if(isDoc){
+            e.respondWith(fetch(req).catch(()=> caches.match(req).then(r=> r || caches.match('./'))));
+            return;
+          }
           e.respondWith(
             fetch(req).then(res=>{
-              const copy = res.clone();
-              caches.open(CACHE).then(c=>{ try{ c.put(req, copy); }catch(err){} });
+              try{
+                const copy = res.clone();
+                caches.open(CACHE).then(c=>{ try{ c.put(req, copy); }catch(err){} });
+              }catch(err){}
               return res;
             }).catch(()=> caches.match(req).then(r=> r || caches.match('./')))
           );
@@ -11147,7 +11163,11 @@ function registerPWA(){
       const swBlob = new Blob([swCode], {type:'text/javascript'});
       const swUrl = URL.createObjectURL(swBlob);
       // blob: SW só funciona em alguns contextos; se falhar, ignora silenciosamente
-      navigator.serviceWorker.register(swUrl).catch(()=>{});
+      // limpa SW antigos que seguram HTML desatualizado
+      navigator.serviceWorker.getRegistrations().then(function(regs){
+        regs.forEach(function(r){ try{ r.update(); }catch(e){} });
+      }).catch(function(){});
+      navigator.serviceWorker.register(swUrl).catch(function(){});
     }
   }catch(err){ /* PWA opcional */ }
 }
