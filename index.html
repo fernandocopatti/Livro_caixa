@@ -1419,11 +1419,11 @@
             <span style="font-size:11px;">JPG ou PNG · lê o valor total de cada nota</span>
           </div>
           <div class="btn-row" style="margin-top:12px;">
-            <button type="button" class="btn secondary" id="btn-take-photo" onclick="document.getElementById('camera-input').click()" style="flex:1;">📷 Tirar foto</button>
-            <button type="button" class="btn secondary" id="btn-choose-gallery" onclick="document.getElementById('gallery-input').click()" style="flex:1;">🖼️ Galeria</button>
+            <button type="button" class="btn secondary" id="btn-take-photo" onclick="openCameraPicker()" style="flex:1;">📷 Tirar foto</button>
+            <button type="button" class="btn secondary" id="btn-choose-gallery" onclick="openGalleryPicker()" style="flex:1;">🖼️ Galeria</button>
           </div>
-          <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none;">
-          <input type="file" id="gallery-input" accept="image/*" multiple style="display:none;">
+          <input type="file" id="camera-input" accept="image/*" capture="environment" style="display:none;" onchange="onCameraPhotoChange(event)">
+          <input type="file" id="gallery-input" accept="image/*" multiple style="display:none;" onchange="onGalleryPhotoChange(event)">
           <div class="ocr-preview" id="ocr-preview" style="display:none;">
             <img id="ocr-img" src="">
             <div>
@@ -6973,28 +6973,78 @@ const photoDrop = document.getElementById('photo-drop');
 const cameraInput = document.getElementById('camera-input');
 const galleryInput = document.getElementById('gallery-input');
 
-document.getElementById('btn-take-photo').addEventListener('click', ()=>cameraInput.click());
-document.getElementById('btn-choose-gallery').addEventListener('click', ()=>galleryInput.click());
-photoDrop.addEventListener('click', ()=>galleryInput.click());
+function openCameraPicker(){
+  try{ const el = document.getElementById('camera-input'); if(el){ el.value=''; el.click(); } }catch(e){ console.warn(e); }
+}
+function openGalleryPicker(){
+  try{ const el = document.getElementById('gallery-input'); if(el){ el.value=''; el.click(); } }catch(e){ console.warn(e); }
+}
+window.openCameraPicker = openCameraPicker;
+window.openGalleryPicker = openGalleryPicker;
+
+try{
+  const btnCam = document.getElementById('btn-take-photo');
+  const btnGal = document.getElementById('btn-choose-gallery');
+  if(btnCam) btnCam.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); openCameraPicker(); });
+  if(btnGal) btnGal.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); openGalleryPicker(); });
+  if(photoDrop) photoDrop.addEventListener('click', function(e){
+    if(e.target && (e.target.closest('button') || e.target.tagName==='BUTTON')) return;
+    openGalleryPicker();
+  });
+}catch(e){ console.warn('photo buttons', e); }
 
 function handlePhotoFiles(files){
-  if(!files.length) return;
-  if(files.length === 1){
-    runOCR(files[0]);
-  } else {
-    document.getElementById('ocr-preview').style.display = 'none';
-    runBatchOCR(files);
+  files = Array.from(files||[]).filter(function(f){ return f && (/^image\//i.test(f.type)||/\.(jpe?g|png|webp|heic|heif)$/i.test(f.name||'')); });
+  if(!files.length){
+    try{ showToast('Nenhuma imagem selecionada.'); }catch(e){}
+    return;
+  }
+  try{
+    if(files.length === 1){
+      runOCR(files[0]);
+    } else {
+      const prev = document.getElementById('ocr-preview');
+      if(prev) prev.style.display = 'none';
+      runBatchOCR(files);
+    }
+  }catch(err){
+    console.error(err);
+    try{ showToast('Erro ao processar a foto: '+(err.message||err)); }catch(e){}
+    alert('Erro ao processar a foto: '+(err.message||err));
   }
 }
-cameraInput.addEventListener('change', (e)=>{ handlePhotoFiles(Array.from(e.target.files||[])); cameraInput.value = ''; });
-galleryInput.addEventListener('change', (e)=>{ handlePhotoFiles(Array.from(e.target.files||[])); galleryInput.value = ''; });
+window.handlePhotoFiles = handlePhotoFiles;
+window.onCameraPhotoChange = function(e){
+  try{
+    const files = Array.from((e && e.target && e.target.files) || []);
+    handlePhotoFiles(files);
+  }finally{
+    try{ if(e && e.target) e.target.value = ''; }catch(err){}
+  }
+};
+window.onGalleryPhotoChange = function(e){
+  try{
+    const files = Array.from((e && e.target && e.target.files) || []);
+    handlePhotoFiles(files);
+  }finally{
+    try{ if(e && e.target) e.target.value = ''; }catch(err){}
+  }
+};
+if(cameraInput) cameraInput.addEventListener('change', window.onCameraPhotoChange);
+if(galleryInput) galleryInput.addEventListener('change', window.onGalleryPhotoChange);
 
-['dragover','dragenter'].forEach(ev=>photoDrop.addEventListener(ev, e=>{ e.preventDefault(); photoDrop.classList.add('drag'); }));
-['dragleave','drop'].forEach(ev=>photoDrop.addEventListener(ev, e=>{ e.preventDefault(); photoDrop.classList.remove('drag'); }));
-photoDrop.addEventListener('drop', e=>{
-  const files = Array.from(e.dataTransfer.files || []).filter(f=>f.type.startsWith('image/'));
-  handlePhotoFiles(files);
-});
+if(photoDrop){
+  ['dragover','dragenter'].forEach(function(ev){
+    photoDrop.addEventListener(ev, function(e){ e.preventDefault(); photoDrop.classList.add('drag'); });
+  });
+  ['dragleave','drop'].forEach(function(ev){
+    photoDrop.addEventListener(ev, function(e){ e.preventDefault(); photoDrop.classList.remove('drag'); });
+  });
+  photoDrop.addEventListener('drop', function(e){
+    const files = Array.from(e.dataTransfer.files || []).filter(function(f){ return f.type && f.type.startsWith('image/'); });
+    handlePhotoFiles(files);
+  });
+}
 
 // lê o texto de uma imagem via Tesseract; retorna '' se OCR indisponível ou falhar
 // converte a foto para escala de cinza com contraste esticado e um tamanho ideal antes do OCR —
@@ -7521,27 +7571,77 @@ function showOcrDupHint(candidates){
 }
 
 async function runOCR(file){
-  if(!requirePro('Leitura de cupom por foto (OCR)')) return;
-  const url = URL.createObjectURL(file);
-  document.getElementById('ocr-img').src = url;
-  document.getElementById('ocr-preview').style.display = 'flex';
+  if(!file){ try{ showToast('Nenhum arquivo de imagem.'); }catch(e){} return; }
+  const preview = document.getElementById('ocr-preview');
+  const imgEl = document.getElementById('ocr-img');
   const statusEl = document.getElementById('ocr-status');
   const progEl = document.getElementById('ocr-progress');
-  document.getElementById('ocr-raw-details').style.display = 'none';
-  document.getElementById('ocr-raw-text').textContent = '';
-  statusEl.textContent = 'Preparando a imagem…';
-  progEl.style.width = '5%';
-  pendingPhotoDataUrl = null;
-  compressPhotoForStorage(file).then(dataUrl=>{ pendingPhotoDataUrl = dataUrl; });
+  const rawDetails = document.getElementById('ocr-raw-details');
+  const rawText = document.getElementById('ocr-raw-text');
 
-  if(typeof Tesseract === 'undefined'){
-    statusEl.textContent = 'OCR indisponível — preencha os dados manualmente.';
+  // 1) Sempre anexa a foto (mesmo sem Pro / sem OCR)
+  let url = null;
+  try{ url = URL.createObjectURL(file); }catch(e){ console.warn(e); }
+  if(imgEl && url) imgEl.src = url;
+  if(preview) preview.style.display = 'flex';
+  if(rawDetails) rawDetails.style.display = 'none';
+  if(rawText) rawText.textContent = '';
+  if(statusEl) statusEl.textContent = 'Anexando foto…';
+  if(progEl) progEl.style.width = '5%';
+  pendingPhotoDataUrl = null;
+  try{
+    const dataUrl = await compressPhotoForStorage(file);
+    if(dataUrl){
+      pendingPhotoDataUrl = dataUrl;
+      if(statusEl) statusEl.textContent = 'Foto anexada. Preparando leitura…';
+    } else {
+      // fallback: data URL direto
+      pendingPhotoDataUrl = await new Promise(function(resolve){
+        try{
+          const r = new FileReader();
+          r.onload = function(){ resolve(r.result); };
+          r.onerror = function(){ resolve(null); };
+          r.readAsDataURL(file);
+        }catch(err){ resolve(null); }
+      });
+      if(statusEl) statusEl.textContent = pendingPhotoDataUrl ? 'Foto anexada.' : 'Não consegui anexar a foto.';
+    }
+  }catch(err){
+    console.warn(err);
+    if(statusEl) statusEl.textContent = 'Foto selecionada (anexo parcial).';
+  }
+  if(pendingPhotoDataUrl){
+    try{ showToast('Foto anexada ao lançamento.'); }catch(e){}
+  }
+
+  // 2) OCR — recurso Pro (se não for Pro, mantém só o anexo)
+  let canOcr = true;
+  try{
+    if(typeof isPro === 'function' && !isPro()){
+      canOcr = false;
+    } else if(typeof requirePro === 'function'){
+      // requirePro mostra paywall; ainda assim a foto já ficou anexada
+      if(!requirePro('Leitura de cupom por foto (OCR)')) canOcr = false;
+    }
+  }catch(e){ canOcr = true; }
+
+  if(!canOcr){
+    if(statusEl) statusEl.textContent = 'Foto anexada. OCR é recurso Pro — preencha data, valor e descrição manualmente.';
+    if(progEl) progEl.style.width = '0%';
     return;
   }
 
-  const processedUrl = await preprocessImageForOCR(file);
-  statusEl.textContent = 'Lendo o comprovante…';
-  progEl.style.width = '10%';
+  if(typeof Tesseract === 'undefined'){
+    if(statusEl) statusEl.textContent = 'Foto anexada. OCR indisponível neste aparelho — preencha os dados manualmente.';
+    if(progEl) progEl.style.width = '0%';
+    try{ showToast('Foto anexada (sem OCR).'); }catch(e){}
+    return;
+  }
+
+  let processedUrl = url;
+  try{ processedUrl = await preprocessImageForOCR(file); }catch(e){ console.warn(e); }
+  if(statusEl) statusEl.textContent = 'Lendo o comprovante…';
+  if(progEl) progEl.style.width = '10%';
 
   ocrImageToText(processedUrl, p=>{
     progEl.style.width = Math.max(10, Math.round(p.progress*100)) + '%';
@@ -7611,6 +7711,11 @@ async function runOCR(file){
         ? 'Foto difícil de ler — confira todos os campos antes de salvar.'
         : 'Dados preenchidos a partir da foto — confira antes de salvar.');
     }
+  }).catch(function(err){
+    console.error('OCR falhou', err);
+    if(statusEl) statusEl.textContent = 'Foto anexada. Não consegui ler o texto — preencha manualmente.';
+    if(progEl) progEl.style.width = '0%';
+    try{ showToast('Foto anexada (leitura OCR falhou).'); }catch(e){}
   });
 }
 
