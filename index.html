@@ -9087,12 +9087,12 @@ function extractOfxAccountMeta(text){
 }
 
 
-/** Limpa prefixos de débito/PIX/cartão nas descrições importadas */
+/** Limpa e encurta descrições importadas (OFX/planilha): débito, PIX, boleto, códigos */
 function cleanImportDescription(raw){
   let s = String(raw || '').replace(/\s+/g, ' ').trim();
   if(!s) return s;
   const original = s;
-  const noiseWord = /^(compra|debito|crédito|credito|master|mastercard|visa|elo|hiper|amex|pix|pagto|pagamento|deb|aut|automatico|automático|cartao|cartão|transf|transferencia|transferência|ted|doc)$/i;
+  const noiseWord = /^(compra|debito|crédito|credito|master|mastercard|visa|elo|hiper|amex|pix|pagto|pagamento|deb|aut|automatico|automático|cartao|cartão|transf|transferencia|transferência|ted|doc|liquidacao|liquidação|boleto|parcela)$/i;
   const rules = [
     /^(compra\s+)?d[eé]bito\s*(master|mastercard|visa|elo|hiper|amex)?[\s\-\*]*/i,
     /^(compra\s+)?cr[eé]dito\s*(master|mastercard|visa|elo|hiper|amex)?[\s\-\*]*/i,
@@ -9114,10 +9114,16 @@ function cleanImportDescription(raw){
     /^pagamento\s+/i,
     /^deb\s+aut[\s\-\.]*/i,
     /^d[eé]b\.\s*autom[aá]tico[\s\-\.]*/i,
-    // códigos de autorização no início: CM0740023 / VM123456
-    /^(CM|VM|EL|SI|CD)[0-9]{4,}[\s\-]*/i,
-    // PIX_DEB 04870…
-    /^[0-9]{4,}[\s\-]*/i,
+    // boleto / liquidação
+    /^liquida[cç][aã]o\s+de\s+parcela[\s\-]*/i,
+    /^liquida[cç][aã]o\s+boleto[\s\-]*/i,
+    /^liquida[cç][aã]o[\s\-]*/i,
+    /^pagto\s+boleto[\s\-]*/i,
+    /^pagamento\s+boleto[\s\-]*/i,
+    /^boleto\s+/i,
+    // códigos de autorização no início
+    /^(CM|VM|EL|SI|CD|CX)[0-9]{4,}[\s\-]*/i,
+    /^[0-9]{6,}[\s\-]*/i,
   ];
   let prev = '';
   for(let n=0;n<6 && s!==prev;n++){
@@ -9125,13 +9131,14 @@ function cleanImportDescription(raw){
     for(const re of rules) s = s.replace(re, '').trim();
     s = s.replace(/^[\-\*\·\|:_]+/, '').trim();
   }
-  // remove código no meio/fim: -CM0740023 SU
-  s = s.replace(/[\s\-]+(CM|VM|EL|SI|CD)[0-9]{4,}.*$/i, '').trim();
-  s = s.replace(/^(CM|VM|EL|SI|CD)[0-9]{4,}[\s\-]*/i, '').trim();
-  // tokens finais inúteis de 1–2 letras (SU, OR, etc.)
+  // remove códigos no fim: -CM0740023, -261000093, /12345
+  s = s.replace(/[\s\-\/]+(CM|VM|EL|SI|CD|CX)[0-9]{4,}.*$/i, '').trim();
+  s = s.replace(/[\s\-\/]+[0-9]{5,}.*$/i, '').trim();
+  s = s.replace(/^(CM|VM|EL|SI|CD|CX)[0-9]{4,}[\s\-]*/i, '').trim();
   s = s.replace(/[\s\-]+[A-Z]{1,2}$/i, '').trim();
-  // se ainda parece só código/ruído, tenta extrair nome do original
-  const looksCode = !s || s.length < 3 || /^(CM|VM|EL|SI|CD)?[0-9]{3,}/i.test(s) || noiseWord.test(s);
+
+  // se só código, tenta extrair nome do original
+  const looksCode = !s || s.length < 3 || /^(CM|VM|EL|SI|CD|CX)?[0-9]{3,}/i.test(s) || noiseWord.test(s);
   if(looksCode){
     const star = original.match(/\*\s*([A-Za-zÀ-ú][A-Za-zÀ-ú0-9\s\.\-]{2,})/);
     if(star) s = star[1].trim();
@@ -9140,13 +9147,12 @@ function cleanImportDescription(raw){
       const named = parts.filter(p =>
         /[A-Za-zÀ-ú]{3,}/.test(p) &&
         !noiseWord.test(p) &&
-        !/^(CM|VM|EL|SI|CD)\d+/i.test(p) &&
+        !/^(CM|VM|EL|SI|CD|CX)\d+/i.test(p) &&
         !/^[0-9]+$/.test(p)
       );
       if(named.length) s = named[named.length-1];
     }
   }
-  // "MERCADOLIVRE*MERCAD" → prefere o lado mais legível
   if(s.includes('*')){
     const sides = s.split('*').map(x=>x.trim()).filter(Boolean);
     if(sides.length >= 2){
@@ -9154,10 +9160,41 @@ function cleanImportDescription(raw){
       s = sides[0];
     }
   }
+
+  // casos especiais legíveis
+  if(/LIQUIDA[CÇ][AÃ]O\s+BOLETO/i.test(original)){
+    const bank = (original.match(/boleto\s+([A-Za-zÀ-ú]{3,})/i)||[])[1];
+    s = bank ? ('Boleto '+bank.charAt(0).toUpperCase()+bank.slice(1).toLowerCase()) : 'Boleto';
+  } else if(/LIQUIDA[CÇ][AÃ]O\s+DE\s+PARCELA/i.test(original)){
+    s = 'Liquidação de parcela';
+  } else if(/\bPIX\b|PIX_DEB/i.test(original) && (/PAGAMENTO|PIX_DEB|PIX\s*DEB/i.test(original) || s.length < 8)){
+    let after = original.replace(/^.*?PIX(?:_DEB)?[\s\-_]*/i,'').replace(/\b(CX|DEB|ENV|REC)[\s\-_]*/ig,' ');
+    after = after.replace(/[0-9]{4,}/g,' ').replace(/\s+/g,' ').trim();
+    // remove tokens curtos/ruído
+    after = after.split(' ').filter(w=> w.length>=3 && !/^(deb|pix|pag|cx)$/i.test(w)).join(' ');
+    s = (after.length >= 3 && /[A-Za-zÀ-ú]{3,}/.test(after)) ? after.slice(0,42) : 'PIX';
+  } else if(/COMPRA\s+D[EÉ]BITO|COMPRA\s+CR[EÉ]DITO/i.test(original)){
+    // se não sobrou estabelecimento, deixa curto
+    if(!s || noiseWord.test(s) || /^(master|visa|elo|hiper|amex)/i.test(s)){
+      s = /CR[EÉ]DITO/i.test(original) ? 'Compra crédito' : 'Compra débito';
+    }
+  }
+
   s = s.replace(/\s{2,}/g, ' ').trim();
-  // se não sobrou nome útil, mantém original curto (melhor que vazio)
-  if(s.length < 2 || noiseWord.test(s)) return original.slice(0, 48);
-  return s.slice(0, 60);
+  // capitaliza se veio tudo MAIÚSCULO
+  if(s === s.toUpperCase() && s.length > 3){
+    s = s.toLowerCase().replace(/(^|\s)([a-zà-ú])/g, function(_, a, b){ return a + b.toUpperCase(); });
+  }
+  // remove palavras-ruído restantes no meio
+  s = s.replace(/\b(Master|Mastercard|Visa|Elo|Debito|Débito|Credito|Crédito)\b/gi, '').replace(/\s{2,}/g,' ').trim();
+  if(s.length < 2 || noiseWord.test(s)){
+    if(/BOLETO/i.test(original)) return 'Boleto';
+    if(/PIX/i.test(original)) return 'PIX';
+    if(/PARCELA/i.test(original)) return 'Parcela';
+    if(/D[EÉ]BITO/i.test(original)) return 'Compra débito';
+    return original.slice(0, 36);
+  }
+  return s.slice(0, 42);
 }
 
 function pickBestImportDesc(name, memo, payee){
