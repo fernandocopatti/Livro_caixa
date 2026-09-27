@@ -1419,13 +1419,12 @@
             <span style="font-size:11px;">JPG ou PNG · lê o valor total de cada nota</span>
           </div>
           <div class="btn-row" style="margin-top:12px;">
-            <button type="button" class="btn secondary" id="btn-take-photo" onclick="openCameraPicker();return false;" style="flex:1;">📷 Tirar foto</button>
-            <button type="button" class="btn secondary" id="btn-choose-gallery" onclick="openGalleryPicker();return false;" style="flex:1;">🖼️ Galeria</button>
+            <label for="camera-input" class="btn secondary" id="btn-take-photo" style="flex:1;text-align:center;cursor:pointer;margin:0;">📷 Tirar foto</label>
+            <label for="gallery-input" class="btn secondary" id="btn-choose-gallery" style="flex:1;text-align:center;cursor:pointer;margin:0;">🖼️ Galeria</label>
           </div>
           <div id="photo-attach-status" style="margin-top:8px;font-size:12.5px;color:var(--ink-dim);min-height:18px;"></div>
-          <!-- inputs quase invisíveis (display:none quebra em alguns iOS) -->
-          <input type="file" id="camera-input" accept="image/*" capture="environment" onchange="onCameraPhotoChange(event)" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;">
-          <input type="file" id="gallery-input" accept="image/*" multiple onchange="onGalleryPhotoChange(event)" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;">
+          <input type="file" id="camera-input" accept="image/*" capture="environment" onchange="onCameraPhotoChange(event)" style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0;">
+          <input type="file" id="gallery-input" accept="image/*" multiple onchange="onGalleryPhotoChange(event)" style="position:fixed;left:-9999px;width:1px;height:1px;opacity:0;">
           <div class="ocr-preview" id="ocr-preview" style="display:none;">
             <img id="ocr-img" src="">
             <div>
@@ -6985,12 +6984,9 @@ window.openCameraPicker = openCameraPicker;
 window.openGalleryPicker = openGalleryPicker;
 
 try{
-  const btnCam = document.getElementById('btn-take-photo');
-  const btnGal = document.getElementById('btn-choose-gallery');
-  if(btnCam) btnCam.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); openCameraPicker(); });
-  if(btnGal) btnGal.addEventListener('click', function(e){ e.preventDefault(); e.stopPropagation(); openGalleryPicker(); });
+  // labels for= já abrem o input; só trata a área de drop
   if(photoDrop) photoDrop.addEventListener('click', function(e){
-    if(e.target && (e.target.closest('button') || e.target.tagName==='BUTTON')) return;
+    if(e.target && (e.target.closest('label') || e.target.closest('button') || e.target.tagName==='LABEL' || e.target.tagName==='BUTTON')) return;
     openGalleryPicker();
   });
 }catch(e){ console.warn('photo buttons', e); }
@@ -7264,10 +7260,11 @@ function parseReceiptText(text){
       paidPago.push(last);
       return;
     }
-    // "CARTAO CREDITO 112,96" na área de pagamento (sem ser bônus)
-    if(/cart[aã]o|credito|d[eé]bito|pix|dinheiro/i.test(lower) && /forma|pagamento|pago|valor/i.test(text.toLowerCase())){
-      // só se a linha parece valor de pagamento (não lista de produto)
-      if(!/[A-Za-zÀ-ÿ]{6,}/.test(line.replace(/cart[aã]o|credito|d[eé]bito|visa|master|elo|hiper/gi,''))){
+    // cartão / débito / crédito / pix (OCR: "CAR", "CART", "CATAO")
+    if(/cart[aã]o|\bcart\b|\bcar\b|credito|d[eé]bito|\bpix\b|dinheiro/i.test(lower)){
+      const rest = line.replace(/cart[aã]o|cartao|\bcart\b|\bcar\b|credito|d[eé]bito|visa|master|elo|hiper|pix|dinheiro/gi,'');
+      // linha curta de pagamento ou com "valor/pago"
+      if(rest.replace(/[\d\s.,r$\-]/gi,'').length < 8 || /pago|valor|total|forma/i.test(lower)){
         paidPago.push(last);
         return;
       }
@@ -7312,6 +7309,39 @@ function parseReceiptText(text){
     value = Math.max(...paidPago);
   } else if(totalMatches.length){
     value = hasDiscount ? Math.min(...totalMatches) : totalMatches[totalMatches.length-1];
+  }
+
+  // fallback NFC-e / cupom: total no rodapé (OCR costuma estragar "VALOR TOTAL" e "CARTÃO")
+  if(value == null){
+    const tail = lines0.slice(-18);
+    const tailNums = [];
+    tail.forEach(line=>{
+      const lower = line.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      if(/desconto|troco|tributo|economia|qtde|item/i.test(lower) && !/total|pagar|pago|cart/i.test(lower)) return;
+      const reN = /(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})/g;
+      let m;
+      while((m = reN.exec(line)) !== null){
+        const val = toNum(m[1]);
+        if(val!=null && val>=1 && val<100000) tailNums.push({val, line: lower});
+      }
+    });
+    // prioriza linhas de total / cartão / pagamento
+    const preferred = tailNums.filter(x=> /total|pagar|pago|cart|debito|credito|pix|dinheiro|valor/i.test(x.line));
+    if(preferred.length){
+      value = Math.max(...preferred.map(x=>x.val));
+    } else if(tailNums.length){
+      // maior valor do rodapé (geralmente o total)
+      value = Math.max(...tailNums.map(x=>x.val));
+    }
+  }
+
+  // se ainda nulo, procura "R$ 51,56" / "51,56" perto de TOTAL no texto inteiro
+  if(value == null){
+    const all = String(text||'');
+    const mTot = all.match(/valor\s*total[^\d]{0,20}(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})/i)
+      || all.match(/total\s*(?:r\$)?\s*(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})/i)
+      || all.match(/(?:cart[aã]o|cartao|debito|cr[eé]dito|pix)\D{0,12}(\d{1,3}(?:[.,]\d{3})*[.,]\d{2})/i);
+    if(mTot) value = toNum(mTot[1]);
   }
 
   // data: dd/mm/yyyy ou dd/mm/yy — evita pegar pedaço de CNPJ/CPF/chave de acesso (que são
