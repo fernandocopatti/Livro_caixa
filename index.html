@@ -929,6 +929,7 @@
     background:var(--bg);padding:24px;
   }
   #auth-gate.hidden{display:none;}
+  .dash-filter-hidden{display:none !important;}
   .auth-card{
     width:100%;max-width:400px;background:var(--surface);border:1px solid var(--line);
     border-radius:16px;padding:22px 18px;box-shadow:0 20px 50px rgba(0,0,0,.35);
@@ -1257,19 +1258,19 @@
         <div id="ir-pf-content"></div>
       </div>
 
-      <div class="dash-cols">
-        <div class="card">
+      <div class="dash-cols" id="charts-row">
+        <div class="card" id="trend-chart-card">
           <div class="panel-title">Gastos nos últimos 6 meses</div>
           <div class="chart-wrap" id="trend-chart-wrap"><canvas id="chart-trend"></canvas></div>
         </div>
-        <div class="card">
+        <div class="card" id="cats-chart-card">
           <div class="panel-title">Por categoria (mês atual)</div>
           <div class="chart-wrap" id="cats-chart-wrap" style="height:180px;"><canvas id="chart-cats"></canvas></div>
           <div class="cat-legend" id="cat-legend"></div>
         </div>
       </div>
 
-      <div class="card" style="margin-top:18px;">
+      <div class="card" style="margin-top:18px;" id="matrix-card">
         <div class="panel-title">
           Gastos por categoria x mês (últimos 6 meses)
           <select id="matrix-account-select" style="font-size:12px;padding:6px 10px;"><option value="">Todas as contas</option></select>
@@ -1278,7 +1279,7 @@
         <div class="review-table-scroll"><table class="review-table" id="cat-month-matrix"></table></div>
       </div>
 
-      <div class="card" style="margin-top:18px;">
+      <div class="card" style="margin-top:18px;" id="cat-trend-card">
         <div class="panel-title">
           Evolução por categoria
           <select id="trend-cat-select" style="font-size:12px;padding:6px 10px;"></select>
@@ -1377,7 +1378,7 @@
         </div>
       </div>
 
-      <div class="card" style="margin-top:18px;">
+      <div class="card" style="margin-top:18px;" id="recent-card">
         <div class="panel-title">Últimos lançamentos</div>
         <div class="ledger" id="dash-recent"></div>
       </div>
@@ -4790,10 +4791,12 @@ function readSplitParts(){
 
 const DEFAULT_DASH_CARDS = {
   goal: true, pace: true, insights: true, budget: true, yoy: true,
+  irPf: true, charts: true, matrix: true, catTrend: true,
   accountsBalance: true, goals: true, debts: true, cashflow: true,
   merchants: true, agenda: true, compare3: true, subscriptions: true, reduction: true,
   cardLimits: true, invoiceSim: true, installments: true,
-  networth: true, sinceVisit: true, alerts: true
+  networth: true, sinceVisit: true, alerts: true,
+  report: true, recent: true
 };
 function dashCardVisible(key){
   const cfg = state.settings.dashCards || DEFAULT_DASH_CARDS;
@@ -4964,11 +4967,14 @@ function renderDashConfig(){
   if(!grid) return;
   const labels = {
     goal:'Meta mensal', pace:'Ritmo do mês', insights:'Insights', budget:'Orçado×realizado',
-    yoy:'Ano passado', accountsBalance:'Saldos', goals:'Objetivos', debts:'Dívidas',
+    yoy:'Ano passado', irPf:'IR / resultado no ano', charts:'Gráficos (6 meses e categorias)',
+    matrix:'Tabela categoria × mês', catTrend:'Evolução por categoria',
+    accountsBalance:'Saldos / por conta', goals:'Objetivos', debts:'Dívidas',
     cashflow:'Fluxo projetado', merchants:'Top lojas', agenda:'Agenda', compare3:'Comparativo 3m',
     subscriptions:'Assinaturas', reduction:'Meta redução', cardLimits:'Limites cartão',
     invoiceSim:'Simulador fatura', installments:'Parcelas futuras',
-    networth:'Patrimônio consolidado', sinceVisit:'Desde última visita', alerts:'Alertas'
+    networth:'Patrimônio consolidado', sinceVisit:'Desde última visita', alerts:'Alertas',
+    report:'Relatório mensal', recent:'Últimos lançamentos'
   };
   const cfg = { ...DEFAULT_DASH_CARDS, ...(state.settings.dashCards||{}) };
   grid.innerHTML = Object.keys(labels).map(k=>`
@@ -6134,13 +6140,19 @@ function renderDashboard(){
     }
   }
 
-  // aplica visibilidade FINAL (sempre por último — evita cards reaparecerem após lógica de dados)
+  // aplica visibilidade FINAL — class com !important (não perde para display:'' dos blocos)
   const visMap = {
     'goal-card':'goal',
     'pace-card':'pace',
     'insights-card':'insights',
     'budget-panel-card':'budget',
     'yoy-card':'yoy',
+    'ir-pf-card':'irPf',
+    'charts-row':'charts',
+    'trend-chart-card':'charts',
+    'cats-chart-card':'charts',
+    'matrix-card':'matrix',
+    'cat-trend-card':'catTrend',
     'account-summary-card':'accountsBalance',
     'accounts-balance-card':'accountsBalance',
     'card-limits-card':'cardLimits',
@@ -6155,32 +6167,26 @@ function renderDashboard(){
     'since-visit-card':'sinceVisit',
     'goals-card':'goals',
     'debts-card':'debts',
-    'cashflow-card':'cashflow'
+    'cashflow-card':'cashflow',
+    'report-card':'report',
+    'recent-card':'recent'
   };
   Object.entries(visMap).forEach(([id,key])=>{
     const el = document.getElementById(id);
     if(!el) return;
-    if(!dashCardVisible(key)){
-      el.style.display = 'none';
-      el.setAttribute('data-force-hidden', '1');
-    } else if(el.getAttribute('data-force-hidden') === '1'){
-      // só reexibe se a lógica de dados acima não tiver escondido por vazio
-      // (se ainda estiver none por falta de dados, mantém)
-      // na prática: se data-force-hidden, libera o display e deixa a lógica anterior decidir
-      // Aqui forçamos '' apenas se o card tinha sido escondido só pelo filtro
-      el.removeAttribute('data-force-hidden');
-      // se a lógica de dados setou none por conteúdo vazio, precisamos reavaliar — 
-      // por segurança, se o card tem conteúdo útil, mostra
-      if(el.style.display === 'none'){
-        // deixa como a lógica de cada bloco definiu: se não tem data-empty, mostra
-        if(el.getAttribute('data-empty') !== '1') el.style.display = '';
-      }
-    }
+    if(dashCardVisible(key)) el.classList.remove('dash-filter-hidden');
+    else el.classList.add('dash-filter-hidden');
   });
-  // alertas (banner)
   try{
     const wrap = document.getElementById('alerts-banner-wrap');
-    if(wrap && !dashCardVisible('alerts')) wrap.innerHTML = '';
+    if(wrap){
+      if(!dashCardVisible('alerts')){
+        wrap.classList.add('dash-filter-hidden');
+        wrap.innerHTML = '';
+      } else {
+        wrap.classList.remove('dash-filter-hidden');
+      }
+    }
   }catch(e){}
 
   // recent transactions
@@ -11321,7 +11327,7 @@ function registerPWA(){
 
     if('serviceWorker' in navigator){
       const swCode = `
-        const CACHE = 'mci-v2026-09-28-dash';
+        const CACHE = 'mci-v2026-09-28-dash2';
         self.addEventListener('install', (e)=>{
           self.skipWaiting();
           e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./']).catch(()=>{})));
