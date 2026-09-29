@@ -5126,7 +5126,7 @@ function renderDashboard(){
     const goalCard = document.getElementById('goal-card');
     const goal = state.settings.monthlyGoal;
     document.getElementById('goal-month-label').textContent = '· ' + monthLabel(curKey);
-    if(!goal || goal <= 0){
+    if(!dashCardVisible('goal') || !goal || goal <= 0){
       goalCard.style.display = 'none';
     } else {
       goalCard.style.display = '';
@@ -5152,6 +5152,8 @@ function renderDashboard(){
   {
     const paceCard = document.getElementById('pace-card');
     const paceEl = document.getElementById('pace-content');
+    if(paceCard && !dashCardVisible('pace')){ paceCard.style.display = 'none'; }
+    else if(paceCard){ paceCard.style.display = ''; }
     document.getElementById('pace-month-label').textContent = '· ' + monthLabel(curKey);
     const now = new Date();
     const realCur = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
@@ -5197,8 +5199,11 @@ function renderDashboard(){
 
   // insights automáticos
   {
+    const insightsCard = document.getElementById('insights-card');
     const insights = buildInsights(curKey, curTotal, curDespesas, prevDespesaTotal, dataMonths);
     const el = document.getElementById('insights-content');
+    if(insightsCard && !dashCardVisible('insights')){ insightsCard.style.display = 'none'; }
+    else if(insightsCard){ insightsCard.style.display = ''; }
     el.innerHTML = insights.map(ins=>{
       const cls = ins.kind === 'warn' ? 'warn-ish' : (ins.kind === 'good' ? 'good-ish' : '');
       return `<div class="insight-item ${cls}"><span class="insight-icon">${ins.icon}</span><span>${escapeHTML(ins.text)}</span></div>`;
@@ -5245,7 +5250,7 @@ function renderDashboard(){
     const hasBase = baseTx.length > 0;
     const hasCur = curDespesas.length > 0;
 
-    if(!hasBase && !hasCur){
+    if(!dashCardVisible('yoy') || (!hasBase && !hasCur)){
       if(yoyCard) yoyCard.style.display = 'none';
     } else {
       if(yoyCard) yoyCard.style.display = '';
@@ -5642,8 +5647,8 @@ function renderDashboard(){
   const accountEntries = Object.entries(accountTotals).sort((a,b)=>b[1]-a[1]);
   const accountCard = document.getElementById('account-summary-card');
   const accountListEl = document.getElementById('account-summary-list');
-  if(!accountEntries.length){
-    accountCard.style.display = 'none';
+  if(!accountEntries.length || !dashCardVisible('accountsBalance')){
+    if(accountCard) accountCard.style.display = 'none';
   } else {
     accountCard.style.display = '';
     const maxVal = accountEntries[0][1];
@@ -5764,7 +5769,7 @@ function renderDashboard(){
     const instCard = document.getElementById('installments-card');
     const instEl = document.getElementById('installments-content');
     const monthKeys = Object.keys(byMonth).sort();
-    if(!monthKeys.length){
+    if(!dashCardVisible('installments') || !monthKeys.length){
       instCard.style.display = 'none';
     } else {
       instCard.style.display = '';
@@ -5835,7 +5840,7 @@ function renderDashboard(){
     if(!budgetCats.length){
       panel.style.display = 'none';
     } else {
-      panel.style.display = '';
+      panel.style.display = dashCardVisible('budget') ? '' : 'none';
       const rows = budgetCats.map(c=>{
         const spent = state.transactions
           .filter(t=> t.category===c.id && monthKey(t.date)===curKey)
@@ -5882,7 +5887,7 @@ function renderDashboard(){
     if(!curM.length){
       card.style.display = 'none';
     } else {
-      card.style.display = '';
+      card.style.display = dashCardVisible('merchants') ? '' : 'none';
       list.innerHTML = curM.map((m,i)=>{
         const prev = prevMmap[m.name];
         let delta = '';
@@ -5913,7 +5918,7 @@ function renderDashboard(){
     const card = document.getElementById('agenda-card');
     const list = document.getElementById('agenda-list');
     const items = buildAgendaItems(todayISO(), 30).slice(0, 12);
-    if(!items.length){
+    if(!dashCardVisible('agenda') || !items.length){
       card.style.display = 'none';
     } else {
       card.style.display = '';
@@ -5934,7 +5939,7 @@ function renderDashboard(){
     const table = document.getElementById('compare3-table');
     const card = document.getElementById('compare3-card');
     const last3 = dataMonths.slice(-3);
-    if(last3.length < 2){
+    if(!dashCardVisible('compare3') || last3.length < 2){
       card.style.display = 'none';
     } else {
       card.style.display = '';
@@ -6010,7 +6015,7 @@ function renderDashboard(){
     const card = document.getElementById('reduction-card');
     const el = document.getElementById('reduction-content');
     const rg = state.settings.reductionGoal;
-    if(!rg || !rg.categoryId || !rg.percent){
+    if(!dashCardVisible('reduction') || !rg || !rg.categoryId || !rg.percent){
       card.style.display = 'none';
     } else {
       card.style.display = '';
@@ -6129,18 +6134,54 @@ function renderDashboard(){
     }
   }
 
-  // aplica visibilidade dos cards clássicos
+  // aplica visibilidade FINAL (sempre por último — evita cards reaparecerem após lógica de dados)
   const visMap = {
-    'goal-card':'goal', 'pace-card':'pace', 'insights-card':'insights', 'budget-panel-card':'budget',
-    'yoy-card':'yoy', 'card-limits-card':'cardLimits', 'invoice-sim-card':'invoiceSim',
-    'installments-card':'installments', 'merchants-card':'merchants', 'agenda-card':'agenda',
-    'compare3-card':'compare3', 'subscriptions-card':'subscriptions', 'reduction-card':'reduction',
-    'networth-card':'networth', 'since-visit-card':'sinceVisit'
+    'goal-card':'goal',
+    'pace-card':'pace',
+    'insights-card':'insights',
+    'budget-panel-card':'budget',
+    'yoy-card':'yoy',
+    'account-summary-card':'accountsBalance',
+    'accounts-balance-card':'accountsBalance',
+    'card-limits-card':'cardLimits',
+    'invoice-sim-card':'invoiceSim',
+    'installments-card':'installments',
+    'merchants-card':'merchants',
+    'agenda-card':'agenda',
+    'compare3-card':'compare3',
+    'subscriptions-card':'subscriptions',
+    'reduction-card':'reduction',
+    'networth-card':'networth',
+    'since-visit-card':'sinceVisit',
+    'goals-card':'goals',
+    'debts-card':'debts',
+    'cashflow-card':'cashflow'
   };
   Object.entries(visMap).forEach(([id,key])=>{
     const el = document.getElementById(id);
-    if(el && !dashCardVisible(key)) el.style.display = 'none';
+    if(!el) return;
+    if(!dashCardVisible(key)){
+      el.style.display = 'none';
+      el.setAttribute('data-force-hidden', '1');
+    } else if(el.getAttribute('data-force-hidden') === '1'){
+      // só reexibe se a lógica de dados acima não tiver escondido por vazio
+      // (se ainda estiver none por falta de dados, mantém)
+      // na prática: se data-force-hidden, libera o display e deixa a lógica anterior decidir
+      // Aqui forçamos '' apenas se o card tinha sido escondido só pelo filtro
+      el.removeAttribute('data-force-hidden');
+      // se a lógica de dados setou none por conteúdo vazio, precisamos reavaliar — 
+      // por segurança, se o card tem conteúdo útil, mostra
+      if(el.style.display === 'none'){
+        // deixa como a lógica de cada bloco definiu: se não tem data-empty, mostra
+        if(el.getAttribute('data-empty') !== '1') el.style.display = '';
+      }
+    }
   });
+  // alertas (banner)
+  try{
+    const wrap = document.getElementById('alerts-banner-wrap');
+    if(wrap && !dashCardVisible('alerts')) wrap.innerHTML = '';
+  }catch(e){}
 
   // recent transactions
   const recent = scopedTx.slice().sort((a,b)=> (b.date+b.createdAt).localeCompare(a.date+a.createdAt)).slice(0,6);
@@ -11280,7 +11321,7 @@ function registerPWA(){
 
     if('serviceWorker' in navigator){
       const swCode = `
-        const CACHE = 'mci-v2026-09-28-icon3';
+        const CACHE = 'mci-v2026-09-28-dash';
         self.addEventListener('install', (e)=>{
           self.skipWaiting();
           e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./']).catch(()=>{})));
