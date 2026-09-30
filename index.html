@@ -74,6 +74,19 @@
     flex-direction:column;
     padding:28px 0 18px;
   }
+  /* Web desktop: menu lateral fixo ao rolar a página */
+  @media (min-width:881px){
+    #app{align-items:flex-start;}
+    .spine{
+      position:sticky;
+      top:0;
+      height:100vh;
+      max-height:100vh;
+      overflow-y:auto;
+      overscroll-behavior:contain;
+      z-index:40;
+    }
+  }
   .brand{
     padding:0 20px 16px;
     border-bottom:1px solid var(--line);
@@ -687,25 +700,33 @@
     .ir-kpi-grid-2{grid-template-columns:1fr;}
   }
 
-  /* Config: blocos recolhíveis */
-  #view-config .card.cfg-fold{
+  /* Config / Categorias: blocos recolhíveis */
+  #view-config .card.cfg-fold,
+  #view-categories .card.cfg-fold{
     padding:0 !important; overflow:hidden; margin-bottom:8px !important;
   }
-  #view-config .card.cfg-fold > .cfg-head{
+  #view-config .card.cfg-fold > .cfg-head,
+  #view-categories .card.cfg-fold > .cfg-head{
     display:flex; align-items:center; justify-content:space-between; gap:10px;
     padding:10px 12px; cursor:pointer; user-select:none;
     font-size:13px; font-weight:600; color:var(--ink);
   }
-  #view-config .card.cfg-fold > .cfg-head:hover{background:var(--surface-3);}
-  #view-config .card.cfg-fold > .cfg-head .cfg-chevron{
+  #view-config .card.cfg-fold > .cfg-head:hover,
+  #view-categories .card.cfg-fold > .cfg-head:hover{background:var(--surface-3);}
+  #view-config .card.cfg-fold > .cfg-head .cfg-chevron,
+  #view-categories .card.cfg-fold > .cfg-head .cfg-chevron{
     font-size:11px; color:var(--ink-faint); transition:transform .2s; flex-shrink:0;
   }
-  #view-config .card.cfg-fold.open > .cfg-head .cfg-chevron{transform:rotate(90deg); color:var(--accent);}
-  #view-config .card.cfg-fold > .cfg-body{
+  #view-config .card.cfg-fold.open > .cfg-head .cfg-chevron,
+  #view-categories .card.cfg-fold.open > .cfg-head .cfg-chevron{transform:rotate(90deg); color:var(--accent);}
+  #view-config .card.cfg-fold > .cfg-body,
+  #view-categories .card.cfg-fold > .cfg-body{
     display:none; padding:0 12px 12px; border-top:1px solid var(--line);
   }
-  #view-config .card.cfg-fold.open > .cfg-body{display:block; padding-top:10px;}
-  #view-config .card.cfg-fold .panel-title{display:none;}
+  #view-config .card.cfg-fold.open > .cfg-body,
+  #view-categories .card.cfg-fold.open > .cfg-body{display:block; padding-top:10px;}
+  #view-config .card.cfg-fold .panel-title,
+  #view-categories .card.cfg-fold .panel-title{display:none;}
   #view-config .view-desc{display:none;}
   #view-config p{font-size:12px !important;line-height:1.4 !important;margin:0 0 8px !important;}
   #view-config .field{margin-bottom:8px;}
@@ -1673,8 +1694,13 @@
 
       <div class="dash-cols" id="cat-groups-container" style="align-items:start;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));"></div>
 
-      <div class="card" style="margin-top:18px;" id="advanced-rules-card">
-        <div class="panel-title">Regras automáticas de categoria</div>
+      <div class="card cfg-fold" style="margin-top:18px;" id="advanced-rules-card">
+        <div class="cfg-head" role="button" tabindex="0" onclick="this.parentElement.classList.toggle('open')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();this.parentElement.classList.toggle('open');}">
+          <span class="cfg-label">Regras automáticas de categoria</span>
+          <span class="cfg-chevron">▶</span>
+        </div>
+        <div class="cfg-body">
+
         <p style="color:var(--ink-dim);font-size:13px;line-height:1.5;margin:0 0 12px;">
           Além das palavras-chave da categoria, você pode criar regras com faixa de valor.
           Ex.: descrição contém “farmácia” e valor entre 50 e 500 → Saúde.
@@ -1697,6 +1723,8 @@
           <div class="field" style="margin:0;"><label>Mín R$</label><input type="number" id="rule-min" step="0.01" min="0" placeholder="0"></div>
           <div class="field" style="margin:0;"><label>Máx R$</label><input type="number" id="rule-max" step="0.01" min="0" placeholder="∞"></div>
           <button type="button" class="btn secondary" id="rule-add-btn" style="padding:10px 14px;">Adicionar</button>
+        </div>
+      
         </div>
       </div>
 
@@ -11387,7 +11415,7 @@ function registerPWA(){
 
     if('serviceWorker' in navigator){
       const swCode = `
-        const CACHE = 'mci-v2026-09-29-saldo';
+        const CACHE = 'mci-v2026-09-29-ui';
         self.addEventListener('install', (e)=>{
           self.skipWaiting();
           e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./']).catch(()=>{})));
