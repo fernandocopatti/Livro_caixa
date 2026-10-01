@@ -11247,8 +11247,14 @@ function renderTypesList(){
     const count = countFor(t.id);
     return `
     <div class="cat-manage-row">
-      <span class="stamp" style="background:${t.color}">${t.arrow || (t.flowSign<0?'↓':'↑')}</span>
-      <span class="cat-manage-name">${escapeHTML(t.name)}<span class="ledger-desc-sub">${t.flowSign<0?'Sai da conta':'Entra na conta'}${t.countsAsExpense?' · conta como despesa':''}</span></span>
+      <span class="stamp" style="background:${t.color}">${t.arrow || (t.flowSign<0?'↓':(t.flowSign>0?'↑':'⇄'))}</span>
+      <span class="cat-manage-name">${escapeHTML(t.name)}<span class="ledger-desc-sub">${
+        t.flowSign<0
+          ? ('Sai da conta'+(t.countsAsExpense?' · conta como despesa':''))
+          : (t.flowSign>0
+              ? 'Entra na conta'
+              : 'Neutro · não conta como despesa nem receita')
+      }</span></span>
       <span class="cat-manage-count">${count} lançamento${count===1?'':'s'}</span>
       <button class="cat-icon-btn" data-edit-type="${t.id}" title="${t.protected ? 'Editar (nome e cor apenas)' : 'Editar'}">✎</button>
       <button class="cat-icon-btn" data-del-type="${t.id}" title="${t.protected ? 'Tipo padrão, não pode ser excluído' : 'Excluir'}" ${t.protected?'disabled':''}>✕</button>
@@ -11415,7 +11421,7 @@ function registerPWA(){
 
     if('serviceWorker' in navigator){
       const swCode = `
-        const CACHE = 'mci-v2026-09-29-ui';
+        const CACHE = 'mci-v2026-09-30-types';
         self.addEventListener('install', (e)=>{
           self.skipWaiting();
           e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./']).catch(()=>{})));
