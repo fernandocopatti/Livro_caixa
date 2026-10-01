@@ -205,7 +205,8 @@
   .grid{display:grid;gap:18px;}
 
   /* ---------- Dashboard ---------- */
-  .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:20px;}
+  .stat-row{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:20px;}
+  @media (max-width:1100px){.stat-row{grid-template-columns:repeat(3,1fr);}}
   .stat-card{
     background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
     padding:18px 20px;position:relative;overflow:hidden;
@@ -1234,6 +1235,11 @@
           <div class="stat-label">Maior categoria de despesa</div>
           <div class="stat-value accent" id="stat-top-cat">—</div>
           <div class="stat-delta" id="stat-top-cat-val">—</div>
+        </div>
+        <div class="stat-card" id="stat-card-purchases-wrap">
+          <div class="stat-label" id="stat-card-purchases-label">Compras no cartão</div>
+          <div class="stat-value warn" id="stat-card-purchases-total">R$ 0,00</div>
+          <div class="stat-delta" id="stat-card-purchases-delta">Só compras do mês (sem parcelas antigas)</div>
         </div>
       </div>
 
@@ -5066,6 +5072,26 @@ function renderDashConfig(){
 }
 
 
+
+/** Compra nova no mês: à vista ou 1ª parcela. Parcelas 2/N, 3/N… = compromisso de meses anteriores. */
+function isNewCardPurchase(t){
+  if(!t) return false;
+  if(!t.installment || t.installment.current == null || t.installment.total == null) return true;
+  const cur = Number(t.installment.current);
+  return !cur || cur <= 1;
+}
+/** Conta parece cartão de crédito (nome ou limite com dia de fechamento). */
+function isCardAccountName(name){
+  if(!name || !String(name).trim()) return false;
+  const n = String(name).toLowerCase();
+  if(/cart[aã]o|\bcard\b|credit|mastercard|visa|\belo\b|hipercard|amex|platinum|\bblack\b|nubank|inter\b|c6\b|sicredi/.test(n)) return true;
+  try{
+    const lim = (state.accountLimits && (state.accountLimits[name] || state.accountLimits[String(name)])) || null;
+    if(lim && (lim.closingDay || lim.limit)) return true;
+  }catch(e){}
+  return false;
+}
+
 function renderDashboard(){
  try{
   try{ updateProUI(); }catch(e){}
@@ -5173,6 +5199,35 @@ function renderDashboard(){
 
   document.getElementById('stat-month-total').textContent = fmtBRL(curTotal);
   document.getElementById('stat-income-total').textContent = fmtBRL(curIncomeTotal);
+
+  // Compras no cartão no mês: só despesas de contas-cartão que são compra nova (à vista / 1ª parcela)
+  try{
+    const cardTx = curDespesas.filter(t=>{
+      if(!isCardAccountName(t.account)) return false;
+      return isNewCardPurchase(t);
+    });
+    const cardTotal = cardTx.reduce((s,t)=> s + (Number(t.amount)||0), 0);
+    const oldParcels = curDespesas.filter(t=> isCardAccountName(t.account) && !isNewCardPurchase(t));
+    const oldTotal = oldParcels.reduce((s,t)=> s + (Number(t.amount)||0), 0);
+    const elT = document.getElementById('stat-card-purchases-total');
+    const elD = document.getElementById('stat-card-purchases-delta');
+    const elL = document.getElementById('stat-card-purchases-label');
+    if(elT){
+      elT.textContent = fmtBRL(cardTotal);
+      elT.className = 'stat-value ' + (cardTotal>0 ? 'warn' : 'accent');
+    }
+    if(elL) elL.textContent = 'Compras no cartão · ' + monthLabel(curKey);
+    if(elD){
+      if(oldTotal > 0){
+        elD.textContent = cardTx.length + ' compra' + (cardTx.length===1?'':'s') + ' do mês · parcelas antigas ' + fmtBRL(oldTotal) + ' (fora)';
+      } else if(cardTx.length){
+        elD.textContent = cardTx.length + ' compra' + (cardTx.length===1?'':'s') + ' · sem parcelas de meses anteriores';
+      } else {
+        elD.textContent = 'Só compras do mês (à vista ou 1ª parcela)';
+      }
+    }
+  }catch(e){ console.warn('card purchases stat', e); }
+
   const balanceEl = document.getElementById('stat-balance-total');
   balanceEl.textContent = (saldo>=0?'':'−') + fmtBRL(Math.abs(saldo));
   balanceEl.className = 'stat-value ' + (saldo>=0 ? 'accent' : 'warn');
@@ -5204,15 +5259,29 @@ function renderDashboard(){
 
   const byCat = {};
   curDespesas.forEach(t=>{ byCat[t.category] = (byCat[t.category]||0) + t.amount; });
+  // Maior categoria: ignora buckets genéricos de cartão (sempre dominariam o ranking)
+  const isGenericCardCat = (id)=>{
+    const c = catById(id);
+    const n = normalizeDesc((c && c.name) || id || '');
+    return /cartao|cartão|credito|crédito|fatura|pagamento fatura/.test(n);
+  };
   const catEntries = Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
-  if(catEntries.length){
-    const top = catById(catEntries[0][0]);
-    document.getElementById('stat-top-cat').textContent = top.name;
-    document.getElementById('stat-top-cat-val').textContent = fmtBRL(catEntries[0][1]);
-  } else {
-    document.getElementById('stat-top-cat').textContent = '—';
-    document.getElementById('stat-top-cat-val').textContent = 'Nenhuma despesa ainda';
-  }
+  const catEntriesTop = catEntries.filter(([id])=> !isGenericCardCat(id));
+  try{
+    const elTop = document.getElementById('stat-top-cat');
+    const elTopVal = document.getElementById('stat-top-cat-val');
+    if(elTop && elTopVal){
+      const rank = catEntriesTop.length ? catEntriesTop : catEntries;
+      if(rank.length){
+        const top = catById(rank[0][0]);
+        elTop.textContent = top.name;
+        elTopVal.textContent = fmtBRL(rank[0][1]);
+      } else {
+        elTop.textContent = '—';
+        elTopVal.textContent = 'Nenhuma despesa ainda';
+      }
+    }
+  }catch(e){}
 
   // meta mensal de despesas
   {
@@ -11421,7 +11490,7 @@ function registerPWA(){
 
     if('serviceWorker' in navigator){
       const swCode = `
-        const CACHE = 'mci-v2026-09-30-types';
+        const CACHE = 'mci-v2026-09-30-topcat';
         self.addEventListener('install', (e)=>{
           self.skipWaiting();
           e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./']).catch(()=>{})));
