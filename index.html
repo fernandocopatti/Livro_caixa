@@ -5231,17 +5231,22 @@ function renderDashboard(){
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
   })();
 
-  document.getElementById('stat-month-label').textContent = 'Despesas em ' + monthLabel(curKey);
-  document.getElementById('stat-income-label').textContent = 'Receitas em ' + monthLabel(curKey);
-  document.getElementById('stat-balance-label').textContent = 'Saldo em ' + monthLabel(curKey);
+  {
+    const single = !!(dashAccount && dashAccount !== '__none__');
+    document.getElementById('stat-month-label').textContent = (single ? 'Despesas em ' : 'Despesas (caixa) em ') + monthLabel(curKey);
+    document.getElementById('stat-income-label').textContent = (single ? 'Receitas em ' : 'Receitas (caixa) em ') + monthLabel(curKey);
+    document.getElementById('stat-balance-label').textContent = (single ? 'Saldo em ' : 'Saldo (caixa) em ') + monthLabel(curKey);
+  }
 
   const curTx = scopedTx.filter(t=>monthKey(t.date)===curKey);
   const prevTx = scopedTx.filter(t=>monthKey(t.date)===prevKey);
   const isExpense = t => typeById(t.type).countsAsExpense;
   const isInflow = t => typeById(t.type).flowSign > 0;
-  // Caixa: ignora compras no cartão (já impactam quando paga a fatura na CC)
-  const curTxCash = curTx.filter(isCashFlowTx);
-  const prevTxCash = prevTx.filter(isCashFlowTx);
+  // Uma conta específica no filtro: mostra essa conta inteira (mesmo cartão).
+  // "Todas as contas": só contas com "Somar no fluxo de caixa".
+  const singleAccount = !!(dashAccount && dashAccount !== '__none__');
+  const curTxCash = singleAccount ? curTx : curTx.filter(isCashFlowTx);
+  const prevTxCash = singleAccount ? prevTx : prevTx.filter(isCashFlowTx);
   const curDespesas = curTxCash.filter(isExpense);
   const curReceitas = curTxCash.filter(isInflow);
   // Todas as despesas do mês (inclui cartão) — categorias / insights analíticos
@@ -5250,15 +5255,21 @@ function renderDashboard(){
   const prevReceitaTotal = prevTxCash.filter(isInflow).reduce((s,t)=>s+t.amount,0);
   const curTotal = curDespesas.reduce((s,t)=>s+t.amount,0);
   const curIncomeTotal = curReceitas.reduce((s,t)=>s+t.amount,0);
-  // fluxo do mês (caixa) — subtítulo
   const fluxoMes = curTxCash.reduce((s,t)=> s + typeById(t.type).flowSign * t.amount, 0);
-  // saldo de caixa (sem contas cartão)
   const saldo = (typeof dashboardBalanceWithInitial === 'function')
-    ? dashboardBalanceWithInitial(curKey, dashAccount, { cashOnly: true })
+    ? dashboardBalanceWithInitial(curKey, dashAccount, { cashOnly: !singleAccount })
     : fluxoMes;
 
   document.getElementById('stat-month-total').textContent = fmtBRL(curTotal);
   document.getElementById('stat-income-total').textContent = fmtBRL(curIncomeTotal);
+
+  // Deixa claro quando o total de despesas é só caixa (cartão separado)
+  try{
+    const cardSpend = curDespesasAll.filter(t=> !isCashFlowTx(t) && isExpense(t)).reduce((s,t)=>s+(Number(t.amount)||0),0);
+    const monthDeltaEl = document.getElementById('stat-month-delta');
+    // subtítulo de variação vs mês anterior é preenchido depois; guardamos dica do cartão
+    window.__dashCardSpendHint = (!singleAccount && cardSpend > 0) ? cardSpend : 0;
+  }catch(e){ window.__dashCardSpendHint = 0; }
 
   // Compras no cartão: analítico — não entra em Despesas/Saldo do caixa
   try{
@@ -5299,6 +5310,13 @@ function renderDashboard(){
   } else {
     document.getElementById('stat-month-delta').textContent = 'Sem dados do mês anterior';
   }
+  try{
+    const hint = window.__dashCardSpendHint || 0;
+    if(hint > 0){
+      const el = document.getElementById('stat-month-delta');
+      if(el) el.textContent = (el.textContent && el.textContent !== '—' ? el.textContent + ' · ' : '') + 'caixa · cartão ' + fmtBRL(hint) + ' (abaixo)';
+    }
+  }catch(e){}
   if(prevReceitaTotal>0){
     const delta = ((curIncomeTotal-prevReceitaTotal)/prevReceitaTotal*100);
     const sign = delta>=0 ? '+' : '';
@@ -11586,7 +11604,7 @@ function registerPWA(){
 
     if('serviceWorker' in navigator){
       const swCode = `
-        const CACHE = 'mci-v2026-10-02-dupkeep';
+        const CACHE = 'mci-v2026-10-02-allacc';
         self.addEventListener('install', (e)=>{
           self.skipWaiting();
           e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./']).catch(()=>{})));
