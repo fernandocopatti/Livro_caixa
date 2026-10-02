@@ -1415,7 +1415,8 @@
     <section class="view" id="view-transactions">
       <div class="view-head">
         <h1 class="view-title">Lançamentos</h1>
-        <p class="view-desc" style="margin-top:4px;"><a href="#" id="link-scan-dups" style="color:var(--accent);">Verificar duplicatas</a></p>
+        <p class="view-desc" style="margin-top:4px;"><a href="#" id="link-scan-dups" style="color:var(--accent);">Verificar duplicatas</a>
+          · <a href="#" id="link-fix-parcels" style="color:var(--accent);">Reorganizar datas das parcelas</a></p>
       </div>
       <div class="card" id="dup-scan-card" style="display:none;margin-bottom:18px;">
         <div class="panel-title">Duplicatas encontradas <button type="button" class="btn ghost" id="dup-scan-close" style="padding:4px 10px;font-size:12px;">Fechar</button></div>
@@ -9202,6 +9203,7 @@ function renderReviewTable(containerId, items, sourceType, mode){
     container.innerHTML = '<div class="empty-state">Não encontrei lançamentos nesse arquivo. Você pode adicioná-los manualmente.</div>';
     return;
   }
+  try{ fixInstallmentDatesInBatch(items); }catch(e){ console.warn('fixInstallmentDates', e); }
   try{ flagDuplicates(items); }catch(e){ console.warn('flagDuplicates', e); }
   const dupCount = items.filter(it=>it.duplicate).length;
   try{
@@ -9892,9 +9894,13 @@ function parseStatementText(text){
     if(instMatch){
       const inst = parseInstallment(`${instMatch[1]}/${instMatch[2]}`);
       if(inst) item.installment = inst;
+    } else {
+      const inst2 = parseInstallment(desc);
+      if(inst2) item.installment = inst2;
     }
     items.push(item);
   });
+  try{ fixInstallmentDatesInBatch(items); }catch(e){}
   return items;
 }
 
@@ -10083,6 +10089,105 @@ function parseInstallment(raw){
   if(isNaN(current) || isNaN(total) || total<1 || current<1 || current>total) return null;
   return { current, total };
 }
+/** Soma meses a uma data ISO (YYYY-MM-DD), preservando o dia quando possível. */
+function addMonthsISO(iso, deltaMonths){
+  if(!iso || !deltaMonths) return iso;
+  const p = String(iso).slice(0,10).split('-').map(Number);
+  if(p.length < 3 || !p[0]) return iso;
+  const day = p[2];
+  const dt = new Date(p[0], p[1]-1 + deltaMonths, 1);
+  const last = new Date(dt.getFullYear(), dt.getMonth()+1, 0).getDate();
+  dt.setDate(Math.min(day, last));
+  return dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+}
+/**
+ * Se o extrato/planilha trouxe várias parcelas da mesma compra na MESMA data,
+ * espalha as datas: parcela N fica em data + (N-1) meses.
+ * Se cada parcela já veio em mês diferente, não altera.
+ */
+function fixInstallmentDatesInBatch(items){
+  if(!items || !items.length) return items;
+  const groups = new Map();
+  items.forEach((it, idx)=>{
+    if(!it || !it.installment || !it.installment.current || !it.installment.total) return;
+    if(Number(it.installment.total) < 2) return;
+    const key = [
+      normalizeDesc(it.desc||'').slice(0,48),
+      Number(it.amount).toFixed(2),
+      Number(it.installment.total),
+      it.account || ''
+    ].join('|');
+    if(!groups.has(key)) groups.set(key, []);
+    groups.get(key).push({ it, idx });
+  });
+  groups.forEach(list=>{
+    if(list.length < 2) return;
+    // datas distintas entre parcelas? já está ok
+    const dates = new Set(list.map(x=> String(x.it.date||'').slice(0,10)));
+    if(dates.size >= list.length) return; // cada uma em data diferente
+    // mesma data (ou quase): usa a menor data do grupo como âncora da parcela 1
+    const sorted = list.slice().sort((a,b)=> Number(a.it.installment.current) - Number(b.it.installment.current));
+    const anchor = sorted.map(x=> String(x.it.date||'').slice(0,10)).filter(Boolean).sort()[0];
+    if(!anchor) return;
+    sorted.forEach(x=>{
+      const cur = Number(x.it.installment.current) || 1;
+      x.it.date = addMonthsISO(anchor, Math.max(0, cur - 1));
+      x.it._parcelDateFixed = true;
+    });
+  });
+  return items;
+}
+
+/** Reorganiza datas de parcelas JÁ SALVAS (mesma lógica da importação). */
+function reorganizeSavedInstallmentDates(){
+  const txs = state.transactions || [];
+  if(!txs.length){ showToast('Nenhum lançamento para reorganizar.'); return 0; }
+  // snapshot para desfazer
+  const before = txs.map(t=> ({ id: t.id, date: t.date }));
+  const items = txs.filter(t=> t.installment && t.installment.current && t.installment.total && Number(t.installment.total)>=2);
+  if(items.length < 2){ showToast('Não há grupos de parcelas para ajustar.'); return 0; }
+  fixInstallmentDatesInBatch(items);
+  let changed = 0;
+  const beforeMap = new Map(before.map(b=> [b.id, b.date]));
+  items.forEach(t=>{
+    if(beforeMap.get(t.id) !== t.date) changed++;
+  });
+  if(!changed){
+    showToast('Nenhuma data alterada — as parcelas já estão em meses diferentes.');
+    return 0;
+  }
+  saveState();
+  try{ renderTransactions(true); }catch(e){}
+  try{ renderDashboard(); }catch(e){}
+  showToast(changed+' parcela(s) com data ajustada.', 'Desfazer', ()=>{
+    const map = new Map(before.map(b=> [b.id, b.date]));
+    state.transactions.forEach(t=>{
+      if(map.has(t.id)) t.date = map.get(t.id);
+    });
+    saveState();
+    try{ renderTransactions(true); }catch(e){}
+    try{ renderDashboard(); }catch(e){}
+    showToast('Datas das parcelas restauradas.');
+  });
+  return changed;
+}
+window.reorganizeSavedInstallmentDates = reorganizeSavedInstallmentDates;
+
+(function(){
+  const el = document.getElementById('link-fix-parcels');
+  if(!el) return;
+  el.addEventListener('click', (e)=>{
+    e.preventDefault();
+    const n = (state.transactions||[]).filter(t=> t.installment && Number(t.installment.total)>=2).length;
+    askConfirm(
+      'Reorganizar datas das parcelas',
+      'Ajusta lançamentos parcelados que estão com a mesma data (ex.: 1/5…5/5 no mesmo dia), espalhando um mês por parcela. Afeta '+n+' lançamento(s) parcelado(s). Continuar?',
+      ()=> reorganizeSavedInstallmentDates()
+    );
+  });
+})();
+
+
 
 function renderColumnMapper(rows){
   const container = document.getElementById('review-planilha');
@@ -10186,6 +10291,13 @@ function renderColumnMapper(rows){
       }catch(e){}
       const account = ((document.getElementById('import-account-planilha')||{}).value || '').trim();
       if(account) items.forEach(it=> it.account = account);
+      // parcela na descrição (ex. (02/05)) se coluna parcela vazia
+      items.forEach(it=>{
+        if(it.installment) return;
+        const inst = parseInstallment(it.desc||'');
+        if(inst) it.installment = inst;
+      });
+      try{ fixInstallmentDatesInBatch(items); }catch(e){ console.warn(e); }
       const preview = document.getElementById('planilha-preview');
       if(!items.length){
         if(preview) preview.innerHTML = '<div class="empty-state">Nenhuma linha válida com data + valor. Ajuste as colunas (datas do Excel e valores R$). Linhas ignoradas: '+skipped+'.</div>';
@@ -11639,7 +11751,7 @@ function registerPWA(){
 
     if('serviceWorker' in navigator){
       const swCode = `
-        const CACHE = 'mci-v2026-10-02-curkey';
+        const CACHE = 'mci-v2026-10-02-reorg';
         self.addEventListener('install', (e)=>{
           self.skipWaiting();
           e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./']).catch(()=>{})));
