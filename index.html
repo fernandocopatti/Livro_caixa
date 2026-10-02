@@ -5135,11 +5135,18 @@ function isCardAccountName(name){
  */
 function accountIncludesInCashFlow(name){
   if(!name || !String(name).trim()) return true; // sem conta = caixa
-  const cfg = (state.accounts && state.accounts[name]) || {};
+  const raw = String(name).trim();
+  // match exato ou case-insensitive nas contas configuradas
+  let cfg = (state.accounts && state.accounts[raw]) || null;
+  if(!cfg && state.accounts){
+    const key = Object.keys(state.accounts).find(k=> String(k).trim().toLowerCase()===raw.toLowerCase());
+    if(key) cfg = state.accounts[key];
+  }
+  cfg = cfg || {};
   if(cfg.includeInCashFlow === true) return true;
   if(cfg.includeInCashFlow === false) return false;
   // legado / não configurado: cartão fora, resto dentro
-  return !isCardAccountName(name);
+  return !isCardAccountName(raw);
 }
 /** Lançamento entra no fluxo de caixa. */
 function isCashFlowTx(t){
@@ -5165,7 +5172,7 @@ function renderDashboard(){
   const cycleMode = !!(document.getElementById('dash-cycle-mode') && document.getElementById('dash-cycle-mode').checked);
   let scopedTx = state.transactions;
   if(dashAccount === '__none__') scopedTx = state.transactions.filter(t=> !(t.account && String(t.account).trim()));
-  else if(dashAccount) scopedTx = state.transactions.filter(t=> t.account === dashAccount);
+  else if(dashAccount) scopedTx = state.transactions.filter(t=> String(t.account||'').trim().toLowerCase() === String(dashAccount).trim().toLowerCase());
   if(cycleMode && dashAccount && dashAccount !== '__none__'){
     const range = getCycleRangeForAccount(dashAccount);
     scopedTx = scopedTx.filter(t=> t.date >= range.start && t.date <= range.end);
@@ -5223,13 +5230,34 @@ function renderDashboard(){
   // usa o mês mais recente que realmente tem lançamentos — evita um dashboard "vazio"
   // quando os dados importados são de um período diferente do mês-calendário atual.
   const dataMonths = Array.from(new Set(scopedTx.map(t=>monthKey(t.date)))).sort();
-  const curKey = hasData ? dataMonths[dataMonths.length-1] : realCurKey;
+  // Meses com movimento de CAIXA (contas que somam no fluxo)
+  const cashDataMonths = Array.from(new Set(
+    scopedTx.filter(t=> typeof isCashFlowTx==='function' ? isCashFlowTx(t) : true).map(t=>monthKey(t.date))
+  )).sort();
+  const singleAccView = !!(dashAccount && dashAccount !== '__none__');
+  // "Todas as contas": se o mês mais recente só tem cartão, usa o último mês com caixa
+  // (evita Despesas/Receitas zeradas enquanto o cartão puxa o mês para frente)
+  let curKey;
+  if(!hasData){
+    curKey = realCurKey;
+  } else if(singleAccView){
+    curKey = dataMonths[dataMonths.length-1];
+  } else {
+    const latestAll = dataMonths[dataMonths.length-1];
+    const latestCash = cashDataMonths.length ? cashDataMonths[cashDataMonths.length-1] : null;
+    if(latestCash && latestCash < latestAll){
+      const cashInLatest = scopedTx.some(t=> monthKey(t.date)===latestAll && isCashFlowTx(t) && (typeById(t.type).countsAsExpense || typeById(t.type).flowSign>0));
+      curKey = cashInLatest ? latestAll : latestCash;
+    } else {
+      curKey = latestAll;
+    }
+  }
   const curKeyIdx = dataMonths.indexOf(curKey);
-  const prevKey = curKeyIdx > 0 ? dataMonths[curKeyIdx-1] : (()=>{
+  const prevKey = curKeyIdx > 0 ? dataMonths[curKeyIdx-1] : (cashDataMonths.filter(m=>m<curKey).pop() || (()=>{
     const [y,m] = curKey.split('-').map(Number);
     const d = new Date(y, m-2, 1);
     return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
-  })();
+  })());
 
   {
     const single = !!(dashAccount && dashAccount !== '__none__');
@@ -5272,12 +5300,19 @@ function renderDashboard(){
   }catch(e){ window.__dashCardSpendHint = 0; }
 
   // Compras no cartão: analítico — não entra em Despesas/Saldo do caixa
+  // Usa o mês mais recente com compra no cartão (pode ser diferente do mês do caixa)
   try{
-    const cardBase = curDespesasAll.filter(t=> isCardAccountName(t.account));
+    const cardMonths = Array.from(new Set(
+      scopedTx.filter(t=> isCardAccountName(t.account) && typeById(t.type).countsAsExpense).map(t=>monthKey(t.date))
+    )).sort();
+    const cardKey = (!singleAccount && cardMonths.length) ? cardMonths[cardMonths.length-1] : curKey;
+    const cardMonthTx = scopedTx.filter(t=> monthKey(t.date)===cardKey && typeById(t.type).countsAsExpense);
+    const cardBase = cardMonthTx.filter(t=> isCardAccountName(t.account));
     const cardTx = cardBase.filter(isNewCardPurchase);
     const cardTotal = cardTx.reduce((s,t)=> s + (Number(t.amount)||0), 0);
     const oldParcels = cardBase.filter(t=> !isNewCardPurchase(t));
     const oldTotal = oldParcels.reduce((s,t)=> s + (Number(t.amount)||0), 0);
+    window.__dashCardMonthKey = cardKey;
     const elT = document.getElementById('stat-card-purchases-total');
     const elD = document.getElementById('stat-card-purchases-delta');
     const elL = document.getElementById('stat-card-purchases-label');
@@ -5285,7 +5320,7 @@ function renderDashboard(){
       elT.textContent = fmtBRL(cardTotal);
       elT.className = 'stat-value ' + (cardTotal>0 ? 'warn' : 'accent');
     }
-    if(elL) elL.textContent = 'Compras no cartão · ' + monthLabel(curKey);
+    if(elL) elL.textContent = 'Compras no cartão · ' + monthLabel(window.__dashCardMonthKey || curKey);
     if(elD){
       if(oldTotal > 0){
         elD.textContent = cardTx.length + ' compra' + (cardTx.length===1?'':'s') + ' do mês · parcelas antigas ' + fmtBRL(oldTotal) + ' (fora do card)';
@@ -11604,7 +11639,7 @@ function registerPWA(){
 
     if('serviceWorker' in navigator){
       const swCode = `
-        const CACHE = 'mci-v2026-10-02-allacc';
+        const CACHE = 'mci-v2026-10-02-curkey';
         self.addEventListener('install', (e)=>{
           self.skipWaiting();
           e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./']).catch(()=>{})));
