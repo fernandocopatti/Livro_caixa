@@ -1955,12 +1955,19 @@
         <div class="panel-title">Contas e saldos iniciais</div>
         <p style="color:var(--ink-dim);font-size:13px;line-height:1.5;margin:0 0 14px;">
           Saldo de partida de cada conta. O app aplica os lançamentos a partir da data informada.
+          <br><strong>Somar no fluxo de caixa:</strong> desmarque em cartões se o pagamento da fatura já entra pela conta corrente (evita contar duas vezes). Marque se quiser que as compras do cartão entrem direto nas despesas.
         </p>
         <div id="accounts-config-list"></div>
         <div class="form-grid" style="margin-top:12px;">
           <div class="field"><label>Nome da conta</label><input type="text" id="new-account-name" list="account-suggestions" placeholder="Ex.: Conta Nubank"></div>
           <div class="field"><label>Saldo inicial (R$)</label><input type="number" id="new-account-balance" step="0.01" placeholder="0,00"></div>
           <div class="field"><label>Desde</label><input type="date" id="new-account-asof"></div>
+          <div class="field full">
+            <label style="display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--ink-dim);cursor:pointer;">
+              <input type="checkbox" id="new-account-cashflow" checked style="margin-top:3px;">
+              <span>Somar lançamentos desta conta no <strong>fluxo de caixa</strong> (despesas, receitas e saldo da visão geral)</span>
+            </label>
+          </div>
         </div>
         <div class="btn-row" style="margin-top:10px;"><button type="button" class="btn secondary" id="new-account-btn" onclick="saveNewAccountClick()" style="padding:8px 16px;">Salvar conta</button></div>
       </div>
@@ -4874,7 +4881,9 @@ function endOfMonthISO(ym){
   return y+'-'+String(m).padStart(2,'0')+'-'+String(last).padStart(2,'0');
 }
 /** Soma saldos das contas (com inicial) até o fim do mês ym. Respeita filtro de conta do dash. */
-function dashboardBalanceWithInitial(ym, dashAccount){
+function dashboardBalanceWithInitial(ym, dashAccount, opts){
+  opts = opts || {};
+  const cashOnly = opts.cashOnly !== false; // padrão: só contas de caixa (ignora cartão)
   const until = endOfMonthISO(ym);
   const applyTx = (bal, t)=>{
     const sign = typeById(t.type).flowSign;
@@ -4883,6 +4892,7 @@ function dashboardBalanceWithInitial(ym, dashAccount){
     return bal + sign * t.amount;
   };
   if(dashAccount && dashAccount !== '__none__'){
+    if(cashOnly && !accountIncludesInCashFlow(dashAccount)) return 0;
     return accountBalanceAsOf(dashAccount, until);
   }
   if(dashAccount === '__none__'){
@@ -4897,8 +4907,10 @@ function dashboardBalanceWithInitial(ym, dashAccount){
   const names = new Set(Object.keys(state.accounts||{}));
   state.transactions.forEach(t=>{ if(t.account && String(t.account).trim()) names.add(t.account); });
   let total = 0;
-  names.forEach(n=>{ total += accountBalanceAsOf(n, until); });
-  // lançamentos sem conta
+  names.forEach(n=>{
+    if(cashOnly && !accountIncludesInCashFlow(n)) return;
+    total += accountBalanceAsOf(n, until);
+  });
   state.transactions.forEach(t=>{
     if(t.account && String(t.account).trim()) return;
     if(t.date > until) return;
@@ -4967,9 +4979,17 @@ function renderAccountsConfig(){
   el.innerHTML = names.map(name=>{
     const cfg = state.accounts[name] || {};
     const bal = accountBalance(name);
-    return `<div class="account-bal-row">
-      <div><div class="account-bal-name">${escapeHTML(name)}</div>
-      <div style="font-size:11px;color:var(--ink-faint);">Inicial ${fmtBRL(cfg.initialBalance||0)}${cfg.asOf?' desde '+fmtDate(cfg.asOf):''}</div></div>
+    const inCash = accountIncludesInCashFlow(name);
+    const isCard = isCardAccountName(name);
+    return `<div class="account-bal-row" style="flex-wrap:wrap;gap:8px;">
+      <div style="flex:1;min-width:140px;">
+        <div class="account-bal-name">${escapeHTML(name)}${isCard?' <span style="font-size:10px;color:var(--ink-faint);font-weight:500;">cartão</span>':''}</div>
+        <div style="font-size:11px;color:var(--ink-faint);">Inicial ${fmtBRL(cfg.initialBalance||0)}${cfg.asOf?' desde '+fmtDate(cfg.asOf):''}</div>
+        <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:11.5px;color:var(--ink-dim);cursor:pointer;">
+          <input type="checkbox" class="acc-cashflow-chk" data-acc="${escapeAttr(name)}" ${inCash?'checked':''}>
+          Somar no fluxo de caixa
+        </label>
+      </div>
       <div style="text-align:right;">
         <div class="account-bal-val" style="color:${bal>=0?'var(--accent)':'var(--warn)'}">${fmtBRL(bal)}</div>
         <button type="button" class="btn ghost acc-remove-btn" data-acc="${escapeAttr(name)}" style="padding:2px 8px;font-size:11px;color:var(--warn);">Remover saldo</button>
@@ -4983,6 +5003,17 @@ function renderAccountsConfig(){
       renderAccountsConfig();
       renderDashboard();
       showToast('Saldo inicial removido.');
+    });
+  });
+  el.querySelectorAll('.acc-cashflow-chk').forEach(chk=>{
+    chk.addEventListener('change', ()=>{
+      const name = chk.dataset.acc;
+      state.accounts = state.accounts || {};
+      const prev = state.accounts[name] || { initialBalance: 0, asOf: todayISO() };
+      state.accounts[name] = { ...prev, includeInCashFlow: !!chk.checked };
+      saveState();
+      renderDashboard();
+      showToast(chk.checked ? 'Conta entra no fluxo de caixa.' : 'Conta fora do fluxo de caixa (só análise).');
     });
   });
 }
@@ -5080,16 +5111,40 @@ function isNewCardPurchase(t){
   const cur = Number(t.installment.current);
   return !cur || cur <= 1;
 }
-/** Conta parece cartão de crédito (nome ou limite com dia de fechamento). */
+/** Conta de cartão de crédito (analítico). Não deve entrar no fluxo de caixa (CC/banco). */
 function isCardAccountName(name){
   if(!name || !String(name).trim()) return false;
-  const n = String(name).toLowerCase();
-  if(/cart[aã]o|\bcard\b|credit|mastercard|visa|\belo\b|hipercard|amex|platinum|\bblack\b|nubank|inter\b|c6\b|sicredi/.test(n)) return true;
+  const raw = String(name).trim();
+  const n = raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  // contas bancárias típicas — nunca cartão
+  if(/^(cc|c\/?c|conta corrente|conta|corrente|poupanca|poupanca|salario|salário)$/i.test(n)) return false;
+  if(/\b(conta corrente|conta salario|poupan[cç]a)\b/.test(n) && !/cartao/.test(n)) return false;
+  if(/cartao|\bcard\b|credit|mastercard|visa|\belo\b|hipercard|amex|platinum/.test(n)) return true;
+  if(/credito/.test(n) && !/debito/.test(n)) return true;
   try{
-    const lim = (state.accountLimits && (state.accountLimits[name] || state.accountLimits[String(name)])) || null;
-    if(lim && (lim.closingDay || lim.limit)) return true;
+    const lim = (state.accountLimits && (state.accountLimits[raw] || state.accountLimits[name])) || null;
+    if(lim && lim.closingDay) return true; // dia de fechamento = cartão
+    if(lim && lim.isCard) return true;
   }catch(e){}
   return false;
+}
+/**
+ * Se a conta entra no fluxo de caixa (despesas/receitas/saldo da visão geral).
+ * Padrão: cartões NÃO entram; demais contas entram.
+ * Pode sobrescrever em Config → Contas → "Somar no fluxo de caixa".
+ */
+function accountIncludesInCashFlow(name){
+  if(!name || !String(name).trim()) return true; // sem conta = caixa
+  const cfg = (state.accounts && state.accounts[name]) || {};
+  if(cfg.includeInCashFlow === true) return true;
+  if(cfg.includeInCashFlow === false) return false;
+  // legado / não configurado: cartão fora, resto dentro
+  return !isCardAccountName(name);
+}
+/** Lançamento entra no fluxo de caixa. */
+function isCashFlowTx(t){
+  if(!t) return false;
+  return accountIncludesInCashFlow(t.account);
 }
 
 function renderDashboard(){
@@ -5184,30 +5239,33 @@ function renderDashboard(){
   const prevTx = scopedTx.filter(t=>monthKey(t.date)===prevKey);
   const isExpense = t => typeById(t.type).countsAsExpense;
   const isInflow = t => typeById(t.type).flowSign > 0;
-  const curDespesas = curTx.filter(isExpense);
-  const curReceitas = curTx.filter(isInflow);
-  const prevDespesaTotal = prevTx.filter(isExpense).reduce((s,t)=>s+t.amount,0);
-  const prevReceitaTotal = prevTx.filter(isInflow).reduce((s,t)=>s+t.amount,0);
+  // Caixa: ignora compras no cartão (já impactam quando paga a fatura na CC)
+  const curTxCash = curTx.filter(isCashFlowTx);
+  const prevTxCash = prevTx.filter(isCashFlowTx);
+  const curDespesas = curTxCash.filter(isExpense);
+  const curReceitas = curTxCash.filter(isInflow);
+  // Todas as despesas do mês (inclui cartão) — categorias / insights analíticos
+  const curDespesasAll = curTx.filter(isExpense);
+  const prevDespesaTotal = prevTxCash.filter(isExpense).reduce((s,t)=>s+t.amount,0);
+  const prevReceitaTotal = prevTxCash.filter(isInflow).reduce((s,t)=>s+t.amount,0);
   const curTotal = curDespesas.reduce((s,t)=>s+t.amount,0);
   const curIncomeTotal = curReceitas.reduce((s,t)=>s+t.amount,0);
-  // fluxo do mês (sem inicial) — só para subtítulo
-  const fluxoMes = curTx.reduce((s,t)=> s + typeById(t.type).flowSign * t.amount, 0);
-  // saldo de caixa no fim do mês = saldos iniciais + lançamentos até o fim do mês (alinha com banco/CC)
+  // fluxo do mês (caixa) — subtítulo
+  const fluxoMes = curTxCash.reduce((s,t)=> s + typeById(t.type).flowSign * t.amount, 0);
+  // saldo de caixa (sem contas cartão)
   const saldo = (typeof dashboardBalanceWithInitial === 'function')
-    ? dashboardBalanceWithInitial(curKey, dashAccount)
+    ? dashboardBalanceWithInitial(curKey, dashAccount, { cashOnly: true })
     : fluxoMes;
 
   document.getElementById('stat-month-total').textContent = fmtBRL(curTotal);
   document.getElementById('stat-income-total').textContent = fmtBRL(curIncomeTotal);
 
-  // Compras no cartão no mês: só despesas de contas-cartão que são compra nova (à vista / 1ª parcela)
+  // Compras no cartão: analítico — não entra em Despesas/Saldo do caixa
   try{
-    const cardTx = curDespesas.filter(t=>{
-      if(!isCardAccountName(t.account)) return false;
-      return isNewCardPurchase(t);
-    });
+    const cardBase = curDespesasAll.filter(t=> isCardAccountName(t.account));
+    const cardTx = cardBase.filter(isNewCardPurchase);
     const cardTotal = cardTx.reduce((s,t)=> s + (Number(t.amount)||0), 0);
-    const oldParcels = curDespesas.filter(t=> isCardAccountName(t.account) && !isNewCardPurchase(t));
+    const oldParcels = cardBase.filter(t=> !isNewCardPurchase(t));
     const oldTotal = oldParcels.reduce((s,t)=> s + (Number(t.amount)||0), 0);
     const elT = document.getElementById('stat-card-purchases-total');
     const elD = document.getElementById('stat-card-purchases-delta');
@@ -5219,11 +5277,13 @@ function renderDashboard(){
     if(elL) elL.textContent = 'Compras no cartão · ' + monthLabel(curKey);
     if(elD){
       if(oldTotal > 0){
-        elD.textContent = cardTx.length + ' compra' + (cardTx.length===1?'':'s') + ' do mês · parcelas antigas ' + fmtBRL(oldTotal) + ' (fora)';
+        elD.textContent = cardTx.length + ' compra' + (cardTx.length===1?'':'s') + ' do mês · parcelas antigas ' + fmtBRL(oldTotal) + ' (fora do card)';
       } else if(cardTx.length){
-        elD.textContent = cardTx.length + ' compra' + (cardTx.length===1?'':'s') + ' · sem parcelas de meses anteriores';
+        elD.textContent = cardTx.length + ' compra' + (cardTx.length===1?'':'s') + ' · não entra no caixa';
+      } else if(cardBase.length===0){
+        elD.textContent = 'Nenhuma conta cartão — use nome com Cartão/Mastercard ou limite com fechamento';
       } else {
-        elD.textContent = 'Só compras do mês (à vista ou 1ª parcela)';
+        elD.textContent = 'Só compras do mês (à vista ou 1ª parcela) · não entra no caixa';
       }
     }
   }catch(e){ console.warn('card purchases stat', e); }
@@ -5258,8 +5318,9 @@ function renderDashboard(){
   }
 
   const byCat = {};
-  curDespesas.forEach(t=>{ byCat[t.category] = (byCat[t.category]||0) + t.amount; });
-  // Maior categoria: ignora buckets genéricos de cartão (sempre dominariam o ranking)
+  // ranking analítico: inclui compras do cartão (por categoria real), não só caixa
+  (typeof curDespesasAll !== 'undefined' ? curDespesasAll : curDespesas).forEach(t=>{ byCat[t.category] = (byCat[t.category]||0) + t.amount; });
+  // Maior categoria: ignora buckets genéricos de cartão (pagamento de fatura)
   const isGenericCardCat = (id)=>{
     const c = catById(id);
     const n = normalizeDesc((c && c.name) || id || '');
@@ -11490,7 +11551,7 @@ function registerPWA(){
 
     if('serviceWorker' in navigator){
       const swCode = `
-        const CACHE = 'mci-v2026-09-30-topcat';
+        const CACHE = 'mci-v2026-10-02-cashopt';
         self.addEventListener('install', (e)=>{
           self.skipWaiting();
           e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./']).catch(()=>{})));
@@ -11554,10 +11615,16 @@ document.getElementById('new-account-btn').addEventListener('click', ()=>{
   const asOf = document.getElementById('new-account-asof').value || todayISO();
   if(!name){ showToast('Informe o nome da conta.'); return; }
   state.accounts = state.accounts || {};
-  state.accounts[name] = { initialBalance: isNaN(bal) ? 0 : bal, asOf };
+  const cashEl = document.getElementById('new-account-cashflow');
+  let includeInCashFlow = cashEl ? !!cashEl.checked : !isCardAccountName(name);
+  if(cashEl && isCardAccountName(name) && cashEl.dataset.userTouched !== '1'){
+    includeInCashFlow = false;
+  }
+  state.accounts[name] = { initialBalance: isNaN(bal) ? 0 : bal, asOf, includeInCashFlow };
   saveState();
   document.getElementById('new-account-name').value = '';
   document.getElementById('new-account-balance').value = '';
+  if(cashEl){ cashEl.checked = true; delete cashEl.dataset.userTouched; }
   renderAccountsConfig();
   fillAccountSuggestions();
   renderDashboard();
@@ -13173,10 +13240,17 @@ function saveNewAccountClick(){
     const asOf = ((document.getElementById('new-account-asof')||{}).value) || todayISO();
     if(!name){ showToast('Informe o nome da conta.'); return; }
     state.accounts = state.accounts || {};
-    state.accounts[name] = { initialBalance: isNaN(bal) ? 0 : bal, asOf };
+    const cashEl = document.getElementById('new-account-cashflow');
+    let includeInCashFlow = cashEl ? !!cashEl.checked : !isCardAccountName(name);
+    // se o usuário não tocou e o nome parece cartão, sugere fora do caixa
+    if(cashEl && isCardAccountName(name) && cashEl.dataset.userTouched !== '1'){
+      includeInCashFlow = false;
+    }
+    state.accounts[name] = { initialBalance: isNaN(bal) ? 0 : bal, asOf, includeInCashFlow };
     saveState();
     const n=document.getElementById('new-account-name'); if(n) n.value='';
     const b=document.getElementById('new-account-balance'); if(b) b.value='';
+    if(cashEl){ cashEl.checked = true; delete cashEl.dataset.userTouched; }
     try{ renderAccountsConfig(); }catch(e){}
     try{ fillAccountSuggestions(); }catch(e){}
     try{ renderDashboard(); }catch(e){}
@@ -13219,6 +13293,21 @@ window.clearClosedUntilClick = clearClosedUntilClick;
 window.saveReductionClick = saveReductionClick;
 window.saveNewLimitClick = saveNewLimitClick;
 window.saveNewAccountClick = saveNewAccountClick;
+
+(function(){
+  const nameEl = document.getElementById('new-account-name');
+  const cashEl = document.getElementById('new-account-cashflow');
+  if(cashEl){
+    cashEl.addEventListener('change', ()=>{ cashEl.dataset.userTouched = '1'; });
+  }
+  if(nameEl && cashEl){
+    nameEl.addEventListener('input', ()=>{
+      if(cashEl.dataset.userTouched === '1') return;
+      cashEl.checked = !isCardAccountName(nameEl.value.trim());
+    });
+  }
+})();
+
 window.saveIrParamsClick = saveIrParamsClick;
 window.exportBackupClick = exportBackupClick;
 window.importBackupClick = importBackupClick;
