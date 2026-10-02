@@ -9271,6 +9271,7 @@ function renderReviewTable(containerId, items, sourceType, mode){
       const batchImportedAt = (typeof todayISO === 'function') ? todayISO() : new Date().toISOString().slice(0,10);
       const cards = cont ? cont.querySelectorAll('.rv-card') : [];
       const seenIdx = new Set();
+      const importedIdx = new Set();
 
       cards.forEach(card=>{
         const idx = parseInt(card.dataset.idx, 10);
@@ -9298,6 +9299,7 @@ function renderReviewTable(containerId, items, sourceType, mode){
             learnCategory(desc, category);
           }
         }catch(e){}
+        importedIdx.add(idx);
         count++;
       });
 
@@ -9310,21 +9312,54 @@ function renderReviewTable(containerId, items, sourceType, mode){
           source: src, type: it.type || 'despesa', account: it.account,
           installment: it.installment, externalId: it.externalId, importedAt: batchImportedAt
         });
+        importedIdx.add(i);
         count++;
+      }
+
+      try{ saveState(); }catch(e){}
+      try{ renderDashboard(); }catch(e){}
+      try{ fillAccountSuggestions(); }catch(e){}
+      try{ renderTransactions(); }catch(e){}
+
+      // Mantém na tela os itens NÃO importados (em geral possíveis duplicatas) para conferência
+      const remaining = [];
+      for(let i=0;i<itemsArr.length;i++){
+        if(importedIdx.has(i)) continue;
+        remaining.push(itemsArr[i]);
       }
 
       const log = [];
       if(count) log.push(count+' lançamento(s) importado(s).');
       else log.push('Nada importado.');
-      if(skippedDup) log.push(skippedDup+' duplicata(s) pulada(s).');
-      if(skippedManual) log.push(skippedManual+' desmarcado(s).');
-      if(cont) cont.innerHTML = '<div class="import-summary">'+log.join(' ')+'</div>';
-      window.__pendingImport = null; try{ document.body.classList.remove("import-reviewing"); }catch(e){}
-      try{ renderDashboard(); }catch(e){}
-      try{ fillAccountSuggestions(); }catch(e){}
-      try{ renderTransactions(); }catch(e){}
-      try{ saveState(); }catch(e){}
-      showToast(log[0]);
+      if(skippedDup) log.push(skippedDup+' possível(is) duplicata(s) ainda na lista.');
+      if(skippedManual && !skippedDup) log.push(skippedManual+' desmarcado(s) ainda na lista.');
+      else if(skippedManual && skippedDup) log.push(skippedManual+' outro(s) desmarcado(s).');
+
+      if(remaining.length){
+        // Reexibe só o que sobrou (duplicatas / desmarcados) para o usuário decidir
+        try{
+          remaining.forEach(it=>{ if(it) it.duplicate = true; }); // destaca como conferência
+          renderReviewTable(pending.containerId, remaining, src, 'date');
+          if(cont){
+            const banner = document.createElement('div');
+            banner.className = 'import-summary';
+            banner.style.cssText = 'margin-bottom:12px;padding:10px 12px;border-radius:10px;background:rgba(89,179,163,.12);border:1px solid rgba(89,179,163,.35);font-size:13px;line-height:1.45;';
+            banner.innerHTML = '<strong>'+count+' importado(s).</strong> Restam <strong>'+remaining.length+'</strong> item(ns) para conferir (possíveis duplicatas ou desmarcados). Marque os que quiser incluir e confirme de novo, ou cancele para sair.';
+            cont.insertBefore(banner, cont.firstChild);
+          }
+        }catch(e){
+          console.warn(e);
+          if(cont) cont.innerHTML = '<div class="import-summary">'+log.join(' ')+'</div>';
+          window.__pendingImport = null;
+          try{ document.body.classList.remove('import-reviewing'); }catch(e2){}
+        }
+        showToast(count ? (count+' importado(s). Confira as duplicatas restantes.') : log.join(' '));
+      } else {
+        if(cont) cont.innerHTML = '<div class="import-summary">'+log.join(' ')+'</div>';
+        window.__pendingImport = null;
+        try{ document.body.classList.remove('import-reviewing'); }catch(e){}
+        showToast(log[0]);
+      }
     }catch(err){
       console.error(err);
       alert('Erro ao confirmar importação: '+(err.message||err));
@@ -11551,7 +11586,7 @@ function registerPWA(){
 
     if('serviceWorker' in navigator){
       const swCode = `
-        const CACHE = 'mci-v2026-10-02-cashopt';
+        const CACHE = 'mci-v2026-10-02-dupkeep';
         self.addEventListener('install', (e)=>{
           self.skipWaiting();
           e.waitUntil(caches.open(CACHE).then(c=>c.addAll(['./']).catch(()=>{})));
